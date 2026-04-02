@@ -62,6 +62,9 @@ def get_input_manager(
         manager.set_interaction_profile(InteractionProfile.ONE_BUTTON)
         whisplay_device = getattr(display_adapter, "device", None)
         enable_navigation = input_config.get("ptt_navigation", True)
+        debounce_time = float(input_config.get("whisplay_debounce_ms", 50)) / 1000.0
+        double_click_time = float(input_config.get("whisplay_double_tap_ms", 300)) / 1000.0
+        long_press_time = float(input_config.get("whisplay_long_hold_ms", 800)) / 1000.0
 
         if whisplay_device or simulate:
             from yoyopy.ui.input.adapters.ptt_button import PTTInputAdapter
@@ -69,12 +72,21 @@ def get_input_manager(
             ptt_adapter = PTTInputAdapter(
                 whisplay_device=whisplay_device,
                 enable_navigation=enable_navigation,
+                debounce_time=debounce_time,
+                double_click_time=double_click_time,
+                long_press_time=long_press_time,
                 simulate=simulate,
             )
             manager.add_adapter(ptt_adapter)
 
             if enable_navigation:
                 logger.info("  -> Added one-button Whisplay navigation")
+                logger.info(
+                    "  -> Gesture timings: %dms debounce, %dms double tap, %dms hold",
+                    int(debounce_time * 1000),
+                    int(double_click_time * 1000),
+                    int(long_press_time * 1000),
+                )
             else:
                 logger.info("  -> Added PTT button input (press/release only)")
         else:

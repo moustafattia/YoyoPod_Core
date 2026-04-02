@@ -381,6 +381,7 @@ class YoyoPodApp:
             self.screen_manager.push_screen(initial_screen)
             self._ui_state = self._get_initial_ui_state()
             logger.info(f"  Initial route resolved to {initial_screen}")
+            logger.info(f"  Initial screen confirmed as {initial_screen}")
             logger.info("  ✓ Initial screen set to menu")
             return True
         except Exception as exc:

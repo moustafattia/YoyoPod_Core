@@ -197,7 +197,7 @@ class OutgoingCallScreen(Screen):
         instructions_size = 12
 
         if self.is_one_button_mode():
-            cancel_text = "Hold: Cancel"
+            cancel_text = "Hold cancel"
         else:
             cancel_text = "B: Cancel"
         cancel_width, _ = self.display.get_text_size(cancel_text, instructions_size)

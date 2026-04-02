@@ -73,9 +73,18 @@ class HubScreen(Screen):
             return "Music offline"
 
         track = self.mopidy_client.get_current_track()
+        playback_state = self.mopidy_client.get_playback_state()
         if track is None:
+            if playback_state == "paused":
+                return "Paused"
             return "No track loaded"
-        return self._truncate(f"{track.name} - {track.get_artist_string()}", 28)
+
+        artist = self._truncate(track.get_artist_string(), 14)
+        if playback_state == "playing":
+            return self._truncate(f"Playing {artist}", 22)
+        if playback_state == "paused":
+            return self._truncate(f"Paused {artist}", 22)
+        return self._truncate(f"Ready {artist}", 22)
 
     def _playlist_subtitle(self) -> str:
         """Return the compact playlist status subtitle."""
@@ -200,6 +209,16 @@ class HubScreen(Screen):
             font_size=subtitle_size,
         )
 
+        position_text = f"{self.selected_index + 1}/{len(cards)}"
+        position_width, _ = self.display.get_text_size(position_text, 11)
+        self.display.text(
+            position_text,
+            self.display.WIDTH - position_width - 18,
+            title_y + 2,
+            color=self.display.COLOR_GRAY,
+            font_size=11,
+        )
+
         dots_y = card_bottom - 22
         dots_width = 14 * len(cards)
         dots_x = (self.display.WIDTH - dots_width) // 2
@@ -207,7 +226,7 @@ class HubScreen(Screen):
             color = self.display.COLOR_CYAN if index == self.selected_index else self.display.COLOR_GRAY
             self.display.circle(dots_x + (index * 14), dots_y, 3, fill=color)
 
-        help_text = "Tap: Next  Double: Open  Hold: Stay"
+        help_text = "Tap next | Double open"
         help_size = 10
         help_width, _ = self.display.get_text_size(help_text, help_size)
         help_x = (self.display.WIDTH - help_width) // 2

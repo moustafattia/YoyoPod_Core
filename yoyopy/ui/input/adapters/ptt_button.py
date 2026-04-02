@@ -25,20 +25,33 @@ from yoyopy.ui.input.hal import InputAction, InputHAL
 class PTTInputAdapter(InputHAL):
     """Input adapter for the Whisplay single button."""
 
-    DEBOUNCE_TIME = 0.05
-    LONG_PRESS_TIME = 0.8
-    DOUBLE_CLICK_TIME = 0.3
-    POLL_RATE = 0.01
+    DEFAULT_DEBOUNCE_TIME = 0.05
+    DEFAULT_LONG_PRESS_TIME = 0.8
+    DEFAULT_DOUBLE_CLICK_TIME = 0.3
+    DEFAULT_POLL_RATE = 0.01
 
     def __init__(
         self,
         whisplay_device: Optional[object] = None,
         enable_navigation: bool = True,
+        debounce_time: float | None = None,
+        double_click_time: float | None = None,
+        long_press_time: float | None = None,
         simulate: bool = False,
     ) -> None:
         self.device = whisplay_device
         self.enable_navigation = enable_navigation
         self.simulate = simulate
+        self.debounce_time = (
+            self.DEFAULT_DEBOUNCE_TIME if debounce_time is None else debounce_time
+        )
+        self.double_click_time = (
+            self.DEFAULT_DOUBLE_CLICK_TIME if double_click_time is None else double_click_time
+        )
+        self.long_press_time = (
+            self.DEFAULT_LONG_PRESS_TIME if long_press_time is None else long_press_time
+        )
+        self.poll_rate = self.DEFAULT_POLL_RATE
 
         self.callbacks: Dict[InputAction, List[Callable]] = defaultdict(list)
         self.running = False
@@ -164,7 +177,7 @@ class PTTInputAdapter(InputHAL):
             self.press_start_time = None
             return
 
-        if press_duration >= self.LONG_PRESS_TIME:
+        if press_duration >= self.long_press_time:
             self.pending_single_tap_time = None
             self._fire_action(
                 InputAction.BACK,
@@ -178,7 +191,7 @@ class PTTInputAdapter(InputHAL):
 
         if (
             self.pending_single_tap_time is not None
-            and (current_time - self.pending_single_tap_time) < self.DOUBLE_CLICK_TIME
+            and (current_time - self.pending_single_tap_time) < self.double_click_time
         ):
             self.pending_single_tap_time = None
             self._fire_action(
@@ -202,7 +215,7 @@ class PTTInputAdapter(InputHAL):
         if self.pending_single_tap_time is None:
             return
 
-        if (current_time - self.pending_single_tap_time) < self.DOUBLE_CLICK_TIME:
+        if (current_time - self.pending_single_tap_time) < self.double_click_time:
             return
 
         self.pending_single_tap_time = None
@@ -226,7 +239,7 @@ class PTTInputAdapter(InputHAL):
             previous_state = self.button_pressed
 
             if current_state and not previous_state:
-                time.sleep(self.DEBOUNCE_TIME)
+                time.sleep(self.debounce_time)
                 current_state = self._get_button_state()
                 if current_state:
                     self._handle_button_press(time.time())
@@ -234,6 +247,6 @@ class PTTInputAdapter(InputHAL):
             elif not current_state and previous_state:
                 self._handle_button_release(time.time())
 
-            time.sleep(self.POLL_RATE)
+            time.sleep(self.poll_rate)
 
         logger.debug("PTT button polling stopped")

@@ -187,7 +187,7 @@ class InCallScreen(Screen):
         instructions_size = 12
 
         if self.is_one_button_mode():
-            instructions = f"Tap: {'Unmute' if is_muted else 'Mute'} | Hold: Hang up"
+            instructions = f"Tap {'unmute' if is_muted else 'mute'} | Hold hang up"
             instr_width, _ = self.display.get_text_size(instructions, instructions_size)
             self.display.text(
                 instructions,

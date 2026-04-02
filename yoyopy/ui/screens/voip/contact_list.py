@@ -96,6 +96,17 @@ class ContactListScreen(Screen):
             font_size=title_size
         )
 
+        if self.is_one_button_mode() and self.contacts:
+            position_text = f"{self.selected_index + 1}/{len(self.contacts)}"
+            position_width, _ = self.display.get_text_size(position_text, 11)
+            self.display.text(
+                position_text,
+                self.display.WIDTH - position_width - 18,
+                title_y + 4,
+                color=self.display.COLOR_GRAY,
+                font_size=11
+            )
+
         # Draw separator line
         separator_y = title_y + title_height + 10
         self.display.line(
@@ -221,7 +232,7 @@ class ContactListScreen(Screen):
         instructions_y = self.display.HEIGHT - 15
         instructions_size = 10
         if self.is_one_button_mode():
-            instructions = "Tap: Next | Double: Call | Hold: Back"
+            instructions = "Tap next | Double call | Hold back"
         else:
             instructions = "A: Call | B: Back | X/Y: Navigate"
         instr_width, _ = self.display.get_text_size(instructions, instructions_size)

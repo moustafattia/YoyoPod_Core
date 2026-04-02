@@ -218,7 +218,7 @@ class NowPlayingScreen(Screen):
             )
 
         if self.is_one_button_mode():
-            help_text = "Tap: Next | Double: Play/Pause | Hold: Back"
+            help_text = "Tap next | Double play | Hold back"
             help_width, _ = self.display.get_text_size(help_text, 9)
             self.display.text(
                 help_text,

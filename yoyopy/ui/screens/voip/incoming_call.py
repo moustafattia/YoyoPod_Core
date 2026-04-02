@@ -162,7 +162,7 @@ class IncomingCallScreen(Screen):
         instructions_size = 12
 
         if self.is_one_button_mode():
-            instructions = "Double: Answer | Hold: Reject"
+            instructions = "Double answer | Hold reject"
             instr_width, _ = self.display.get_text_size(instructions, instructions_size)
             self.display.text(
                 instructions,
