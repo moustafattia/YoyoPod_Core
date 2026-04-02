@@ -14,9 +14,11 @@ from yoyopy.events import (
     CallEndedEvent,
     CallStateChangedEvent,
     IncomingCallEvent,
+    MusicAvailabilityChangedEvent,
     PlaybackStateChangedEvent,
     RegistrationChangedEvent,
     TrackChangedEvent,
+    VoIPAvailabilityChangedEvent,
 )
 from yoyopy.fsm import (
     CallFSM,
@@ -102,6 +104,42 @@ class FakeMopidyClient:
         self.play_calls += 1
         self.playback_state = "playing"
         return True
+
+
+class FakeRecoveringVoIPManager:
+    """Minimal VoIP manager double for app-level recovery tests."""
+
+    def __init__(self, start_results: list[bool]) -> None:
+        self._start_results = start_results
+        self.start_calls = 0
+        self.running = False
+
+    def start(self) -> bool:
+        self.start_calls += 1
+        result_index = min(self.start_calls - 1, len(self._start_results) - 1)
+        self.running = self._start_results[result_index]
+        return self.running
+
+
+class FakeRecoveringMopidyClient:
+    """Minimal Mopidy double for recovery backoff tests."""
+
+    def __init__(self, connect_results: list[bool]) -> None:
+        self._connect_results = connect_results
+        self.connect_calls = 0
+        self.start_polling_calls = 0
+        self.is_connected = False
+        self.polling = False
+
+    def connect(self) -> bool:
+        self.connect_calls += 1
+        result_index = min(self.connect_calls - 1, len(self._connect_results) - 1)
+        self.is_connected = self._connect_results[result_index]
+        return self.is_connected
+
+    def start_polling(self) -> None:
+        self.polling = True
+        self.start_polling_calls += 1
 
 
 def _publish_from_worker(app: YoyoPodApp, event: object) -> None:
@@ -302,6 +340,44 @@ def test_periodic_in_call_refresh_only_renders_visible_call_screen() -> None:
     assert app.in_call_screen.render_calls == 1
 
 
+def test_voip_unavailable_event_ends_call_and_restores_music() -> None:
+    """VoIP backend loss should tear down the call flow and restore interrupted playback."""
+    app, mopidy, screen_manager = _build_app(playback_state="paused", auto_resume=True)
+    app.music_fsm.sync(MusicState.PAUSED)
+    app.call_fsm.sync(CallSessionState.ACTIVE)
+    app.call_interruption_policy.music_interrupted_by_call = True
+    app.coordinator_runtime.sync_app_state("test_setup")
+    screen_manager.push_screen("in_call")
+
+    _publish_from_worker(
+        app,
+        VoIPAvailabilityChangedEvent(available=False, reason="backend_stopped"),
+    )
+
+    assert app.event_bus.drain() == 1
+    assert app.call_fsm.state == CallSessionState.IDLE
+    assert app.music_fsm.state == MusicState.PLAYING
+    assert mopidy.play_calls == 1
+    assert screen_manager.current_screen is app.menu_screen
+
+
+def test_music_unavailable_event_stops_music_and_refreshes_now_playing() -> None:
+    """Mopidy loss should stop music state and refresh the visible now-playing screen."""
+    app, _, screen_manager = _build_app(playback_state="playing")
+    screen_manager.current_screen = app.now_playing_screen
+    app.music_fsm.transition("play")
+    app.coordinator_runtime.sync_app_state("playback_playing")
+
+    _publish_from_worker(
+        app,
+        MusicAvailabilityChangedEvent(available=False, reason="connection_lost"),
+    )
+
+    assert app.event_bus.drain() == 1
+    assert app.music_fsm.state == MusicState.IDLE
+    assert app.now_playing_screen.render_calls == 1
+
+
 def test_navigation_updates_runtime_base_state() -> None:
     """Idle navigation should keep the derived runtime state aligned with the active screen."""
     app, _, screen_manager = _build_app(playback_state="stopped")
@@ -343,3 +419,33 @@ def test_call_end_restores_previous_screen_base_state() -> None:
     assert app.event_bus.drain() == 1
     assert screen_manager.current_screen is app.playlist_screen
     assert app.coordinator_runtime.current_app_state == AppRuntimeState.PLAYLIST_BROWSER
+
+
+def test_manager_recovery_uses_backoff_and_starts_polling_after_reconnect() -> None:
+    """Recovery attempts should back off after failure and restart healthy managers."""
+    app = YoyoPodApp(simulate=True)
+    app.voip_manager = FakeRecoveringVoIPManager([False, True])
+    app.mopidy_client = FakeRecoveringMopidyClient([False, True])
+
+    app._attempt_manager_recovery(now=0.0)
+
+    assert app.voip_manager.start_calls == 1
+    assert app.mopidy_client.connect_calls == 1
+    assert app.mopidy_client.start_polling_calls == 0
+    assert app._voip_recovery.next_attempt_at == 1.0
+    assert app._mopidy_recovery.next_attempt_at == 1.0
+
+    app._attempt_manager_recovery(now=0.5)
+
+    assert app.voip_manager.start_calls == 1
+    assert app.mopidy_client.connect_calls == 1
+
+    app._attempt_manager_recovery(now=1.0)
+
+    assert app.voip_manager.start_calls == 2
+    assert app.voip_manager.running
+    assert app.mopidy_client.connect_calls == 2
+    assert app.mopidy_client.is_connected
+    assert app.mopidy_client.start_polling_calls == 1
+    assert app._voip_recovery.next_attempt_at == 0.0
+    assert app._mopidy_recovery.next_attempt_at == 0.0

@@ -35,7 +35,7 @@ class ScreenCoordinator:
         if self.runtime.screen_manager.current_screen != self.runtime.now_playing_screen:
             return
 
-        if self.runtime.mopidy_client:
+        if self.runtime.mopidy_client and self.runtime.mopidy_client.is_connected:
             playback_state = self.runtime.mopidy_client.get_playback_state()
             if playback_state == "playing":
                 self.runtime.now_playing_screen.render()

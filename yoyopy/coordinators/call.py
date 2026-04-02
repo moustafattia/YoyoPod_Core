@@ -17,6 +17,7 @@ from yoyopy.events import (
     CallStateChangedEvent,
     IncomingCallEvent,
     RegistrationChangedEvent,
+    VoIPAvailabilityChangedEvent,
 )
 from yoyopy.connectivity import CallState, RegistrationState
 
@@ -50,6 +51,7 @@ class CallCoordinator:
         event_bus.subscribe(CallStateChangedEvent, self._on_call_state_changed_event)
         event_bus.subscribe(CallEndedEvent, self._on_call_ended_event)
         event_bus.subscribe(RegistrationChangedEvent, self._on_registration_changed_event)
+        event_bus.subscribe(VoIPAvailabilityChangedEvent, self._on_availability_changed_event)
         self._bound = True
 
     def publish_incoming_call(self, caller_address: str, caller_name: str) -> None:
@@ -76,6 +78,13 @@ class CallCoordinator:
             raise RuntimeError("CallCoordinator is not bound to an EventBus")
 
         self._event_bus.publish(RegistrationChangedEvent(state=state))
+
+    def publish_availability_change(self, available: bool, reason: str = "") -> None:
+        """Publish backend availability changes from VoIP threads."""
+        if self._event_bus is None:
+            raise RuntimeError("CallCoordinator is not bound to an EventBus")
+
+        self._event_bus.publish(VoIPAvailabilityChangedEvent(available=available, reason=reason))
 
     def start_ringing(self) -> None:
         """Start playing the ring tone for an incoming call."""
@@ -137,6 +146,9 @@ class CallCoordinator:
     def _on_registration_changed_event(self, event: RegistrationChangedEvent) -> None:
         self.handle_registration_change(event.state)
 
+    def _on_availability_changed_event(self, event: VoIPAvailabilityChangedEvent) -> None:
+        self.handle_availability_change(event.available, event.reason)
+
     def handle_incoming_call(self, caller_address: str, caller_name: str) -> None:
         """Coordinate music pause and UI transitions for an incoming call."""
         if self.handling_incoming_call:
@@ -148,7 +160,7 @@ class CallCoordinator:
 
         playback_state = (
             self.runtime.mopidy_client.get_playback_state()
-            if self.runtime.mopidy_client
+            if self.runtime.mopidy_client and self.runtime.mopidy_client.is_connected
             else "stopped"
         )
 
@@ -232,3 +244,19 @@ class CallCoordinator:
             logger.warning("  ⚠ VoIP registration failed")
 
         self.screen_coordinator.refresh_call_screen_if_visible()
+
+    def handle_availability_change(self, available: bool, reason: str) -> None:
+        """Coordinate backend availability changes and forced call cleanup."""
+        if available:
+            logger.info(f"VoIP backend available ({reason or 'ready'})")
+            self.screen_coordinator.refresh_call_screen_if_visible()
+            return
+
+        logger.warning(f"VoIP backend unavailable ({reason or 'unknown'})")
+        self.voip_registered = False
+        self.runtime.set_voip_ready(False, trigger=f"voip_{reason or 'unavailable'}")
+        self.stop_ringing()
+        self.screen_coordinator.refresh_call_screen_if_visible()
+
+        if self.runtime.call_fsm.is_active:
+            self.handle_call_ended()

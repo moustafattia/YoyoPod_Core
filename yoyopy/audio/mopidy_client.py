@@ -92,6 +92,9 @@ class MopidyClient:
         # Playback state change callbacks
         self.playback_state_callbacks: List[Callable[[str], None]] = []
 
+        # Connectivity callbacks
+        self.connection_change_callbacks: List[Callable[[bool, str], None]] = []
+
         # State tracking
         self.current_track: Optional[MopidyTrack] = None
         self.current_playback_state: Optional[str] = None
@@ -148,7 +151,7 @@ class MopidyClient:
         except requests.exceptions.ConnectionError:
             if self.is_connected:
                 logger.error("Lost connection to Mopidy")
-                self.is_connected = False
+            self._set_connection_state(False, "connection_lost")
             raise
         except requests.exceptions.Timeout:
             logger.warning(f"Mopidy request timeout ({method})")
@@ -168,12 +171,12 @@ class MopidyClient:
             # Test connection with a simple call
             version = self._rpc_call("core.get_version")
             if version:
-                self.is_connected = True
+                self._set_connection_state(True, "connected")
                 logger.info(f"Connected to Mopidy {version}")
                 return True
         except Exception as e:
             logger.error(f"Failed to connect to Mopidy: {e}")
-            self.is_connected = False
+            self._set_connection_state(False, "connect_failed")
 
         return False
 
@@ -434,11 +437,20 @@ class MopidyClient:
         self.playback_state_callbacks.append(callback)
         logger.debug("Registered playback state change callback")
 
+    def on_connection_change(self, callback: Callable[[bool, str], None]) -> None:
+        """Register callback for Mopidy connectivity changes."""
+        self.connection_change_callbacks.append(callback)
+        logger.debug("Registered Mopidy connection change callback")
+
     def _poll_track_changes(self) -> None:
         """Poll for track and playback state changes (runs in background thread)."""
         logger.debug("Track change polling started")
 
         while self.polling and not self.poll_event.is_set():
+            if not self.is_connected:
+                self.poll_event.wait(2.0)
+                continue
+
             try:
                 track = self.get_current_track()
                 playback_state = self.get_playback_state()
@@ -509,3 +521,21 @@ class MopidyClient:
         """Clean up resources."""
         self.stop_polling()
         logger.info("Mopidy client cleaned up")
+
+    def _set_connection_state(self, connected: bool, reason: str = "") -> None:
+        """Store connectivity and notify listeners when it changes."""
+        previous = self.is_connected
+        self.is_connected = connected
+
+        if not connected:
+            self.current_track = None
+            self.current_playback_state = None
+
+        if previous == connected:
+            return
+
+        for callback in self.connection_change_callbacks:
+            try:
+                callback(connected, reason)
+            except Exception as exc:
+                logger.error(f"Error in Mopidy connection callback: {exc}")

@@ -87,13 +87,17 @@ class CallScreen(Screen):
         # Get VoIP status
         if self.voip_manager:
             status = self.voip_manager.get_status()
+            running = status.get("running", False)
             registered = status.get("registered", False)
             reg_state = status.get("registration_state", "none")
             call_state = status.get("call_state", "idle")
             sip_identity = status.get("sip_identity", "")
 
             # Draw registration status
-            if registered:
+            if not running:
+                status_text = "VoIP Recovering..."
+                status_color = self.display.COLOR_YELLOW
+            elif registered:
                 status_text = "VoIP Ready"
                 status_color = self.display.COLOR_GREEN
             elif reg_state == "progress":
