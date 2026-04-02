@@ -41,6 +41,14 @@ class RegistrationChangedEvent:
 
 
 @dataclass(frozen=True, slots=True)
+class VoIPAvailabilityChangedEvent:
+    """Published when VoIP backend availability changes."""
+
+    available: bool
+    reason: str = ""
+
+
+@dataclass(frozen=True, slots=True)
 class TrackChangedEvent:
     """Published when the current Mopidy track changes."""
 
@@ -52,3 +60,11 @@ class PlaybackStateChangedEvent:
     """Published when Mopidy playback changes state."""
 
     state: str
+
+
+@dataclass(frozen=True, slots=True)
+class MusicAvailabilityChangedEvent:
+    """Published when Mopidy connectivity changes."""
+
+    available: bool
+    reason: str = ""

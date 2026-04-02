@@ -44,23 +44,29 @@ class NowPlayingScreen(Screen):
         """Render the now playing screen."""
         # Get track info from Mopidy or context
         if self.mopidy_client:
-            # Get track from Mopidy
-            mopidy_track = self.mopidy_client.get_current_track()
-            if mopidy_track:
-                track_title = mopidy_track.name
-                artist = mopidy_track.get_artist_string()
-                # Calculate progress from position and track length
-                if mopidy_track.length > 0:
-                    position_ms = self.mopidy_client.get_time_position()
-                    progress = position_ms / mopidy_track.length
-                else:
-                    progress = 0.0
-                is_playing = self.mopidy_client.get_playback_state() == "playing"
-            else:
-                track_title = "No Track"
-                artist = "Unknown Artist"
+            if not self.mopidy_client.is_connected:
+                track_title = "Music Offline"
+                artist = "Reconnecting..."
                 progress = 0.0
                 is_playing = False
+            else:
+                # Get track from Mopidy
+                mopidy_track = self.mopidy_client.get_current_track()
+                if mopidy_track:
+                    track_title = mopidy_track.name
+                    artist = mopidy_track.get_artist_string()
+                    # Calculate progress from position and track length
+                    if mopidy_track.length > 0:
+                        position_ms = self.mopidy_client.get_time_position()
+                        progress = position_ms / mopidy_track.length
+                    else:
+                        progress = 0.0
+                    is_playing = self.mopidy_client.get_playback_state() == "playing"
+                else:
+                    track_title = "No Track"
+                    artist = "Unknown Artist"
+                    progress = 0.0
+                    is_playing = False
         else:
             # Fallback to context for local tracks
             track = self.context.get_current_track() if self.context else None
@@ -217,6 +223,8 @@ class NowPlayingScreen(Screen):
     def _toggle_playback(self) -> None:
         """Toggle playback via Mopidy or the local app context."""
         if self.mopidy_client:
+            if not self.mopidy_client.is_connected:
+                return
             state = self.mopidy_client.get_playback_state()
             if state == "playing":
                 self.mopidy_client.pause()
@@ -228,6 +236,8 @@ class NowPlayingScreen(Screen):
     def _previous_track(self) -> None:
         """Go to the previous track."""
         if self.mopidy_client:
+            if not self.mopidy_client.is_connected:
+                return
             self.mopidy_client.previous_track()
         elif self.context:
             self.context.previous_track()
@@ -235,6 +245,8 @@ class NowPlayingScreen(Screen):
     def _next_track(self) -> None:
         """Go to the next track."""
         if self.mopidy_client:
+            if not self.mopidy_client.is_connected:
+                return
             self.mopidy_client.next_track()
         elif self.context:
             self.context.next_track()

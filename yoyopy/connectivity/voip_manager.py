@@ -47,6 +47,7 @@ class VoIPManager:
         self.registration_callbacks: list[Callable[[RegistrationState], None]] = []
         self.call_state_callbacks: list[Callable[[CallState], None]] = []
         self.incoming_call_callbacks: list[Callable[[str, str], None]] = []
+        self.availability_callbacks: list[Callable[[bool, str], None]] = []
 
         self.duration_thread: Optional[threading.Thread] = None
         self.duration_stop_event = threading.Event()
@@ -62,6 +63,9 @@ class VoIPManager:
             return True
 
         self.running = self.backend.start()
+        if not self.running:
+            self._update_registration_state(RegistrationState.FAILED)
+        self._notify_availability_change(self.running, "started" if self.running else "start_failed")
         return self.running
 
     def stop(self) -> None:
@@ -70,7 +74,10 @@ class VoIPManager:
         logger.info("Stopping VoIP manager...")
         self._stop_call_timer()
         self.backend.stop()
+        if self.call_state not in (CallState.IDLE, CallState.RELEASED):
+            self._update_call_state(CallState.RELEASED)
         self.running = False
+        self._notify_availability_change(False, "stopped")
         logger.info("VoIP manager stopped")
 
     def make_call(self, sip_address: str, contact_name: str | None = None) -> bool:
@@ -161,6 +168,11 @@ class VoIPManager:
 
         self.incoming_call_callbacks.append(callback)
 
+    def on_availability_change(self, callback: Callable[[bool, str], None]) -> None:
+        """Register a callback for backend availability changes."""
+
+        self.availability_callbacks.append(callback)
+
     def get_call_duration(self) -> int:
         """Return the current call duration in seconds."""
 
@@ -204,7 +216,11 @@ class VoIPManager:
             return
         if isinstance(event, BackendStopped):
             logger.warning(f"VoIP backend stopped unexpectedly: {event.reason or 'unknown'}")
+            if self.call_state not in (CallState.IDLE, CallState.RELEASED):
+                self._update_call_state(CallState.RELEASED)
+            self._update_registration_state(RegistrationState.FAILED)
             self.running = False
+            self._notify_availability_change(False, event.reason or "backend_stopped")
 
     def _handle_incoming_call_event(self, caller_address: str) -> None:
         """Resolve caller metadata and notify incoming-call callbacks."""
@@ -318,3 +334,11 @@ class VoIPManager:
             if self.call_start_time is not None:
                 self.call_duration = int(time.time() - self.call_start_time)
             time.sleep(1)
+
+    def _notify_availability_change(self, available: bool, reason: str) -> None:
+        """Notify listeners that backend availability changed."""
+        for callback in self.availability_callbacks:
+            try:
+                callback(available, reason)
+            except Exception as exc:
+                logger.error(f"Error in availability callback: {exc}")

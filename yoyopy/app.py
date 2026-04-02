@@ -50,6 +50,19 @@ class _MainThreadCallbackEvent:
     callback: Callable[[], None]
 
 
+@dataclass(slots=True)
+class _RecoveryState:
+    """Track reconnect backoff for a recoverable subsystem."""
+
+    next_attempt_at: float = 0.0
+    delay_seconds: float = 1.0
+
+    def reset(self) -> None:
+        """Reset backoff after a successful recovery."""
+        self.next_attempt_at = 0.0
+        self.delay_seconds = 1.0
+
+
 class YoyoPodApp:
     """
     Main YoyoPod application coordinator.
@@ -57,6 +70,8 @@ class YoyoPodApp:
     Owns startup, lifecycle, and the main loop while delegating call and
     playback orchestration to focused coordinator modules.
     """
+
+    _RECOVERY_MAX_DELAY_SECONDS = 30.0
 
     def __init__(self, config_dir: str = "config", simulate: bool = False) -> None:
         self.config_dir = config_dir
@@ -108,6 +123,10 @@ class YoyoPodApp:
         self.screen_coordinator: Optional[ScreenCoordinator] = None
         self.call_coordinator: Optional[CallCoordinator] = None
         self.playback_coordinator: Optional[PlaybackCoordinator] = None
+
+        # Recovery backoff state
+        self._voip_recovery = _RecoveryState()
+        self._mopidy_recovery = _RecoveryState()
 
         logger.info("=" * 60)
         logger.info("YoyoPod Application Initializing")
@@ -367,6 +386,7 @@ class YoyoPodApp:
         self.voip_manager.on_incoming_call(self.call_coordinator.publish_incoming_call)
         self.voip_manager.on_call_state_change(self.call_coordinator.publish_call_state_events)
         self.voip_manager.on_registration_change(self.call_coordinator.publish_registration_change)
+        self.voip_manager.on_availability_change(self.call_coordinator.publish_availability_change)
         logger.info("  ✓ VoIP callbacks registered")
 
     def _setup_music_callbacks(self) -> None:
@@ -381,6 +401,9 @@ class YoyoPodApp:
         self.mopidy_client.on_track_change(self.playback_coordinator.publish_track_change)
         self.mopidy_client.on_playback_state_change(
             self.playback_coordinator.publish_playback_state_change
+        )
+        self.mopidy_client.on_connection_change(
+            self.playback_coordinator.publish_availability_change
         )
         logger.info("  ✓ Music callbacks registered")
 
@@ -480,6 +503,77 @@ class YoyoPodApp:
         self._ensure_coordinators()
         self.coordinator_runtime.sync_ui_state_for_screen(screen_name)
 
+    def _attempt_manager_recovery(self, now: float | None = None) -> None:
+        """Try to recover VoIP and Mopidy when they become unavailable."""
+        recovery_now = time.monotonic() if now is None else now
+        self._attempt_voip_recovery(recovery_now)
+        self._attempt_mopidy_recovery(recovery_now)
+
+    def _attempt_voip_recovery(self, recovery_now: float) -> None:
+        """Restart the VoIP backend when it is not running."""
+        if self.voip_manager is None:
+            return
+
+        if self.voip_manager.running:
+            self._voip_recovery.reset()
+            return
+
+        if recovery_now < self._voip_recovery.next_attempt_at:
+            return
+
+        logger.info("Attempting VoIP recovery")
+        self._finalize_recovery_attempt(
+            "VoIP",
+            self._voip_recovery,
+            self.voip_manager.start(),
+            recovery_now,
+        )
+
+    def _attempt_mopidy_recovery(self, recovery_now: float) -> None:
+        """Reconnect Mopidy when the HTTP client becomes unavailable."""
+        if self.mopidy_client is None:
+            return
+
+        if self.mopidy_client.is_connected:
+            self._mopidy_recovery.reset()
+            return
+
+        if recovery_now < self._mopidy_recovery.next_attempt_at:
+            return
+
+        logger.info("Attempting Mopidy recovery")
+        recovered = self.mopidy_client.connect()
+        if recovered and not self.mopidy_client.polling:
+            self.mopidy_client.start_polling()
+
+        self._finalize_recovery_attempt(
+            "Mopidy",
+            self._mopidy_recovery,
+            recovered,
+            recovery_now,
+        )
+
+    def _finalize_recovery_attempt(
+        self,
+        label: str,
+        state: _RecoveryState,
+        recovered: bool,
+        recovery_now: float,
+    ) -> None:
+        """Update reconnect backoff after a recovery attempt."""
+        if recovered:
+            logger.info(f"{label} recovery succeeded")
+            state.reset()
+            return
+
+        retry_in = state.delay_seconds
+        logger.warning(f"{label} recovery failed, retrying in {retry_in:.0f}s")
+        state.next_attempt_at = recovery_now + retry_in
+        state.delay_seconds = min(
+            state.delay_seconds * 2.0,
+            self._RECOVERY_MAX_DELAY_SECONDS,
+        )
+
     def run(self) -> None:
         """Run the main application loop until interrupted."""
         logger.info("=" * 60)
@@ -532,6 +626,7 @@ class YoyoPodApp:
             while True:
                 time.sleep(0.1)
                 self._process_pending_main_thread_actions()
+                self._attempt_manager_recovery()
 
                 current_time = time.time()
                 if current_time - last_screen_update >= screen_update_interval:
@@ -584,6 +679,6 @@ class YoyoPodApp:
             "voip_registered": self.voip_registered,
             "music_was_playing": self.call_interruption_policy.music_interrupted_by_call,
             "auto_resume": self.auto_resume_after_call,
-            "voip_available": self.voip_manager is not None,
+            "voip_available": self.voip_manager is not None and self.voip_manager.running,
             "music_available": self.mopidy_client is not None and self.mopidy_client.is_connected,
         }

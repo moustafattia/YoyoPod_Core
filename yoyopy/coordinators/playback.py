@@ -10,7 +10,11 @@ from yoyopy.audio.mopidy_client import MopidyTrack
 from yoyopy.coordinators.runtime import AppRuntimeState, CoordinatorRuntime
 from yoyopy.coordinators.screen import ScreenCoordinator
 from yoyopy.event_bus import EventBus
-from yoyopy.events import PlaybackStateChangedEvent, TrackChangedEvent
+from yoyopy.events import (
+    MusicAvailabilityChangedEvent,
+    PlaybackStateChangedEvent,
+    TrackChangedEvent,
+)
 
 
 class PlaybackCoordinator:
@@ -30,6 +34,7 @@ class PlaybackCoordinator:
         self._event_bus = event_bus
         event_bus.subscribe(TrackChangedEvent, self._on_track_changed_event)
         event_bus.subscribe(PlaybackStateChangedEvent, self._on_playback_state_changed_event)
+        event_bus.subscribe(MusicAvailabilityChangedEvent, self._on_availability_changed_event)
         self._bound = True
 
     def publish_track_change(self, track: MopidyTrack | None) -> None:
@@ -46,6 +51,13 @@ class PlaybackCoordinator:
 
         self._event_bus.publish(PlaybackStateChangedEvent(state=playback_state))
 
+    def publish_availability_change(self, available: bool, reason: str = "") -> None:
+        """Publish Mopidy connectivity changes from worker threads."""
+        if self._event_bus is None:
+            raise RuntimeError("PlaybackCoordinator is not bound to an EventBus")
+
+        self._event_bus.publish(MusicAvailabilityChangedEvent(available=available, reason=reason))
+
     def update_now_playing_if_needed(self) -> None:
         """Refresh the now-playing screen for periodic progress updates."""
         self.screen_coordinator.update_now_playing_if_needed()
@@ -59,6 +71,9 @@ class PlaybackCoordinator:
 
     def _on_playback_state_changed_event(self, event: PlaybackStateChangedEvent) -> None:
         self.handle_playback_state_change(event.state)
+
+    def _on_availability_changed_event(self, event: MusicAvailabilityChangedEvent) -> None:
+        self.handle_availability_change(event.available, event.reason)
 
     def handle_track_change(self, track: MopidyTrack | None) -> None:
         """Handle track changes and refresh the active screen when needed."""
@@ -90,4 +105,17 @@ class PlaybackCoordinator:
         state_change = self.runtime.sync_app_state(f"playback_{playback_state}")
         if state_change.entered(AppRuntimeState.PLAYING_WITH_VOIP):
             logger.info("Music playing with VoIP ready")
+        self.screen_coordinator.refresh_now_playing_screen()
+
+    def handle_availability_change(self, available: bool, reason: str) -> None:
+        """Keep playback state aligned with Mopidy connectivity."""
+        if available:
+            logger.info(f"Music backend connected ({reason or 'ready'})")
+            self.screen_coordinator.refresh_now_playing_screen()
+            return
+
+        logger.warning(f"Music backend unavailable ({reason or 'unknown'})")
+        self.runtime.call_interruption_policy.clear()
+        self.runtime.music_fsm.transition("stop")
+        self.runtime.sync_app_state(f"music_{reason or 'unavailable'}")
         self.screen_coordinator.refresh_now_playing_screen()

@@ -61,6 +61,11 @@ class PlaylistScreen(Screen):
             logger.error("Cannot fetch playlists: No Mopidy client")
             return
 
+        if not self.mopidy_client.is_connected:
+            self.error_message = "Mopidy offline"
+            logger.error("Cannot fetch playlists: Mopidy is offline")
+            return
+
         self.loading = True
         self.render()  # Show loading indicator
 
