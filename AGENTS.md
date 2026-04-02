@@ -1,528 +1,286 @@
-# YoyoPod Development Status & Debug Guide
+# YoyoPod Current Status & Developer Guide
 
-**Last Updated:** 2025-10-19
-**Hardware:** Raspberry Pi Zero 2W (416 MB RAM)
-**Project:** iPod-inspired VoIP music player with I2C display
-
----
-
-## Current Development Status
-
-### ✅ Completed Features
-
-#### Phase 1-3: Core Infrastructure
-- Display driver (DisplayHATMini 320x240)
-- Input handling (4 buttons: A, B, X, Y)
-- Screen management system with stack navigation
-- Audio playback via Mopidy
-- Playlist management
-- Contact management
-
-#### Phase 4: VoIP Integration (COMPLETED)
-- **VoIPManager** with linphonec backend
-- SIP registration with HA1 hash authentication
-- Contact lookup and caller name resolution
-- **Outgoing calls:** Working perfectly with contact names and live duration
-- **Incoming calls:** Working perfectly with caller name display and call acceptance
-- **Call state management:** Proper screen transitions between states
-- **Screen navigation:** Fixed stack overflow issues and proper cleanup on call end
-
-### 🎯 Current Status: VoIP Fully Functional
-
-**What Works:**
-- Outgoing calls display contact names correctly
-- Live call duration updates during calls
-- Incoming calls show caller name during ring
-- Call acceptance/rejection with proper UI feedback
-- Screen transitions: Menu → Contact List → Outgoing → In Call → Back to Menu
-- Incoming call: Any Screen → Incoming Call → In Call → Back to Previous Screen
-
-### ✅ Phase 5: Integration (COMPLETE)
-
-**Goal:** Merge VoIP and music streaming into unified YoyoPod application
-
-**Status:** ALL PHASES COMPLETE ✓ - Production Ready
-
-**Key Integration Points:**
-- Unified state machine managing both VoIP and music
-- Auto-pause music on incoming calls
-- Auto-resume music after call ends (configurable)
-- Seamless screen transitions during call interruptions
-- Context-sensitive button controls
-
-**Phase 1 Complete (2025-10-19):**
-- ✅ Enhanced StateMachine with 3 new states
-- ✅ Added 24+ new state transitions
-- ✅ Created `YoyoPodApp` coordinator class
-- ✅ Implemented callback coordination
-- ✅ All state machine tests passing
-
-**Phase 2 Complete (2025-10-19):**
-- ✅ Implemented `_setup_screens()` - registers all 9 screens
-- ✅ Screen integration complete:
-  - Music screens: MenuScreen, NowPlayingScreen, PlaylistScreen
-  - VoIP screens: CallScreen, ContactListScreen, IncomingCallScreen, OutgoingCallScreen, InCallScreen
-  - Navigation: HomeScreen
-- ✅ Screen transitions wired to callbacks:
-  - Incoming call → push IncomingCallScreen
-  - Call connected → push InCallScreen
-  - Call ended → pop all call screens
-  - Track change → refresh NowPlayingScreen
-- ✅ `_pop_call_screens()` helper prevents stack overflow
-- ✅ Created `yoyopod.py` - production application
-- ✅ Full UI navigation working
-
-**Phase 3 Complete (2025-10-19):**
-- ✅ Music auto-pause on incoming call working perfectly
-- ✅ Music auto-resume after call ends (configurable)
-- ✅ Call interruption tested on hardware
-- ✅ Microphone configuration fixed (USB audio card direct access)
-- ✅ All state transitions validated
-- ✅ User confirmation: "Perfect all works!!"
-
-**Phase 4 Complete (2025-10-19):**
-- ✅ RAM profiling: 54.5 MB app, 151 MB available system RAM
-- ✅ UX refinements implemented:
-  1. Progress bar animation (1 Hz updates)
-  2. Pause icon sync after call ends
-  3. State machine sync with mopidy/VoIP states
-  4. Audible ringing for incoming calls (800Hz tone)
-- ✅ Bug fixes applied:
-  - Added `StateMachine.is_call_active()` method
-  - Added missing CALL_INCOMING state transitions
-- ✅ Documentation complete:
-  - `docs/SYSTEM_ARCHITECTURE.md` - Full system diagrams
-  - `docs/INTEGRATION_PLAN.md` - Updated with completion status
-  - `docs/PHASE2_SUMMARY.md` - Screen integration details
-
-**Next Steps:**
-1. Deploy to production (running on hardware)
-2. Monitor for edge cases
-3. Future enhancements (see Phase 5+ in integration plan)
-
-**Integration Plan:** See `docs/INTEGRATION_PLAN.md` for complete architecture, state diagrams, and implementation phases.
+**Last Updated:** 2026-04-02
+**Target Hardware:** Raspberry Pi Zero 2W
+**Project:** iPod-inspired VoIP and Mopidy player with a small-screen, button-driven UI
 
 ---
 
-## Key Technical Details
+## Current Status
 
-### Hardware Setup
-- **Device:** Raspberry Pi Zero 2W
-- **Display:** Pimoroni DisplayHATMini (I2C, 320x240 LCD)
-- **Buttons:** 4 tactile buttons (A, B, X, Y)
-- **Audio:** USB sound card or built-in audio
-- **Network:** WiFi for SIP and mopidy streaming
+- Production runtime is `yoyopod.py` -> `yoyopy.main` -> `YoyoPodApp`.
+- The large architecture refactor is complete:
+  - typed `EventBus`
+  - split `MusicFSM` and `CallFSM`
+  - coordinator modules under `yoyopy/coordinators/`
+  - derived runtime state in `CoordinatorRuntime`
+  - declarative screen routing
+  - typed config models with YAML plus env overlay
+  - dedicated `yoyopy/voip/` package
+- CI validates the Python test suite with `uv sync --extra dev` and `uv run pytest -q`.
+- Raspberry Pi validation has a defined path through `scripts/pi_smoke.py` and `scripts/pi_remote.py`.
 
-### Software Stack
-- **OS:** Raspberry Pi OS
-- **Python:** 3.x with virtual environment
-- **VoIP:** linphonec (Linphone 5.3.105 CLI)
-- **Music:** mopidy server + mopidy-local extension
-- **Display:** ST7789 driver via SPI
-- **Dependencies:** Managed via uv/pip
-
-### Critical Linphone Version Differences
-
-**Linphone 5.x vs 4.x Output Patterns:**
-- Linphone 5.x uses `"CallSession"` (not just `"Call"`)
-- Linphone 5.x uses `"LinphoneCallIncoming"` state
-- Linphone 5.x uses **square brackets** `[sip:user@domain]` not angle brackets
-- Linphone 5.x outputs **lowercase** `"New incoming call from..."` not `"Call from..."`
-
-**Impact:** Pattern matching must be case-insensitive and support multiple formats.
+This file should reflect the repo as it exists on `main`. Older milestone notes are useful for history, but they are not the source of truth anymore.
 
 ---
 
-## RAM Usage Analysis
+## Source Of Truth
 
-### Test Results (Actual Use Case)
+When in doubt, trust these files first:
 
-**Scenario:** Music streaming + VoIP ready to receive calls
-
-```
-Total RAM: 416 MB
-Used RAM:  264 MB
-Free RAM:  92 MB
-Available: 151 MB ✅
-
-Process Breakdown:
-- demo_playlists.py:  54.5 MB (12.7%)
-- mopidy (streaming): 28.7 MB (6.7%)
-- linphonec:          21.7 MB (5.1%)
-- Total apps:        ~105 MB
-```
-
-**Conclusion:** System is viable with 151 MB available RAM remaining.
-
-### RAM Optimization Options
-
-**Non-Essential Services (Headless Setup):**
-- `wf-panel-pi` + `pcmanfm`: ~11 MB (desktop environment)
-- `cups` + `cups-browsed`: ~8 MB (printing)
-- `bluetooth`: ~6 MB (if not using Bluetooth)
-- `avahi-daemon`: ~3 MB (mDNS, lose .local hostname)
-- `ModemManager`: ~3 MB (mobile modems)
-
-**Conservative optimization:** Disable desktop + cups = ~20 MB saved → ~170 MB available
-**Aggressive optimization:** Above + Bluetooth + Avahi = ~35 MB saved → ~185 MB available
+- `yoyopy/app.py`
+- `yoyopy/fsm.py`
+- `yoyopy/event_bus.py`
+- `yoyopy/events.py`
+- `yoyopy/coordinators/runtime.py`
+- `yoyopy/voip/`
+- `yoyopy/ui/display/`
+- `yoyopy/ui/input/`
+- `yoyopy/ui/screens/`
+- `README.md`
+- `docs/SYSTEM_ARCHITECTURE.md`
 
 ---
 
-## Development & Debug Workflow
+## Runtime Architecture
 
-### Remote Development Setup
+Current production topology:
 
-**SSH Access:**
-```bash
-ssh rpi-zero  # or ssh tifo@192.168.x.x
+```text
+yoyopod.py / yoyopy.main
+  -> YoyoPodApp
+     -> EventBus
+     -> MusicFSM
+     -> CallFSM
+     -> CallInterruptionPolicy
+     -> CoordinatorRuntime
+     -> CallCoordinator / PlaybackCoordinator / ScreenCoordinator
+     -> Display facade
+        -> display factory
+        -> Pimoroni | Whisplay | Simulation adapters
+     -> InputManager
+        -> FourButton | PTT | Keyboard adapters
+     -> ScreenManager
+        -> declarative router
+        -> navigation / music / voip screens
+     -> MopidyClient
+     -> VoIPManager
+        -> LinphonecBackend
 ```
 
-**Project Location:**
-- Local: `/home/tifo/Workspace/yoyo-py`
-- RPi: `/home/tifo/yoyo-py`
+Key design points:
 
-**Deploy & Test Workflow:**
+- Music and call state are modeled separately in `yoyopy/fsm.py`.
+- The app no longer uses a monolithic combined `StateMachine`.
+- Background Mopidy and VoIP events are published onto the typed `EventBus` and drained on the coordinator thread.
+- `CoordinatorRuntime` derives the user-facing app state from the split FSMs plus UI state.
+- The screen stack is still the core navigation model.
+
+---
+
+## Important Packages And Files
+
+### Application Core
+
+- `yoyopy/app.py` - app bootstrap, lifecycle, recovery loop, and coordinator wiring
+- `yoyopy/main.py` - package entry point
+- `yoyopy/app_context.py` - shared screen/application context
+- `yoyopy/fsm.py` - `MusicFSM`, `CallFSM`, `CallInterruptionPolicy`
+- `yoyopy/event_bus.py` - thread-safe typed event bus
+- `yoyopy/events.py` - typed orchestration events
+
+### Coordinators
+
+- `yoyopy/coordinators/call.py` - call-flow orchestration
+- `yoyopy/coordinators/playback.py` - music-flow orchestration
+- `yoyopy/coordinators/screen.py` - screen refresh and call-screen updates
+- `yoyopy/coordinators/runtime.py` - derived `AppRuntimeState` and shared runtime references
+
+### Audio And VoIP
+
+- `yoyopy/audio/mopidy_client.py` - Mopidy JSON-RPC client
+- `yoyopy/voip/manager.py` - app-facing VoIP facade
+- `yoyopy/voip/backend.py` - `VoIPBackend`, `LinphonecBackend`, `MockVoIPBackend`
+- `yoyopy/voip/types.py` - SIP config and typed backend events
+
+### UI
+
+- `yoyopy/ui/display/` - display HAL, factory, facade, and adapters
+- `yoyopy/ui/input/` - input HAL, factory, manager, and adapters
+- `yoyopy/ui/screens/manager.py` - stack navigation and input binding
+- `yoyopy/ui/screens/router.py` - declarative route resolution
+- `yoyopy/ui/screens/voip/hub.py` - VoIP hub / quick-call screen
+
+### Configuration
+
+- `config/voip_config.yaml`
+- `config/contacts.yaml`
+- `config/yoyopod_config.yaml`
+- `yoyopy/config/models.py` - typed config models
+- `yoyopy/config/config_manager.py` - current config facade used by the app
+
+---
+
+## Supported Hardware Modes
+
+Current display/input combinations:
+
+- Pimoroni Display HAT Mini: 320x240 landscape with four buttons
+- PiSugar Whisplay: 240x280 portrait with a single PTT-style button
+- Simulation mode: browser-rendered display with keyboard and web-button input
+
+Useful env overrides:
+
+- `YOYOPOD_DISPLAY`
+- `YOYOPOD_WHISPLAY_DRIVER`
+- `YOYOPOD_PLAYBACK_DEVICE`
+- `YOYOPOD_RINGER_DEVICE`
+- `YOYOPOD_CAPTURE_DEVICE`
+- `YOYOPOD_MEDIA_DEVICE`
+- `YOYOPOD_RING_OUTPUT_DEVICE`
+- `YOYOPOD_PI_HOST`
+- `YOYOPOD_PI_PROJECT_DIR`
+- `YOYOPOD_PI_BRANCH`
+
+---
+
+## Local Development Workflow
+
+### Setup
+
 ```bash
-# On local machine: commit and push changes
-git add . && git commit -m "message" && git push
-
-# On RPi: pull and test
-ssh rpi-zero "cd yoyo-py && git pull origin main"
-ssh rpi-zero "cd yoyo-py && source .venv/bin/activate && python demo_voip.py"
+uv sync --extra dev
 ```
 
-### Running Demos
+### Validate Locally
 
-**VoIP Demo:**
 ```bash
-# On RPi (with hardware)
-cd yoyo-py
-source .venv/bin/activate
-python demo_voip.py
-
-# Simulation mode (no hardware required)
-python demo_voip.py --simulate
+python -m compileall yoyopy tests demos scripts
+uv run pytest -q
 ```
 
-**Music Demo:**
+### Run The Production App
+
 ```bash
-python demo_playlists.py  # Playlist browser
-python demo_mopidy.py     # Full mopidy integration
+python yoyopod.py
+python yoyopod.py --simulate
 ```
 
-**Test Scripts:**
+### Useful Demos
+
 ```bash
-python test_voip_registration.py      # Test SIP registration
-python test_incoming_call_debug.py    # Debug incoming call detection
+python demos/demo_voip.py --simulate
+python demos/demo_playlists.py
+python demos/demo_mopidy.py
+python demos/demo_runtime_state.py --simulate
 ```
 
-### Common Debug Commands
+---
 
-**Check running processes:**
+## Raspberry Pi Workflow
+
+Preferred remote helper:
+
+```bash
+uv run python scripts/pi_remote.py status --host rpi-zero
+uv run python scripts/pi_remote.py preflight --host rpi-zero --with-mopidy --with-voip
+uv run python scripts/pi_remote.py sync --host rpi-zero --branch main
+uv run python scripts/pi_remote.py smoke --host rpi-zero --with-mopidy --with-voip
+```
+
+Direct smoke helper on the Pi:
+
+```bash
+uv run python scripts/pi_smoke.py
+uv run python scripts/pi_smoke.py --with-mopidy --with-voip
+```
+
+If the Pi seems to keep old Python state after a pull, restart the running app process before retesting.
+
+---
+
+## Debug Entry Points
+
+Manual diagnostics live in `scripts/`, not `tests/`:
+
+```bash
+uv run python scripts/check_voip_registration.py
+uv run python scripts/debug_incoming_call.py
+```
+
+Helpful remote checks:
+
 ```bash
 ssh rpi-zero "ps aux | grep -E '(python|linphonec|mopidy)'"
-```
-
-**Check RAM usage:**
-```bash
 ssh rpi-zero "free -h"
-ssh rpi-zero "ps aux --sort=-%mem | head -20"
-```
-
-**Kill stuck processes:**
-```bash
-ssh rpi-zero "killall -9 python linphonec"
-```
-
-**Check VoIP logs:**
-```bash
-# Logs are output to stderr by demo scripts
-# Use DEBUG level for detailed linphonec output
-```
-
-**Check mopidy service:**
-```bash
 ssh rpi-zero "systemctl --user status mopidy"
-ssh rpi-zero "systemctl --user restart mopidy"
-```
-
-### Python Module Reload Issue
-
-**Problem:** After `git pull`, Python doesn't reload cached modules
-**Solution:** Kill all Python processes before restarting:
-```bash
 ssh rpi-zero "killall -9 python linphonec"
-# Then start demo again
 ```
+
+If SIP behavior looks wrong, inspect `linphonec` parsing in `yoyopy/voip/backend.py`.
+
+Important current Linphone parsing assumptions:
+
+- Linphone 5.x emits `CallSession` output
+- incoming calls may use `LinphoneCallIncoming`
+- SIP addresses may appear in square brackets like `[sip:user@domain]`
+- incoming call text is typically lowercase `New incoming call from ...`
 
 ---
 
-## Configuration Files
+## Current Test Suite
 
-### VoIP Configuration
-**Location:** `config/voip_config.yaml`
+High-signal tests:
 
-```yaml
-account:
-  sip_server: "sip.linphone.org"
-  sip_username: "your_username"
-  sip_password: "your_password"          # Plain text (optional)
-  sip_password_ha1: "hash_here"          # HA1 hash (preferred)
-  sip_identity: "sip:user@sip.linphone.org"
-  transport: "tcp"
-  display_name: "YoyoPod"
+- `tests/test_fsm_runtime.py`
+- `tests/test_event_bus.py`
+- `tests/test_app_orchestration.py`
+- `tests/test_screen_routing.py`
+- `tests/test_call_screen.py`
+- `tests/test_voip_backend.py`
+- `tests/test_config_models.py`
+- `tests/test_pi_remote.py`
 
-network:
-  stun_server: "stun.linphone.org"
-  enable_ice: true
-
-linphonec_path: "/usr/bin/linphonec"
-```
-
-### Contacts Configuration
-**Location:** `config/contacts.yaml`
-
-```yaml
-contacts:
-  - name: "John Doe"
-    sip_address: "sip:john@sip.linphone.org"
-    favorite: true
-    notes: "Friend"
-
-  - name: "Jane Smith"
-    sip_address: "sip:jane@example.com"
-    favorite: false
-    notes: ""
-
-speed_dial:
-  1: "sip:john@sip.linphone.org"
-  2: "sip:jane@example.com"
-```
+CI-safe tests are in `tests/`. Hardware diagnostics were intentionally moved out of the test suite.
 
 ---
 
-## Known Issues & Solutions
+## Stale Names To Avoid
 
-### Issue 1: Incoming Call Not Detected
+These old names are no longer correct:
 
-**Symptoms:**
-- Call comes in but no UI update
-- LED changes but screen frozen
+- `yoyopy/connectivity/` -> use `yoyopy/voip/`
+- `yoyopy/connectivity/voip_manager.py` -> use `yoyopy/voip/manager.py`
+- `yoyopy/connectivity/voip_backend.py` -> use `yoyopy/voip/backend.py`
+- `yoyopy/connectivity/voip_types.py` -> use `yoyopy/voip/types.py`
+- `state_machine.py` -> removed; use `yoyopy/fsm.py` and `yoyopy/coordinators/runtime.py`
+- `demo_yoyopod_phase1.py` -> removed
+- `tests/test_phase1_state_machine.py` -> replaced by `tests/test_fsm_runtime.py`
+- `tests/test_voip_registration.py` -> moved to `scripts/check_voip_registration.py`
+- `tests/test_incoming_call_debug.py` -> moved to `scripts/debug_incoming_call.py`
 
-**Root Causes:**
-1. Case-sensitive pattern matching (Linphone 5.x uses lowercase "call")
-2. Square bracket format `[sip:...]` not matched
-3. Caller address extraction fails → callback not fired
-
-**Solution Applied:**
-- `yoyopy/voip/manager.py:376-377` - Case-insensitive matching
-- `yoyopy/voip/manager.py:382-417` - Support multiple SIP address formats
-
-### Issue 2: Caller Name Not Shown During Ring
-
-**Symptoms:**
-- Incoming call screen shows "Unknown"
-- Name appears correctly after answering
-
-**Root Cause:**
-- IncomingCallScreen created at startup with empty values
-- Callback didn't update screen instance variables before pushing
-
-**Solution Applied:**
-- `demo_voip.py:208-217` - Update screen properties in callback before push
-
-### Issue 3: Screen Frozen After Call Ends
-
-**Symptoms:**
-- After hangup, stuck on call screen
-- Can't return to menu
-
-**Root Causes:**
-1. Incoming call callback fires repeatedly during ring → screen stack overflow
-2. Only one screen popped when call ends → stuck in deep stack
-
-**Solutions Applied:**
-- `demo_voip.py:216-217` - Guard condition: only push if not already on screen
-- `demo_voip.py:229-235` - Loop to pop ALL call-related screens on release
+If an old doc mentions combined VoIP/music states as the implementation model, treat it as historical context only.
 
 ---
 
-## Important Code Locations
+## Active Product Gaps
 
-### Core VoIP Implementation
-- `yoyopy/voip/manager.py` - VoIPManager class, linphonec interface
-- `yoyopy/voip/types.py` - VoIP configuration dataclass and SIP event types
-- `yoyopy/config/config_manager.py` - Config and contact management
+The architecture cleanup is largely done. The remaining work is more product-facing:
 
-### UI Screens
-- `yoyopy/ui/screens.py` - All screen implementations:
-  - CallScreen (VoIP status)
-  - ContactListScreen (browsable contacts)
-  - OutgoingCallScreen (calling...)
-  - IncomingCallScreen (incoming ring)
-  - InCallScreen (active call with duration)
+- dial pad / manual SIP entry
+- call history and missed-call UX
+- fuller settings UI
+- additional hardware-in-the-loop validation on Raspberry Pi
 
-### Demo Applications
-- **`yoyopod.py`** - ⭐ **PRODUCTION APP** - Full VoIP + Music integration (Phase 2 complete)
-- `demo_yoyopod_phase1.py` - Phase 1 core framework test (state machine only)
-- `demo_voip.py` - VoIP-only demo with full UI
-- `demo_playlists.py` - Music playlist browser
-- `demo_mopidy.py` - Mopidy streaming demo
-
-### Test Scripts
-- `test_phase1_state_machine.py` - Phase 1 state machine validation (8 tests)
-- `test_voip_registration.py` - Test SIP registration
-- `test_incoming_call_debug.py` - Debug incoming call detection with DEBUG logs
+The current codebase is in a good place to focus on product behavior instead of large structural rewrites.
 
 ---
 
-## Debug Patterns
+## References
 
-### Pattern 1: Check Linphonec Output
-
-When calls don't work, use DEBUG logging to see raw linphonec output:
-
-```python
-from loguru import logger
-logger.remove()
-logger.add(sys.stderr, level="DEBUG")  # Enable DEBUG level
-```
-
-**Look for:**
-- `"New incoming call from [sip:user@domain]"` - Incoming call detected
-- `"Call state: idle -> incoming"` - State change
-- `"Extracted caller address: ..."` - Address extraction working
-- `"INCOMING CALL CALLBACK FIRED!"` - Callback triggered
-
-### Pattern 2: Test in Isolation
-
-Create minimal test scripts to isolate issues:
-
-```python
-# Minimal VoIP test
-from yoyopy.voip import VoIPManager, VoIPConfig
-from yoyopy.config import ConfigManager
-
-cm = ConfigManager("config")
-vc = VoIPConfig.from_config_manager(cm)
-vm = VoIPManager(vc, cm)
-
-def on_incoming(addr, name):
-    print(f"CALL FROM: {name} ({addr})")
-
-vm.on_incoming_call(on_incoming)
-vm.start()
-
-import time
-while True:
-    time.sleep(1)
-```
-
-### Pattern 3: Check Call State Flow
-
-Expected state transitions:
-
-**Outgoing Call:**
-```
-idle → outgoing → connected → streams_running → released
-```
-
-**Incoming Call:**
-```
-idle → incoming → connected → streams_running → released
-```
-
-Monitor in logs:
-```python
-def on_call_state_change(state):
-    logger.info(f"Call state: {state.value}")
-```
-
----
-
-## Next Development Steps
-
-### 🔥 PRIORITY: Phase 5 Integration (See docs/INTEGRATION_PLAN.md)
-1. **Create YoyoPodApp coordinator** - Unified application class
-2. **Enhance state machine** - Add combined VoIP+music states
-3. **Implement call interruption** - Auto-pause/resume music
-4. **Integration testing** - Test on hardware with real calls
-
-### Future Features (Post-Integration)
-1. **Dial pad screen** - Manual SIP address entry
-2. **Call history** - Track incoming/outgoing/missed calls
-3. **Volume control during call** - Adjust mic/speaker
-4. **Bluetooth headset** - Support wireless audio
-5. **Speed dial** - Quick access to favorite contacts
-6. **Conference calling** - Multiple participants
-
-### Optimization Ideas
-1. Reduce VoIPManager RAM usage (~57 MB is high)
-2. Implement lazy loading for screens
-3. Profile and optimize mopidy integration
-4. Consider lighter VoIP alternatives to linphonec
-
----
-
-## Useful References
-
-**Project Documentation:**
-- `docs/INTEGRATION_PLAN.md` - VoIP + Music integration architecture and plan
-- `.Codex/AGENTS.md` - This file (development status and debug guide)
-
-**Linphone Documentation:**
-- https://wiki.linphone.org/
-- linphonec commands: `help` in linphonec console
-
-**Mopidy Documentation:**
-- https://docs.mopidy.com/
-- Extensions: https://mopidy.com/ext/
-
-**DisplayHATMini:**
-- https://github.com/pimoroni/displayhatmini-python
-
-**Project Repository:**
-- https://github.com/your-username/yoyo-py (update with actual repo)
-
----
-
-## Development Notes
-
-**Date: 2025-10-19 (Phase 2 Complete)**
-- **Phase 2: Screen Integration COMPLETE** ✓
-- Implemented:
-  - `_setup_screens()` method - creates and registers all 9 screens
-  - Screen transitions wired to VoIP/music callbacks
-  - `_pop_call_screens()` helper - prevents stack overflow
-  - Full UI navigation with all screens
-  - Production app: `yoyopod.py`
-- All callbacks now update screens:
-  - Incoming call → push IncomingCallScreen
-  - Call connected → push InCallScreen
-  - Call ended → pop all call screens
-  - Track change → refresh NowPlayingScreen
-  - Registration change → refresh CallScreen
-- Ready for Phase 3: Hardware testing and refinement
-
-**Date: 2025-10-19 (Phase 1 Complete)**
-- **Phase 1: Core Integration Framework COMPLETE** ✓
-- Enhanced StateMachine with 3 new states, 24+ transitions
-- YoyoPodApp coordinator class with callback coordination
-- Configuration system (yoyopod_config.yaml)
-- State machine testing (all 8 tests passing)
-
-**Date: 2025-10-19 (Planning)**
-- **Phase 5 Integration Planning:** Created comprehensive integration plan (`docs/INTEGRATION_PLAN.md`)
-- Integration plan covers:
-  - Enhanced state machine with combined VoIP+music states
-  - YoyoPodApp coordinator architecture
-  - Call interruption flow (auto-pause/resume music)
-  - Screen transition scenarios
-  - Context-sensitive button mapping
-  - 4-phase implementation roadmap
-
-**Date: 2025-10-13**
-- VoIP Phase 4.2 completed: Full incoming and outgoing call support
-- RAM testing confirmed viability on Pi Zero 2W (151 MB available with music+VoIP)
-- All major VoIP bugs fixed (caller detection, screen navigation, stack overflow)
-- System ready for integration work (music pause on call, etc.)
+- `README.md`
+- `docs/SYSTEM_ARCHITECTURE.md`
+- `docs/INTEGRATION_PLAN.md`
+- `docs/RPI_SMOKE_VALIDATION.md`
+- `docs/PI_DEV_WORKFLOW.md`
+- Project repository: `https://github.com/moustafattia/yoyo-py`
