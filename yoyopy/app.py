@@ -453,6 +453,11 @@ class YoyoPodApp:
         self._ensure_coordinators()
         self.playback_coordinator.update_now_playing_if_needed()
 
+    def _update_in_call_if_needed(self) -> None:
+        """Refresh the in-call screen from the main loop when it is visible."""
+        self._ensure_coordinators()
+        self.screen_coordinator.update_in_call_if_needed()
+
     def _start_ringing(self) -> None:
         """Compatibility wrapper for starting the call ring tone."""
         self._ensure_coordinators()
@@ -524,6 +529,7 @@ class YoyoPodApp:
                 current_time = time.time()
                 if current_time - last_screen_update >= screen_update_interval:
                     self._update_now_playing_if_needed()
+                    self._update_in_call_if_needed()
                     last_screen_update = current_time
         except KeyboardInterrupt:
             logger.info("\n" + "=" * 60)

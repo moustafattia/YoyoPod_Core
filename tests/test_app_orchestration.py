@@ -280,6 +280,22 @@ def test_track_event_refreshes_now_playing_screen_when_visible() -> None:
     assert app.music_fsm.state == MusicState.IDLE
 
 
+def test_periodic_in_call_refresh_only_renders_visible_call_screen() -> None:
+    """Live in-call refreshes should come from the main loop, not a screen-owned thread."""
+    app, _, screen_manager = _build_app(playback_state="stopped")
+
+    app._update_in_call_if_needed()
+    assert app.in_call_screen.render_calls == 0
+
+    screen_manager.push_screen("in_call")
+    app._update_in_call_if_needed()
+    assert app.in_call_screen.render_calls == 1
+
+    screen_manager.pop_screen()
+    app._update_in_call_if_needed()
+    assert app.in_call_screen.render_calls == 1
+
+
 def test_navigation_updates_runtime_base_state() -> None:
     """Idle navigation should keep the derived runtime state aligned with the active screen."""
     app, _, screen_manager = _build_app(playback_state="stopped")
