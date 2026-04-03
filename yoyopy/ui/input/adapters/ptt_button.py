@@ -124,6 +124,8 @@ class PTTInputAdapter(InputHAL):
             return False
 
         try:
+            if hasattr(self.device, "button_pressed") and callable(self.device.button_pressed):
+                return self.device.button_pressed()
             if hasattr(self.device, "button_pressed"):
                 return self.device.button_pressed
             if hasattr(self.device, "get_button_state"):
