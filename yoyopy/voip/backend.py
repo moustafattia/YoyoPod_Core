@@ -403,8 +403,18 @@ ringer_dev_id={self.config.ringer_dev_id}
 capture_dev_id={self.config.capture_dev_id}
 media_dev_id={self.config.media_dev_id}
 echocancellation=1
+ec_tail_len=200
+ec_delay=50
+ec_framesize=128
+echolimiter=1
+el_type=mic
+el_thres=0.02
+el_force=10
+el_sustain=100
 mic_gain_db={self.config.mic_gain * 0.3:.1f}
 playback_gain_db={self.config.speaker_volume * 0.12 - 6:.1f}
+ng_thres=0.02
+ng_floorgain=0.005
 """
 
             with open(linphonerc_path, "w", encoding="utf-8") as handle:
