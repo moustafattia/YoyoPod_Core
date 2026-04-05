@@ -174,8 +174,8 @@ def test_call_screen_builds_syncs_and_destroys_lvgl_view() -> None:
         voip_manager=FakeVoipManager(),
         config_manager=FakeConfigManager(
             [
-                FakeContact("Echo Test Service", "sip:echo@sip.linphone.org", True),
                 FakeContact("Hagar", "sip:hagar@example.com", True),
+                FakeContact("Mama", "sip:mama@example.com", True),
             ]
         ),
     )
@@ -187,8 +187,8 @@ def test_call_screen_builds_syncs_and_destroys_lvgl_view() -> None:
     payload = binding.playlist_sync_payloads[-1]
     assert payload["title_text"] == "Calls ready"
     assert payload["page_text"] == "1/2"
-    assert payload["items"] == ["Echo Test Service", "Hagar"]
-    assert payload["badges"] == ["FAV", "FAV"]
+    assert payload["items"] == ["Hagar", "Mama"]
+    assert payload["badges"] == ["", ""]
     assert payload["selected_visible_index"] == 0
 
     screen.on_advance()
