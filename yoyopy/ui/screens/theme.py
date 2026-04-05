@@ -25,6 +25,8 @@ MUTED: Color = (153, 160, 173)
 MUTED_DIM: Color = (111, 118, 132)
 SUCCESS: Color = (61, 221, 83)
 ERROR: Color = (255, 103, 93)
+FOOTER_SAFE_HEIGHT_PORTRAIT = 20
+FOOTER_SAFE_HEIGHT_LANDSCAPE = 18
 
 
 @dataclass(frozen=True, slots=True)
@@ -487,8 +489,16 @@ def render_footer(display: Display, text: str, *, mode: str) -> None:
 
     theme = theme_for(mode)
     font_size = 9 if display.is_portrait() else 10
-    footer_width, _ = display.get_text_size(text, font_size)
-    display.text(text, (display.WIDTH - footer_width) // 2, display.HEIGHT - 15, color=mix(theme.accent, MUTED, 0.72), font_size=font_size)
+    footer_width, footer_height = display.get_text_size(text, font_size)
+    footer_safe_height = FOOTER_SAFE_HEIGHT_PORTRAIT if display.is_portrait() else FOOTER_SAFE_HEIGHT_LANDSCAPE
+    footer_top = display.HEIGHT - footer_safe_height
+
+    # Reserve a clean bottom strip so helper text never collides with panels or list rows.
+    display.rectangle(0, footer_top, display.WIDTH, display.HEIGHT, fill=BACKGROUND)
+
+    footer_x = (display.WIDTH - footer_width) // 2
+    footer_y = footer_top + max(0, (footer_safe_height - footer_height) // 2) - 1
+    display.text(text, footer_x, footer_y, color=mix(theme.accent, MUTED, 0.72), font_size=font_size)
 
 
 def _pill(
