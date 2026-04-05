@@ -36,8 +36,8 @@ def build(native_dir: Path, source_dir: Path, build_dir: Path) -> None:
             str(build_dir),
             "-DCMAKE_BUILD_TYPE=Release",
             f"-DLVGL_SOURCE_DIR={source_dir}",
-            "-DLV_BUILD_EXAMPLES=OFF",
-            "-DLV_BUILD_DEMOS=OFF",
+            "-DCONFIG_LV_BUILD_EXAMPLES=OFF",
+            "-DCONFIG_LV_BUILD_DEMOS=OFF",
         ]
     )
     run(["cmake", "--build", str(build_dir), "--parallel", "2"])
