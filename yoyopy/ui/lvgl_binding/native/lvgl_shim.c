@@ -39,8 +39,6 @@ typedef struct {
     lv_obj_t * title_label;
     lv_obj_t * title_underline;
     lv_obj_t * page_label;
-    lv_obj_t * status_chip;
-    lv_obj_t * status_chip_label;
     lv_obj_t * panel;
     lv_obj_t * item_panels[4];
     lv_obj_t * item_titles[4];
@@ -62,6 +60,8 @@ typedef struct {
     lv_obj_t * title_label;
     lv_obj_t * title_underline;
     lv_obj_t * page_label;
+    lv_obj_t * status_chip;
+    lv_obj_t * status_chip_label;
     lv_obj_t * panel;
     lv_obj_t * item_panels[4];
     lv_obj_t * item_titles[4];
