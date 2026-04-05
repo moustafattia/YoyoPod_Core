@@ -175,11 +175,12 @@ int yoyopy_lvgl_power_sync(
     int32_t power_available,
     uint32_t accent_rgb
 );
-void yoyopy_lvgl_power_destroy(void);
-void yoyopy_lvgl_clear_screen(void);
-const char * yoyopy_lvgl_last_error(void);
-const char * yoyopy_lvgl_version(void);
-"""
+    void yoyopy_lvgl_power_destroy(void);
+    void yoyopy_lvgl_clear_screen(void);
+    void yoyopy_lvgl_force_refresh(void);
+    const char * yoyopy_lvgl_last_error(void);
+    const char * yoyopy_lvgl_version(void);
+    """
 
 
 class LvglBindingError(RuntimeError):
@@ -722,6 +723,9 @@ class LvglBinding:
 
     def clear_screen(self) -> None:
         self.lib.yoyopy_lvgl_clear_screen()
+
+    def force_refresh(self) -> None:
+        self.lib.yoyopy_lvgl_force_refresh()
 
     def to_bytes(self, pixel_data: object, byte_length: int) -> bytes:
         return bytes(self.ffi.buffer(pixel_data, byte_length))

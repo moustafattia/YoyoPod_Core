@@ -927,6 +927,9 @@ class YoyoPodApp:
             if current_screen is not None:
                 current_screen.render()
 
+        if self._lvgl_backend is not None and self._lvgl_backend.initialized:
+            self._lvgl_backend.force_refresh()
+
         self._update_screen_runtime_metrics(now)
         logger.debug("Screen woke from inactivity")
 

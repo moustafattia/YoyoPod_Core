@@ -2440,6 +2440,20 @@ void yoyopy_lvgl_clear_screen(void) {
     yoyopy_reset_scene_refs();
 }
 
+void yoyopy_lvgl_force_refresh(void) {
+    if(!g_initialized || g_display == NULL) {
+        return;
+    }
+
+    lv_obj_t * screen = lv_screen_active();
+    if(screen == NULL) {
+        return;
+    }
+
+    lv_obj_invalidate(screen);
+    lv_timer_handler();
+}
+
 const char * yoyopy_lvgl_last_error(void) {
     return g_last_error;
 }

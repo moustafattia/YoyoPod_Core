@@ -18,6 +18,7 @@ class FakeBinding:
         self.register_input_calls = 0
         self.shutdown_calls = 0
         self.clear_calls = 0
+        self.force_refresh_calls = 0
         self.tick_calls: list[int] = []
         self.key_events: list[tuple[int, bool]] = []
         self.flush_callback = None
@@ -50,6 +51,9 @@ class FakeBinding:
 
     def clear_screen(self) -> None:
         self.clear_calls += 1
+
+    def force_refresh(self) -> None:
+        self.force_refresh_calls += 1
 
     def to_bytes(self, pixel_data: object, byte_length: int) -> bytes:
         return bytes(pixel_data[:byte_length])
@@ -152,6 +156,19 @@ def test_lvgl_backend_reset_clears_the_active_scene() -> None:
     backend.reset()
 
     assert binding.clear_calls == 1
+
+
+def test_lvgl_backend_force_refresh_delegates_to_native_binding() -> None:
+    """Force-refresh should invalidate the active LVGL scene once initialized."""
+
+    binding = FakeBinding()
+    target = FakeFlushTarget()
+    backend = LvglDisplayBackend(target, binding=binding)
+    backend.initialize()
+
+    backend.force_refresh()
+
+    assert binding.force_refresh_calls == 1
 
 
 def test_lvgl_backend_cleanup_shuts_down_the_native_binding() -> None:
