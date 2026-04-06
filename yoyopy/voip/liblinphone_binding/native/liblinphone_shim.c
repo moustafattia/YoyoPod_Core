@@ -484,6 +484,50 @@ static void yoyopy_prepare_auto_download(LinphoneChatMessage *message) {
     linphone_chat_message_download_content(message, content);
 }
 
+static int yoyopy_apply_transports(LinphoneCore *core, const char *transport) {
+    LinphoneTransports *transports = NULL;
+    const char *selected = transport;
+    LinphoneStatus status;
+
+    if (core == NULL) {
+        yoyopy_set_error("Cannot configure Liblinphone transports without a core");
+        return -1;
+    }
+
+    if (selected == NULL || selected[0] == '\0' || strcmp(selected, "auto") == 0) {
+        selected = "tcp";
+    }
+
+    transports = linphone_core_get_transports(core);
+    if (transports == NULL) {
+        yoyopy_set_error("Failed to allocate Linphone transports");
+        return -1;
+    }
+
+    linphone_transports_set_udp_port(transports, 0);
+    linphone_transports_set_tcp_port(transports, 0);
+    linphone_transports_set_tls_port(transports, 0);
+    linphone_transports_set_dtls_port(transports, 0);
+
+    if (strcmp(selected, "udp") == 0) {
+        linphone_transports_set_udp_port(transports, LC_SIP_TRANSPORT_RANDOM);
+    } else if (strcmp(selected, "tls") == 0) {
+        linphone_transports_set_tls_port(transports, LC_SIP_TRANSPORT_RANDOM);
+    } else if (strcmp(selected, "dtls") == 0) {
+        linphone_transports_set_dtls_port(transports, LC_SIP_TRANSPORT_RANDOM);
+    } else {
+        linphone_transports_set_tcp_port(transports, LC_SIP_TRANSPORT_RANDOM);
+    }
+
+    status = linphone_core_set_transports(core, transports);
+    linphone_transports_unref(transports);
+    if (status != 0) {
+        yoyopy_set_error("Failed to configure Liblinphone transports for %s", selected);
+        return -1;
+    }
+    return 0;
+}
+
 static void yoyopy_queue_message_received_event(LinphoneChatMessage *message) {
     yoyopy_liblinphone_event_t event_value;
     memset(&event_value, 0, sizeof(event_value));
@@ -795,6 +839,10 @@ int yoyopy_liblinphone_start(
     linphone_core_enable_echo_cancellation(g_state.core, echo_cancellation != 0);
     linphone_core_set_mic_gain_db(g_state.core, ((float)mic_gain * 0.3f));
     linphone_core_set_playback_gain_db(g_state.core, ((float)speaker_volume * 0.12f) - 6.0f);
+    if (yoyopy_apply_transports(g_state.core, transport) != 0) {
+        yoyopy_liblinphone_stop();
+        return -1;
+    }
     if (stun_server != NULL && stun_server[0] != '\0') {
         linphone_core_set_stun_server(g_state.core, stun_server);
     }
