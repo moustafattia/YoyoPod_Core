@@ -80,6 +80,7 @@ class WhisplayDisplayAdapter(DisplayHAL):
         self.renderer = renderer.lower().strip() or "pil"
         self.lvgl_buffer_lines = max(1, int(lvgl_buffer_lines))
         self.ui_backend = None
+        self.shadow_buffer_sync_enabled = self.simulate or self.renderer != "lvgl"
 
         # Create PIL drawing buffer
         self._create_buffer()
@@ -184,13 +185,15 @@ class WhisplayDisplayAdapter(DisplayHAL):
         height: int,
         pixel_data: bytes,
     ) -> None:
-        """Write an RGB565 region to hardware and the PIL shadow buffer."""
+        """Write an RGB565 region to hardware and optionally the PIL shadow buffer."""
 
         if not self.simulate and self.device:
             self.device.draw_image(x, y, width, height, pixel_data)
 
-        # Always keep PIL shadow buffer in sync for screenshots.
-        self._paste_rgb565_region(x, y, width, height, pixel_data)
+        # Keep the PIL buffer in sync only when it is the active renderer or simulation target.
+        # Doing this for every LVGL partial flush on hardware is too expensive on the Pi.
+        if self.shadow_buffer_sync_enabled:
+            self._paste_rgb565_region(x, y, width, height, pixel_data)
 
     def clear(self, color: Optional[Tuple[int, int, int]] = None) -> None:
         """Clear the display with specified color."""
@@ -418,6 +421,12 @@ class WhisplayDisplayAdapter(DisplayHAL):
         Returns:
             True if the screenshot was saved, False if no buffer exists.
         """
+        if not self.shadow_buffer_sync_enabled:
+            logger.info(
+                "Shadow-buffer screenshots are disabled for hardware LVGL; using LVGL readback instead"
+            )
+            return self.save_screenshot_readback(path)
+
         if self.buffer is None:
             logger.warning("No buffer available for screenshot")
             return False
