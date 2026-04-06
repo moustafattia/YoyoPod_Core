@@ -88,7 +88,12 @@ class VoiceNoteScreen(Screen):
             return
 
         draft = self.voip_manager.get_active_voice_note()
-        if draft is None:
+        recipient_address = self.recipient_address()
+        if draft is None or (
+            recipient_address
+            and draft.recipient_address
+            and draft.recipient_address != recipient_address
+        ):
             self._state = default_state
             if self.context is not None:
                 self.context.update_active_voice_note(send_state="idle")

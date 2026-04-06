@@ -94,7 +94,7 @@ class VoIPManager:
     def _build_message_store(self) -> VoIPMessageStore:
         store_dir = Path(self.config.message_store_dir)
         store_dir.mkdir(parents=True, exist_ok=True)
-        return VoIPMessageStore(store_dir / "messages.json")
+        return VoIPMessageStore(store_dir)
 
     def start(self) -> bool:
         if self.running:

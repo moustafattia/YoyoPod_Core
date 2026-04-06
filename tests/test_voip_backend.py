@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from types import SimpleNamespace
 
 from cffi import FFI
@@ -302,6 +303,18 @@ def test_voip_manager_receives_incoming_voice_note_and_updates_summary() -> None
     assert latest is not None
     assert latest.local_file_path.endswith("incoming.wav")
     assert summary_events[-1][0] == 1
+
+
+def test_voip_manager_builds_message_store_under_directory(tmp_path: Path) -> None:
+    """The configured message store path should be treated as a directory, not a file."""
+
+    config = build_config()
+    config.message_store_dir = str(tmp_path / "messages")
+
+    manager = VoIPManager(config, backend=MockVoIPBackend())
+
+    assert manager._message_store.store_dir == tmp_path / "messages"
+    assert manager._message_store.index_file == tmp_path / "messages" / "messages.json"
 
 
 def test_voip_manager_handles_backend_stop_event() -> None:

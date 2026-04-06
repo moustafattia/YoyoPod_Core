@@ -228,3 +228,26 @@ def test_voice_note_screen_records_reviews_and_sends(display: Display) -> None:
     screen.on_select()
     assert screen.current_view_model()[0] == "Sending"
     assert voip_manager.send_attempts == 1
+
+
+def test_voice_note_screen_ignores_stale_draft_for_different_recipient(display: Display) -> None:
+    """Opening voice notes for contact B should not inherit contact A's stale draft state."""
+
+    context = AppContext()
+    voip_manager = FakeVoIPManager()
+    voip_manager.active_voice_note = VoiceNoteDraft(
+        recipient_address="sip:alice@example.com",
+        recipient_name="Mama",
+        file_path="data/voice_notes/alice.wav",
+        send_state="sent",
+        status_text="Sent",
+        message_id="note-alice",
+    )
+    context.set_voice_note_recipient(name="Dad", sip_address="sip:bob@example.com")
+    screen = VoiceNoteScreen(display, context, voip_manager=voip_manager)
+
+    screen.enter()
+
+    assert screen.current_view_model()[0] == "Voice Note"
+    assert context.voice_note_send_state == "idle"
+    assert context.voice_note_status_text == ""
