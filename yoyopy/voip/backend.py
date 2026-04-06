@@ -121,6 +121,7 @@ class LiblinphoneBackend:
             return False
 
         try:
+            factory_config_path = self._resolve_factory_config_path()
             self.binding.init()
             self._configure_alsa_mixer()
             self.binding.start(
@@ -129,6 +130,7 @@ class LiblinphoneBackend:
                 sip_password=self.config.sip_password,
                 sip_password_ha1=self.config.sip_password_ha1,
                 sip_identity=self.config.sip_identity,
+                factory_config_path=factory_config_path,
                 transport=self.config.transport,
                 stun_server=self.config.stun_server,
                 file_transfer_server_url=self.config.file_transfer_server_url,
@@ -156,6 +158,17 @@ class LiblinphoneBackend:
                 logger.debug("Liblinphone shutdown after failed start also failed")
             self.running = False
             return False
+
+    def _resolve_factory_config_path(self) -> str:
+        path = Path(self.config.factory_config_path)
+        if not path.is_absolute():
+            repo_root = Path(__file__).resolve().parents[2]
+            candidate = repo_root / path
+            path = candidate if candidate.exists() else (Path.cwd() / path)
+        if not path.exists():
+            logger.warning("Liblinphone factory config not found at {}", path)
+            return ""
+        return str(path)
 
     def stop(self) -> None:
         if self.binding is None:

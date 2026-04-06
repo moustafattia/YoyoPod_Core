@@ -69,6 +69,7 @@ class VoIPConfig:
     sip_password: str = ""
     sip_password_ha1: str = ""
     sip_identity: str = ""
+    factory_config_path: str = "config/liblinphone_factory.conf"
     transport: str = "tcp"
     stun_server: str = ""
     file_transfer_server_url: str = ""
@@ -94,6 +95,7 @@ class VoIPConfig:
             sip_password=config_manager.get_sip_password(),
             sip_password_ha1=config_manager.get_sip_password_ha1(),
             sip_identity=config_manager.get_sip_identity(),
+            factory_config_path=config_manager.get_voip_factory_config_path(),
             transport=config_manager.get_transport(),
             stun_server=config_manager.get_stun_server(),
             file_transfer_server_url=config_manager.get_file_transfer_server_url(),

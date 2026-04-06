@@ -257,6 +257,11 @@ class ConfigManager:
 
         return self.voip_settings.account.sip_identity
 
+    def get_voip_factory_config_path(self) -> str:
+        """Get the Liblinphone factory-config path."""
+
+        return self.voip_settings.account.factory_config_path
+
     def get_transport(self) -> str:
         """Get transport protocol."""
 

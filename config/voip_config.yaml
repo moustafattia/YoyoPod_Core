@@ -4,6 +4,7 @@ account:
   sip_password: ""
   sip_password_ha1: 846b52c8563e31b8649afce1eea8cd1e67993182e5d623881948d83d1f77e643
   sip_identity: sip:tifo@sip.linphone.org
+  factory_config_path: config/liblinphone_factory.conf
   transport: tcp
   display_name: YoyoPod
 

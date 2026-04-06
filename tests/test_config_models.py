@@ -156,3 +156,17 @@ def test_config_manager_keeps_typed_voip_audio_settings(tmp_path, monkeypatch) -
     assert config_manager.voip_settings.audio.playback_device_id == "ALSA: default"
     assert config_manager.get_playback_device_id() == "ALSA: default"
     assert config_manager.get_ring_output_device() == "default"
+
+
+def test_config_manager_keeps_liblinphone_factory_config_path(tmp_path, monkeypatch) -> None:
+    """VoIP config should expose the Liblinphone factory config path with env override support."""
+
+    monkeypatch.setenv("YOYOPOD_LIBLINPHONE_FACTORY_CONFIG", "config/custom_liblinphone_factory.conf")
+
+    config_manager = ConfigManager(config_dir=str(tmp_path))
+
+    assert (
+        config_manager.voip_settings.account.factory_config_path
+        == "config/custom_liblinphone_factory.conf"
+    )
+    assert config_manager.get_voip_factory_config_path() == "config/custom_liblinphone_factory.conf"

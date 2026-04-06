@@ -831,6 +831,7 @@ int yoyopy_liblinphone_start(
     const char *sip_password,
     const char *sip_password_ha1,
     const char *sip_identity,
+    const char *factory_config_path,
     const char *transport,
     const char *stun_server,
     const char *file_transfer_server_url,
@@ -857,7 +858,12 @@ int yoyopy_liblinphone_start(
         return -1;
     }
 
-    g_state.core = linphone_factory_create_core_3(g_state.factory, NULL, NULL, NULL);
+    g_state.core = linphone_factory_create_core_3(
+        g_state.factory,
+        NULL,
+        (factory_config_path != NULL && factory_config_path[0] != '\0') ? factory_config_path : NULL,
+        NULL
+    );
     if (g_state.core == NULL) {
         yoyopy_set_error("Failed to create Liblinphone core");
         return -1;

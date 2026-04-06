@@ -37,6 +37,7 @@ class FakeBinding:
         self.shutdown_called = False
         self.events: list[SimpleNamespace] = []
         self.calls: list[str] = []
+        self.start_kwargs: dict[str, object] = {}
 
     def init(self) -> None:
         self.initialized = True
@@ -44,7 +45,8 @@ class FakeBinding:
     def shutdown(self) -> None:
         self.shutdown_called = True
 
-    def start(self, **_kwargs) -> None:
+    def start(self, **kwargs) -> None:
+        self.start_kwargs = kwargs
         self.started = True
 
     def stop(self) -> None:
@@ -181,6 +183,9 @@ def test_liblinphone_backend_starts_and_drains_native_events() -> None:
     assert isinstance(events[3], MessageReceived)
     assert events[3].message.kind == MessageKind.VOICE_NOTE
     assert events[3].message.unread is True
+    assert binding.start_kwargs["factory_config_path"].endswith("config\\liblinphone_factory.conf") or binding.start_kwargs[
+        "factory_config_path"
+    ].endswith("config/liblinphone_factory.conf")
 
 
 def test_liblinphone_binding_decodes_c_string_arrays() -> None:

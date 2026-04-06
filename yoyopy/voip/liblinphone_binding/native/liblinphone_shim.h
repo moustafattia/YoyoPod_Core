@@ -34,6 +34,7 @@ int yoyopy_liblinphone_start(
     const char *sip_password,
     const char *sip_password_ha1,
     const char *sip_identity,
+    const char *factory_config_path,
     const char *transport,
     const char *stun_server,
     const char *file_transfer_server_url,

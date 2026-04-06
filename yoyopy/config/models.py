@@ -335,6 +335,10 @@ class VoIPAccountConfig:
     sip_password: str = config_value(default="", env="YOYOPOD_SIP_PASSWORD")
     sip_password_ha1: str = config_value(default="", env="YOYOPOD_SIP_PASSWORD_HA1")
     sip_identity: str = config_value(default="", env="YOYOPOD_SIP_IDENTITY")
+    factory_config_path: str = config_value(
+        default="config/liblinphone_factory.conf",
+        env="YOYOPOD_LIBLINPHONE_FACTORY_CONFIG",
+    )
     transport: str = config_value(default="tcp", env="YOYOPOD_SIP_TRANSPORT")
     display_name: str = "YoyoPod"
 
