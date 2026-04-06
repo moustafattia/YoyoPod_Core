@@ -9,7 +9,10 @@ import shlex
 import subprocess
 import sys
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Sequence
+
+import yaml
 
 
 @dataclass
@@ -19,6 +22,31 @@ class RemoteConfig:
     host: str
     project_dir: str
     branch: str
+
+
+@dataclass(frozen=True)
+class PiDeployConfig:
+    """Stable runtime paths used by the Pi deploy/debugging workflow."""
+
+    log_file: str
+    error_log_file: str
+    pid_file: str
+    startup_marker: str
+
+
+def load_pi_deploy_config() -> PiDeployConfig:
+    """Load the checked-in Raspberry Pi deploy contract."""
+
+    config_path = Path(__file__).resolve().parent.parent / "deploy" / "pi-deploy.yaml"
+    with open(config_path, "r", encoding="utf-8") as handle:
+        data = yaml.safe_load(handle) or {}
+
+    return PiDeployConfig(
+        log_file=data["log_file"],
+        error_log_file=data["error_log_file"],
+        pid_file=data["pid_file"],
+        startup_marker=data["startup_marker"],
+    )
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -210,6 +238,31 @@ def build_parser() -> argparse.ArgumentParser:
         help="Enable verbose power helper logging",
     )
 
+    logs_parser = subparsers.add_parser(
+        "logs",
+        help="Tail the file-based YoyoPod logs on the Raspberry Pi",
+    )
+    logs_parser.add_argument(
+        "--errors",
+        action="store_true",
+        help="Read the errors-only log file instead of the main log",
+    )
+    logs_parser.add_argument(
+        "--follow",
+        action="store_true",
+        help="Follow the log output until interrupted",
+    )
+    logs_parser.add_argument(
+        "--filter",
+        help="Case-insensitive grep filter for subsystem, module, level, or text",
+    )
+    logs_parser.add_argument(
+        "--lines",
+        type=int,
+        default=100,
+        help="How many lines to show before following (default: 100)",
+    )
+
     service_parser = subparsers.add_parser(
         "service",
         help="Install or inspect the production YoyoPod systemd service",
@@ -360,8 +413,15 @@ def run_local(command: Sequence[str], label: str) -> int:
     return completed.returncode
 
 
-def build_status_command() -> str:
+def shell_quote(value: str) -> str:
+    """Shell-escape one literal value for the remote command string."""
+
+    return shlex.quote(value)
+
+
+def build_status_command(deploy_config: PiDeployConfig | None = None) -> str:
     """Create the remote status command."""
+    deploy = deploy_config or load_pi_deploy_config()
     return " && ".join(
         [
             "echo '== Git ==' ",
@@ -377,6 +437,20 @@ def build_status_command() -> str:
             "echo",
             "echo '== PiSugar Server ==' ",
             "systemctl is-active pisugar-server || true",
+            "echo",
+            "echo '== PID File ==' ",
+            (
+                f"if test -f {shell_quote(deploy.pid_file)}; "
+                f"then cat {shell_quote(deploy.pid_file)}; "
+                "else echo 'missing'; fi"
+            ),
+            "echo",
+            "echo '== Latest Startup Marker ==' ",
+            (
+                f"if test -f {shell_quote(deploy.log_file)}; "
+                f"then grep -F {shell_quote(deploy.startup_marker)} {shell_quote(deploy.log_file)} | tail -n 1 || true; "
+                "else echo 'missing'; fi"
+            ),
             "echo",
             "echo '== Top Processes ==' ",
             "ps -eo pid,comm,%mem,%cpu --sort=-%mem | head -15",
@@ -474,9 +548,71 @@ def build_power_command(args: argparse.Namespace) -> str:
     return " ".join(parts)
 
 
-def build_service_command(args: argparse.Namespace) -> str:
+def build_logs_command(
+    args: argparse.Namespace,
+    deploy_config: PiDeployConfig | None = None,
+) -> str:
+    """Create the remote file-log inspection command."""
+
+    deploy = deploy_config or load_pi_deploy_config()
+    target_log = deploy.error_log_file if args.errors else deploy.log_file
+    tail_mode = "-F" if args.follow else ""
+    base_tail = f"tail -n {args.lines} {tail_mode} {shell_quote(target_log)}".strip()
+
+    if args.filter:
+        return (
+            f"test -f {shell_quote(target_log)} && "
+            f"{base_tail} | grep --line-buffered -i -- {shell_quote(args.filter)}"
+        )
+
+    return f"test -f {shell_quote(target_log)} && {base_tail}"
+
+
+def build_startup_verification_command(
+    deploy_config: PiDeployConfig | None = None,
+    *,
+    attempts: int = 20,
+) -> str:
+    """Create a remote command that waits for the startup marker and matching PID."""
+
+    deploy = deploy_config or load_pi_deploy_config()
+    pid_file = shell_quote(deploy.pid_file)
+    log_file = shell_quote(deploy.log_file)
+    startup_marker = shell_quote(deploy.startup_marker)
+    return " && ".join(
+        [
+            (
+                f"for _ in $(seq 1 {attempts}); do "
+                f"test -f {pid_file} && break; "
+                "sleep 1; "
+                "done"
+            ),
+            f"test -f {pid_file}",
+            f'pid="$(tr -d \'\\n\' < {pid_file})"',
+            'test -n "$pid"',
+            'kill -0 "$pid"',
+            (
+                f"for _ in $(seq 1 {attempts}); do "
+                f"if test -f {log_file} && "
+                f"grep -F {startup_marker} {log_file} | tail -n 1 | grep -F \"pid=$pid\" >/dev/null; then "
+                "break; "
+                "fi; "
+                "sleep 1; "
+                "done"
+            ),
+            f"grep -F {startup_marker} {log_file} | tail -n 1 | grep -F \"pid=$pid\"",
+        ]
+    )
+
+
+def build_service_command(
+    args: argparse.Namespace,
+    deploy_config: PiDeployConfig | None = None,
+) -> str:
     """Create the remote systemd service command."""
+    deploy = deploy_config or load_pi_deploy_config()
     service_name = 'yoyopod@"$(id -un)".service'
+    verify_startup = build_startup_verification_command(deploy)
 
     if args.service_action == "status":
         return f"sudo systemctl status {service_name} --no-pager || true"
@@ -488,18 +624,27 @@ def build_service_command(args: argparse.Namespace) -> str:
                 "sudo cp deploy/systemd/yoyopod@.service /etc/systemd/system/yoyopod@.service",
                 "sudo systemctl daemon-reload",
                 f"sudo systemctl enable --now {service_name}",
+                verify_startup,
                 f"sudo systemctl status {service_name} --no-pager",
             ]
         )
 
     if args.service_action == "start":
-        return f"sudo systemctl start {service_name} && sudo systemctl status {service_name} --no-pager"
+        return (
+            f"sudo systemctl start {service_name} && "
+            f"{verify_startup} && "
+            f"sudo systemctl status {service_name} --no-pager"
+        )
 
     if args.service_action == "stop":
         return f"sudo systemctl stop {service_name} && sudo systemctl status {service_name} --no-pager || true"
 
     if args.service_action == "restart":
-        return f"sudo systemctl restart {service_name} && sudo systemctl status {service_name} --no-pager"
+        return (
+            f"sudo systemctl restart {service_name} && "
+            f"{verify_startup} && "
+            f"sudo systemctl status {service_name} --no-pager"
+        )
 
     if args.service_action == "logs":
         return f"sudo journalctl -u {service_name} -n {args.lines} --no-pager"
@@ -566,6 +711,7 @@ def main() -> int:
     """Program entry point."""
     parser = build_parser()
     args = parser.parse_args()
+    deploy_config = load_pi_deploy_config()
 
     config = RemoteConfig(
         host=args.host,
@@ -575,7 +721,7 @@ def main() -> int:
     validate_config(config)
 
     if args.command == "status":
-        return run_remote(config, build_status_command())
+        return run_remote(config, build_status_command(deploy_config))
 
     if args.command == "sync":
         return run_remote(config, build_sync_command(config, args.skip_uv_sync))
@@ -595,8 +741,11 @@ def main() -> int:
     if args.command == "power":
         return run_remote(config, build_power_command(args))
 
+    if args.command == "logs":
+        return run_remote(config, build_logs_command(args, deploy_config), tty=args.follow)
+
     if args.command == "service":
-        return run_remote(config, build_service_command(args))
+        return run_remote(config, build_service_command(args, deploy_config))
 
     if args.command == "preflight":
         return run_preflight(config, args)

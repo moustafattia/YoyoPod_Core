@@ -76,5 +76,14 @@ display:
 logging:
   level: "INFO"                   # DEBUG, INFO, WARNING, ERROR
   file: "logs/yoyopod.log"
-  max_size_mb: 10
-  backup_count: 3
+  error_file: "logs/yoyopod_errors.log"
+  pid_file: "/tmp/yoyopod.pid"
+  rotation: "5 MB"
+  retention: "3 days"
+  compression: "gz"
+  error_rotation: "2 MB"
+  error_retention: "7 days"
+  encoding: "utf-8"
+  enqueue: false                  # Write immediately for near-real-time tails
+  backtrace: true
+  diagnose: true

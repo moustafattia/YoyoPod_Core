@@ -12,6 +12,7 @@ The repo now has a clear hardware smoke path, but developers still need a quick 
 - run the Pi smoke checks
 - launch the production app
 - install and inspect the production systemd unit
+- tail the structured file logs with subsystem/error filtering
 
 Use `scripts/pi_remote.py` for that loop.
 
@@ -55,6 +56,8 @@ Shows:
 - remote branch and commit
 - dirty working tree state
 - Mopidy user-service state
+- tracked PID file state
+- latest startup marker from the file log
 - top memory processes
 
 ### Sync branch to the Raspberry Pi
@@ -138,7 +141,25 @@ uv run python scripts/pi_remote.py service logs --lines 150
 
 This installs `deploy/systemd/yoyopod@.service` onto the Pi as
 `yoyopod@<remote-user>.service`, enables it at boot, and keeps the app paired
-with the PiSugar watchdog recovery loop.
+with the PiSugar watchdog recovery loop. `service install`, `start`, and
+`restart` now wait for the file-log startup marker and verify that it matches
+the PID file before returning success.
+
+### Structured file logs
+
+```bash
+uv run python scripts/pi_remote.py logs --lines 200
+uv run python scripts/pi_remote.py logs --errors
+uv run python scripts/pi_remote.py logs --filter voip
+uv run python scripts/pi_remote.py logs --follow --filter ERROR
+```
+
+This tails the file sinks declared in `deploy/pi-deploy.yaml`, which is the
+stable Pi contract for:
+
+- `<project-dir>/logs/yoyopod.log`
+- `<project-dir>/logs/yoyopod_errors.log`
+- `/tmp/yoyopod.pid`
 
 Use this during on-device tuning when the Whisplay button feels too eager or too sluggish. The helper runs interactively over SSH, prints every semantic gesture event, and accepts temporary timing overrides without modifying the tracked config file.
 

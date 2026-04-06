@@ -295,9 +295,21 @@ class AppLoggingConfig:
     """Logging configuration."""
 
     level: str = config_value(default="INFO", env="YOYOPOD_LOG_LEVEL")
-    file: str = "logs/yoyopod.log"
-    max_size_mb: int = 10
-    backup_count: int = 3
+    file: str = config_value(default="logs/yoyopod.log", env="YOYOPOD_LOG_FILE")
+    error_file: str = config_value(
+        default="logs/yoyopod_errors.log",
+        env="YOYOPOD_ERROR_LOG_FILE",
+    )
+    pid_file: str = config_value(default="/tmp/yoyopod.pid", env="YOYOPOD_PID_FILE")
+    rotation: str = config_value(default="5 MB", env="YOYOPOD_LOG_ROTATION")
+    retention: str = config_value(default="3 days", env="YOYOPOD_LOG_RETENTION")
+    compression: str = config_value(default="gz", env="YOYOPOD_LOG_COMPRESSION")
+    error_rotation: str = config_value(default="2 MB", env="YOYOPOD_ERROR_LOG_ROTATION")
+    error_retention: str = config_value(default="7 days", env="YOYOPOD_ERROR_LOG_RETENTION")
+    encoding: str = config_value(default="utf-8", env="YOYOPOD_LOG_ENCODING")
+    enqueue: bool = config_value(default=False, env="YOYOPOD_LOG_ENQUEUE")
+    backtrace: bool = config_value(default=True, env="YOYOPOD_LOG_BACKTRACE")
+    diagnose: bool = config_value(default=True, env="YOYOPOD_LOG_DIAGNOSE")
 
 
 @dataclass(slots=True)

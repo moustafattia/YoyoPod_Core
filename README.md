@@ -42,6 +42,7 @@ On Whisplay, the one-button root hub currently exposes four cards:
 - `scripts/pisugar_power.py`: PiSugar battery, shutdown, and watchdog helper
 - `scripts/pisugar_rtc.py`: PiSugar RTC status, sync, and alarm helper
 - `deploy/systemd/yoyopod@.service`: production systemd unit for boot-time app supervision
+- `deploy/pi-deploy.yaml`: stable Pi log/PID contract for remote tooling and future automation
 - `yoyopy/fsm.py`: split `MusicFSM`, `CallFSM`, and call interruption policy
 - `yoyopy/coordinators/runtime.py`: derived `AppRuntimeState` over music, call, and UI state
 - `yoyopy/audio/mopidy_client.py`: Mopidy JSON-RPC client
@@ -100,6 +101,7 @@ Important settings:
 - `config/yoyopod_config.yaml`: `input.ptt_navigation=false` is reserved for future voice/PTT work and is currently experimental
 - `config/yoyopod_config.yaml`: `power.watchdog_*` controls the PiSugar app heartbeat watchdog
 - `config/yoyopod_config.yaml`: `power.*` also controls low-battery warning, graceful shutdown, and PiSugar polling
+- `config/yoyopod_config.yaml`: `logging.*` controls file rotation, retention, error-only logs, PID file location, and traceback detail
 - `config/voip_config.yaml`: SIP account, transport, STUN, `linphonec` path
 - `config/contacts.yaml`: contact list and speed dial entries
 
@@ -130,6 +132,8 @@ uv run python scripts/pi_remote.py smoke --with-mopidy --with-voip
 uv run python scripts/pi_remote.py power
 uv run python scripts/pi_remote.py rtc status
 uv run python scripts/pi_remote.py rtc sync-to-rtc
+uv run python scripts/pi_remote.py logs --lines 200
+uv run python scripts/pi_remote.py logs --errors --filter voip
 uv run python scripts/pi_remote.py lvgl-soak --cycles 2
 uv run python scripts/pi_remote.py service status
 uv run python scripts/pi_remote.py service install
@@ -156,6 +160,28 @@ PiSugar power diagnostics:
 ```bash
 uv run python scripts/pisugar_power.py
 uv run python scripts/pi_remote.py power
+```
+
+## Logging
+
+The production app now writes two rotating files in `logs/`:
+
+- `logs/yoyopod.log`: main structured log with timestamps, subsystem tag, module/function/line, and message
+- `logs/yoyopod_errors.log`: errors-only companion log
+
+On the Pi, the checked-in deploy contract at `deploy/pi-deploy.yaml` pins the default project-relative paths used by remote tooling:
+
+- `<project-dir>/logs/yoyopod.log`
+- `<project-dir>/logs/yoyopod_errors.log`
+- `/tmp/yoyopod.pid`
+
+Typical remote debugging flow:
+
+```bash
+uv run python scripts/pi_remote.py logs --lines 200
+uv run python scripts/pi_remote.py logs --errors
+uv run python scripts/pi_remote.py logs --filter voip
+uv run python scripts/pi_remote.py logs --follow --filter ERROR
 ```
 
 ## Running

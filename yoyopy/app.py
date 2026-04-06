@@ -265,8 +265,8 @@ class YoyoPodApp:
 
             logger.info("YoyoPod setup complete")
             return True
-        except Exception as exc:
-            logger.error(f"Setup failed: {exc}")
+        except Exception:
+            logger.exception("Setup failed")
             return False
 
     def _load_configuration(self) -> bool:
@@ -293,8 +293,8 @@ class YoyoPodApp:
             logger.info(f"  Screen timeout: {self._screen_timeout_seconds:.1f}s")
             logger.info(f"  Active brightness: {self._active_brightness:.2f}")
             return True
-        except Exception as exc:
-            logger.error(f"Failed to load configuration: {exc}")
+        except Exception:
+            logger.exception("Failed to load configuration")
             return False
 
     def _resolve_screen_timeout_seconds(self) -> float:
@@ -435,8 +435,8 @@ class YoyoPodApp:
                 action_scheduler=action_scheduler,
             )
             return True
-        except Exception as exc:
-            logger.error(f"Failed to initialize core components: {exc}")
+        except Exception:
+            logger.exception("Failed to initialize core components")
             return False
 
     def _init_managers(self) -> bool:
@@ -494,8 +494,8 @@ class YoyoPodApp:
                 logger.info("    Power backend disabled in config")
 
             return True
-        except Exception as exc:
-            logger.error(f"Failed to initialize managers: {exc}")
+        except Exception:
+            logger.exception("Failed to initialize managers")
             return False
 
     def _setup_screens(self) -> bool:
@@ -621,8 +621,8 @@ class YoyoPodApp:
             logger.info(f"  Initial screen confirmed as {initial_screen}")
             logger.info("  ✓ Initial screen set to menu")
             return True
-        except Exception as exc:
-            logger.error(f"Failed to setup screens: {exc}")
+        except Exception:
+            logger.exception("Failed to setup screens")
             return False
 
     def _get_interaction_profile(self) -> InteractionProfile:
