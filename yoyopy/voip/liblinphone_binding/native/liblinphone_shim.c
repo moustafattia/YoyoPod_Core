@@ -528,6 +528,30 @@ static int yoyopy_apply_transports(LinphoneCore *core, const char *transport) {
     return 0;
 }
 
+static int yoyopy_configure_media_policy(LinphoneCore *core, LinphoneFactory *factory) {
+    LinphoneVideoActivationPolicy *policy = NULL;
+
+    if (core == NULL || factory == NULL) {
+        yoyopy_set_error("Cannot configure Liblinphone media policy without a core and factory");
+        return -1;
+    }
+
+    linphone_core_enable_video_capture(core, FALSE);
+    linphone_core_enable_video_display(core, FALSE);
+
+    policy = linphone_factory_create_video_activation_policy(factory);
+    if (policy == NULL) {
+        yoyopy_set_error("Failed to create Liblinphone video activation policy");
+        return -1;
+    }
+
+    linphone_video_activation_policy_set_automatically_accept(policy, FALSE);
+    linphone_video_activation_policy_set_automatically_initiate(policy, FALSE);
+    linphone_core_set_video_activation_policy(core, policy);
+    linphone_video_activation_policy_unref(policy);
+    return 0;
+}
+
 static void yoyopy_queue_message_received_event(LinphoneChatMessage *message) {
     yoyopy_liblinphone_event_t event_value;
     memset(&event_value, 0, sizeof(event_value));
@@ -839,6 +863,10 @@ int yoyopy_liblinphone_start(
     linphone_core_enable_echo_cancellation(g_state.core, echo_cancellation != 0);
     linphone_core_set_mic_gain_db(g_state.core, ((float)mic_gain * 0.3f));
     linphone_core_set_playback_gain_db(g_state.core, ((float)speaker_volume * 0.12f) - 6.0f);
+    if (yoyopy_configure_media_policy(g_state.core, g_state.factory) != 0) {
+        yoyopy_liblinphone_stop();
+        return -1;
+    }
     if (yoyopy_apply_transports(g_state.core, transport) != 0) {
         yoyopy_liblinphone_stop();
         return -1;
