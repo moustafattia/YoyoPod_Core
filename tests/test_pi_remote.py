@@ -1,18 +1,28 @@
 """Tests for Raspberry Pi remote workflow helpers."""
 
 from scripts.pi_remote import (
+    PiDeployConfig,
     RemoteConfig,
     build_local_preflight_commands,
+    build_logs_command,
     build_power_command,
     build_rtc_command,
     build_service_command,
     build_smoke_command,
+    build_startup_verification_command,
     build_status_command,
     build_sync_command,
     build_whisplay_command,
     quote_remote_project_dir,
 )
 from argparse import Namespace
+
+DEPLOY_CONFIG = PiDeployConfig(
+    log_file="logs/yoyopod.log",
+    error_log_file="logs/yoyopod_errors.log",
+    pid_file="/tmp/yoyopod.pid",
+    startup_marker="YoyoPod starting",
+)
 
 
 def test_quote_remote_project_dir_preserves_home_expansion() -> None:
@@ -131,10 +141,12 @@ def test_build_power_command_supports_verbose_status() -> None:
 def test_build_status_command_reports_yoyopod_service_and_pisugar_server() -> None:
     """Status output should include the production YoyoPod service and PiSugar daemon."""
 
-    command = build_status_command()
+    command = build_status_command(DEPLOY_CONFIG)
 
     assert 'systemctl is-active "yoyopod@$(id -un).service" || true' in command
     assert "systemctl is-active pisugar-server || true" in command
+    assert "/tmp/yoyopod.pid" in command
+    assert "YoyoPod starting" in command
 
 
 def test_build_service_command_supports_install_and_logs() -> None:
@@ -143,9 +155,33 @@ def test_build_service_command_supports_install_and_logs() -> None:
     install_args = Namespace(service_action="install", lines=100)
     logs_args = Namespace(service_action="logs", lines=25)
 
-    install_command = build_service_command(install_args)
-    logs_command = build_service_command(logs_args)
+    install_command = build_service_command(install_args, DEPLOY_CONFIG)
+    logs_command = build_service_command(logs_args, DEPLOY_CONFIG)
 
     assert "deploy/systemd/yoyopod@.service" in install_command
     assert 'sudo systemctl enable --now yoyopod@"$(id -un)".service' in install_command
+    assert "/tmp/yoyopod.pid" in install_command
+    assert "YoyoPod starting" in install_command
     assert logs_command == 'sudo journalctl -u yoyopod@"$(id -un)".service -n 25 --no-pager'
+
+
+def test_build_logs_command_supports_error_filtering_and_follow() -> None:
+    """File log tails should support error-only, grep filters, and follow mode."""
+
+    args = Namespace(errors=True, follow=True, filter="voip", lines=50)
+
+    command = build_logs_command(args, DEPLOY_CONFIG)
+
+    assert "tail -n 50 -F logs/yoyopod_errors.log" in command
+    assert "grep --line-buffered -i -- voip" in command
+
+
+def test_build_startup_verification_command_checks_pid_and_marker() -> None:
+    """Startup verification should cross-check the PID file against the startup log line."""
+
+    command = build_startup_verification_command(DEPLOY_CONFIG, attempts=3)
+
+    assert "test -f /tmp/yoyopod.pid" in command
+    assert "kill -0 \"$pid\"" in command
+    assert "grep -F 'YoyoPod starting' logs/yoyopod.log" in command
+    assert "grep -F \"pid=$pid\"" in command

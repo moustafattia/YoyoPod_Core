@@ -86,8 +86,8 @@ class ConfigManager:
             logger.debug(f"Mopidy host: {self.app_settings.audio.mopidy_host}")
             logger.debug(f"Display hardware: {self.app_settings.display.hardware}")
             return self.app_config_loaded
-        except Exception as exc:
-            logger.error(f"Error loading app config: {exc}")
+        except Exception:
+            logger.exception("Error loading app config")
             self.app_settings = YoyoPodConfig()
             self.app_config = config_to_dict(self.app_settings)
             self.app_config_loaded = False
@@ -114,8 +114,8 @@ class ConfigManager:
             logger.debug(f"SIP Server: {self.get_sip_server()}")
             logger.debug(f"SIP Identity: {self.get_sip_identity()}")
             return self.voip_config_loaded
-        except Exception as exc:
-            logger.error(f"Error loading VoIP config: {exc}")
+        except Exception:
+            logger.exception("Error loading VoIP config")
             self.voip_settings = VoIPFileConfig()
             self.voip_config = config_to_dict(self.voip_settings)
             return False
@@ -151,8 +151,8 @@ class ConfigManager:
 
             logger.info(f"Loaded {len(self.contacts)} contacts")
             return True
-        except Exception as exc:
-            logger.error(f"Error loading contacts: {exc}")
+        except Exception:
+            logger.exception("Error loading contacts")
             return False
 
     def save_contacts(self) -> bool:
@@ -182,8 +182,8 @@ class ConfigManager:
 
             logger.info("Contacts saved successfully")
             return True
-        except Exception as exc:
-            logger.error(f"Error saving contacts: {exc}")
+        except Exception:
+            logger.exception("Error saving contacts")
             return False
 
     def _create_default_voip_config(self) -> None:

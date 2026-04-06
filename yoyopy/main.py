@@ -5,21 +5,50 @@ This module provides the console-script target used by `pyproject.toml`
 and keeps the installed entry point aligned with the top-level launcher.
 """
 
+import os
 import sys
 import signal
+from pathlib import Path
 
 from loguru import logger
 
+from yoyopy import __version__
 from yoyopy.app import YoyoPodApp
-from yoyopy.utils.logger import init_logger
+from yoyopy.config.models import YoyoPodConfig, load_config_model_from_yaml
+from yoyopy.utils.logger import (
+    LoggingRuntimeConfig,
+    build_logging_runtime_config,
+    get_subsystem_logger,
+    init_logger,
+    log_shutdown,
+    log_startup,
+    remove_pid_file,
+    write_pid_file,
+)
 
 
-def configure_logger() -> None:
-    """Configure the default console logger for the app."""
-    init_logger(
-        level="INFO",
+def load_app_settings(config_dir: str = "config") -> YoyoPodConfig:
+    """Load app settings early enough to configure logging before app setup."""
+
+    config_path = Path(config_dir) / "yoyopod_config.yaml"
+    try:
+        return load_config_model_from_yaml(YoyoPodConfig, config_path)
+    except Exception:
+        return YoyoPodConfig()
+
+
+def configure_logger(config_dir: str = "config") -> LoggingRuntimeConfig:
+    """Configure the shared logger using typed logging settings."""
+
+    settings = load_app_settings(config_dir)
+    logging_config = build_logging_runtime_config(
+        settings.logging,
+        base_dir=Path.cwd(),
+    )
+    return init_logger(
+        config=logging_config,
         console=True,
-        file_logging=False,
+        file_logging=True,
         console_stream=sys.stderr,
         announce=False,
     )
@@ -27,71 +56,86 @@ def configure_logger() -> None:
 
 def main() -> int:
     """Run the integrated YoyoPod application."""
-    configure_logger()
+    logging_config = configure_logger()
+    app_log = get_subsystem_logger("app")
 
     simulate = "--simulate" in sys.argv
+    pid = os.getpid()
+    startup_logged = False
 
-    if simulate:
-        logger.info("=" * 60)
-        logger.info("SIMULATION MODE")
-        logger.info("Running without physical hardware")
-        logger.info("Web server will start on http://localhost:5000")
-        logger.info("Open the URL in your browser to view the display")
-        logger.info("Use keyboard (Arrow keys, Enter, Esc) or web buttons for input")
-        logger.info("=" * 60)
-
-    logger.info("Initializing YoyoPod...")
-    app = YoyoPodApp(config_dir="config", simulate=simulate)
-
-    if not app.setup():
-        logger.error("Failed to setup application!")
-        logger.error("Check that:")
-        logger.error("  - config/voip_config.yaml exists")
-        logger.error("  - config/contacts.yaml exists")
-        logger.error("  - linphonec is installed")
-        logger.error("  - Mopidy is running on localhost:6680")
-        return 1
-
-    logger.info("")
-    logger.info("=" * 60)
-    logger.info("YoyoPod Ready!")
-    logger.info("=" * 60)
-    logger.info("")
-    logger.info("Available Features:")
-    logger.info("  - Music streaming (Mopidy/Spotify)")
-    logger.info("  - VoIP calling (linphonec)")
-    logger.info("  - Auto-pause music on calls")
-    logger.info("  - Auto-resume after calls")
-    logger.info("  - Full UI navigation")
-    logger.info("")
-    logger.info("Current Configuration:")
-    status = app.get_status()
-    logger.info(f"  Auto-resume: {status['auto_resume']}")
-    logger.info(f"  VoIP available: {status['voip_available']}")
-    logger.info(f"  Music available: {status['music_available']}")
-    logger.info("")
-    logger.info("Press Ctrl+C to exit")
-    logger.info("=" * 60)
-    logger.info("")
-
-    def handle_shutdown_signal(signum, _frame) -> None:
-        signal_name = signal.Signals(signum).name
-        logger.info(f"Received {signal_name}, shutting down...")
-        raise KeyboardInterrupt
-
-    previous_sigterm = signal.getsignal(signal.SIGTERM)
-    signal.signal(signal.SIGTERM, handle_shutdown_signal)
+    write_pid_file(logging_config.pid_file, pid)
 
     try:
-        app.run()
-    except KeyboardInterrupt:
-        logger.info("")
-        logger.info("=" * 60)
-        logger.info("Shutting down...")
-    finally:
-        signal.signal(signal.SIGTERM, previous_sigterm)
-        app.stop()
+        log_startup(version=__version__, pid=pid, runtime=logging_config)
+        startup_logged = True
 
-    logger.info("")
-    logger.info("Goodbye!")
-    return 0
+        if simulate:
+            app_log.info("=" * 60)
+            app_log.info("SIMULATION MODE")
+            app_log.info("Running without physical hardware")
+            app_log.info("Web server will start on http://localhost:5000")
+            app_log.info("Open the URL in your browser to view the display")
+            app_log.info("Use keyboard (Arrow keys, Enter, Esc) or web buttons for input")
+            app_log.info("=" * 60)
+
+        app_log.info("Initializing YoyoPod...")
+        app = YoyoPodApp(config_dir="config", simulate=simulate)
+
+        if not app.setup():
+            app_log.error("Failed to setup application")
+            app_log.error("Check that:")
+            app_log.error("  - config/voip_config.yaml exists")
+            app_log.error("  - config/contacts.yaml exists")
+            app_log.error("  - linphonec is installed")
+            app_log.error("  - Mopidy is running on localhost:6680")
+            app.stop()
+            return 1
+
+        app_log.info("")
+        app_log.info("=" * 60)
+        app_log.info("YoyoPod Ready!")
+        app_log.info("=" * 60)
+        app_log.info("")
+        app_log.info("Available Features:")
+        app_log.info("  - Music streaming (Mopidy/Spotify)")
+        app_log.info("  - VoIP calling (linphonec)")
+        app_log.info("  - Auto-pause music on calls")
+        app_log.info("  - Auto-resume after calls")
+        app_log.info("  - Full UI navigation")
+        app_log.info("")
+        app_log.info("Current Configuration:")
+        status = app.get_status()
+        app_log.info(f"  Auto-resume: {status['auto_resume']}")
+        app_log.info(f"  VoIP available: {status['voip_available']}")
+        app_log.info(f"  Music available: {status['music_available']}")
+        app_log.info("")
+        app_log.info("Press Ctrl+C to exit")
+        app_log.info("=" * 60)
+        app_log.info("")
+
+        def handle_shutdown_signal(signum, _frame) -> None:
+            signal_name = signal.Signals(signum).name
+            app_log.info(f"Received {signal_name}, shutting down...")
+            raise KeyboardInterrupt
+
+        previous_sigterm = signal.getsignal(signal.SIGTERM)
+        signal.signal(signal.SIGTERM, handle_shutdown_signal)
+
+        exit_code = 0
+        try:
+            app.run()
+        except KeyboardInterrupt:
+            app_log.info("Shutdown requested by signal or keyboard interrupt")
+        except Exception:
+            logger.exception("Unhandled exception escaped the YoyoPod main loop")
+            exit_code = 1
+        finally:
+            signal.signal(signal.SIGTERM, previous_sigterm)
+            app.stop()
+
+        app_log.info("Goodbye!")
+        return exit_code
+    finally:
+        if startup_logged:
+            log_shutdown(pid=pid)
+        remove_pid_file(logging_config.pid_file)

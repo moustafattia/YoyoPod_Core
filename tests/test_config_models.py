@@ -50,6 +50,16 @@ def test_app_config_defaults_do_not_require_a_file(tmp_path, monkeypatch) -> Non
     assert settings.display.hardware == "auto"
     assert settings.display.whisplay_renderer == "lvgl"
     assert settings.display.lvgl_buffer_lines == 40
+    assert settings.logging.file == "logs/yoyopod.log"
+    assert settings.logging.error_file == "logs/yoyopod_errors.log"
+    assert settings.logging.pid_file == "/tmp/yoyopod.pid"
+    assert settings.logging.rotation == "5 MB"
+    assert settings.logging.retention == "3 days"
+    assert settings.logging.error_rotation == "2 MB"
+    assert settings.logging.error_retention == "7 days"
+    assert settings.logging.enqueue is False
+    assert settings.logging.backtrace is True
+    assert settings.logging.diagnose is True
 
 
 def test_config_manager_app_config_merges_yaml_and_env(tmp_path, monkeypatch) -> None:
@@ -94,6 +104,10 @@ def test_config_manager_app_config_merges_yaml_and_env(tmp_path, monkeypatch) ->
     monkeypatch.setenv("YOYOPOD_DISPLAY", "whisplay")
     monkeypatch.setenv("YOYOPOD_WHISPLAY_RENDERER", "lvgl")
     monkeypatch.setenv("YOYOPOD_LVGL_BUFFER_LINES", "24")
+    monkeypatch.setenv("YOYOPOD_LOG_FILE", "/var/log/yoyopod.log")
+    monkeypatch.setenv("YOYOPOD_ERROR_LOG_FILE", "/var/log/yoyopod_errors.log")
+    monkeypatch.setenv("YOYOPOD_PID_FILE", "/run/yoyopod.pid")
+    monkeypatch.setenv("YOYOPOD_LOG_ENQUEUE", "true")
 
     config_manager = ConfigManager(config_dir=str(tmp_path))
     settings = config_manager.get_app_settings()
@@ -120,10 +134,15 @@ def test_config_manager_app_config_merges_yaml_and_env(tmp_path, monkeypatch) ->
     assert settings.display.whisplay_renderer == "lvgl"
     assert settings.display.lvgl_buffer_lines == 24
     assert settings.logging.level == "DEBUG"
+    assert settings.logging.file == "/var/log/yoyopod.log"
+    assert settings.logging.error_file == "/var/log/yoyopod_errors.log"
+    assert settings.logging.pid_file == "/run/yoyopod.pid"
+    assert settings.logging.enqueue is True
     assert config_dict["audio"]["mopidy_port"] == 7788
     assert config_dict["display"]["hardware"] == "whisplay"
     assert config_dict["display"]["whisplay_renderer"] == "lvgl"
     assert config_dict["display"]["lvgl_buffer_lines"] == 24
+    assert config_dict["logging"]["file"] == "/var/log/yoyopod.log"
 
 
 def test_config_manager_keeps_typed_voip_audio_settings(tmp_path, monkeypatch) -> None:
