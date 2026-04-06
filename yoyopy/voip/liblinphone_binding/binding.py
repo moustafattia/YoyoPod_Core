@@ -320,7 +320,5 @@ class LiblinphoneBinding:
             return self.ffi.NULL
         return self.ffi.new("char[]", value.encode("utf-8"))
 
-    @staticmethod
-    def _decode_c_string(buffer: object) -> str:
-        raw = bytes(buffer)
-        return raw.split(b"\x00", 1)[0].decode("utf-8", errors="replace")
+    def _decode_c_string(self, buffer: object) -> str:
+        return self.ffi.string(buffer).decode("utf-8", errors="replace")

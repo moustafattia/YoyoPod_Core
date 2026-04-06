@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
+from cffi import FFI
+
 from yoyopy.voip import (
     BackendStopped,
     CallState,
@@ -22,6 +24,7 @@ from yoyopy.voip import (
     VoIPManager,
     VoIPMessageRecord,
 )
+from yoyopy.voip.liblinphone_binding import LiblinphoneBinding
 
 
 class FakeBinding:
@@ -178,6 +181,18 @@ def test_liblinphone_backend_starts_and_drains_native_events() -> None:
     assert isinstance(events[3], MessageReceived)
     assert events[3].message.kind == MessageKind.VOICE_NOTE
     assert events[3].message.unread is True
+
+
+def test_liblinphone_binding_decodes_c_string_arrays() -> None:
+    """Fixed-size C char arrays should decode through ffi.string on all platforms."""
+
+    ffi = FFI()
+    binding = object.__new__(LiblinphoneBinding)
+    binding.ffi = ffi
+
+    buffer = ffi.new("char[]", b"sip:parent@example.com")
+
+    assert binding._decode_c_string(buffer) == "sip:parent@example.com"
 
 
 def test_voip_manager_applies_backend_events_and_resolves_contact_names() -> None:
