@@ -38,6 +38,46 @@ def test_track_from_mpv_metadata_missing_fields() -> None:
     assert track.length == 0
 
 
+def test_track_from_mpv_metadata_strips_file_extension_from_runtime_title() -> None:
+    track = Track.from_mpv_metadata(
+        "/music/OpenSampler/02-Moonlight-Sonata.ogg",
+        {"title": "02-Moonlight-Sonata.ogg", "length": 123456},
+    )
+    assert track.name == "02-Moonlight-Sonata"
+
+
+def test_track_from_mpv_metadata_falls_back_to_file_tags_for_sparse_local_metadata(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    music_file = tmp_path / "01-Fur-Elise.ogg"
+    music_file.write_bytes(b"not-really-audio")
+
+    fallback_track = Track(
+        uri=str(music_file),
+        name="01-Fur-Elise",
+        artists=["sebion"],
+        album="OpenSampler",
+        length=176500,
+    )
+
+    def fake_from_file_tags(cls, path: Path) -> Track:
+        assert path == music_file
+        return fallback_track
+
+    monkeypatch.setattr(Track, "from_file_tags", classmethod(fake_from_file_tags))
+
+    track = Track.from_mpv_metadata(
+        str(music_file),
+        {"title": "01-Fur-Elise.ogg", "duration": 176.5},
+    )
+
+    assert track.name == "01-Fur-Elise"
+    assert track.artists == ["sebion"]
+    assert track.album == "OpenSampler"
+    assert track.length == 176500
+
+
 def test_track_from_file_tags(tmp_path: Path) -> None:
     # Create a minimal test - from_file_tags falls back to filename when tinytag fails
     fake_file = tmp_path / "test_song.mp3"

@@ -5,6 +5,31 @@ from __future__ import annotations
 import sys
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
+
+
+def _normalized_metadata(metadata: dict[str, Any]) -> dict[str, Any]:
+    """Normalize mpv metadata keys for case-insensitive lookups."""
+    return {str(key).lower(): value for key, value in metadata.items()}
+
+
+def _artist_list(value: object) -> list[str]:
+    """Coerce one mpv artist field into a normalized artist list."""
+    if isinstance(value, str):
+        return [value] if value else []
+    if isinstance(value, list):
+        return [item for item in value if isinstance(item, str) and item]
+    return []
+
+
+def _track_number(value: object) -> int | None:
+    """Coerce one runtime track-number field into an integer when possible."""
+    if value in (None, ""):
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
 
 
 @dataclass(frozen=True, slots=True)
@@ -25,20 +50,39 @@ class Track:
     @classmethod
     def from_mpv_metadata(cls, path: str, metadata: dict) -> Track:
         """Build from mpv's 'metadata' property dict at runtime."""
-        raw_duration = metadata.get("duration", 0)
+        metadata_map = _normalized_metadata(metadata)
+        path_obj = Path(path)
+
+        raw_duration = metadata_map.get("duration", 0)
         duration_ms = int(float(raw_duration) * 1000) if raw_duration else 0
-        name = metadata.get("title") or Path(path).stem
-        artist = metadata.get("artist") or "Unknown"
-        album = metadata.get("album", "")
-        track_no_raw = metadata.get("track")
-        track_no = int(track_no_raw) if track_no_raw is not None else None
+
+        runtime_title = metadata_map.get("title")
+        title = runtime_title if isinstance(runtime_title, str) else ""
+        if title == path_obj.name:
+            title = path_obj.stem
+
+        artists = _artist_list(metadata_map.get("artist"))
+        album = metadata_map.get("album")
+        album_name = album if isinstance(album, str) else ""
+        track_no = _track_number(
+            metadata_map.get("track")
+            or metadata_map.get("track_no")
+            or metadata_map.get("tracknumber")
+        )
+
+        file_track: Track | None = None
+        if path_obj.exists() and (
+            not title or not artists or not album_name or track_no is None
+        ):
+            file_track = cls.from_file_tags(path_obj)
+
         return cls(
             uri=path,
-            name=name,
-            artists=[artist] if isinstance(artist, str) else list(artist),
-            album=album,
-            length=duration_ms,
-            track_no=track_no,
+            name=title or (file_track.name if file_track is not None else path_obj.stem),
+            artists=artists or (file_track.artists if file_track is not None else ["Unknown"]),
+            album=album_name or (file_track.album if file_track is not None else ""),
+            length=duration_ms or (file_track.length if file_track is not None else 0),
+            track_no=track_no if track_no is not None else (file_track.track_no if file_track is not None else None),
         )
 
     @classmethod
@@ -48,10 +92,11 @@ class Track:
             from tinytag import TinyTag
 
             tag = TinyTag.get(str(path))
+            artist = tag.artist or getattr(tag, "albumartist", None)
             return cls(
                 uri=str(path),
                 name=tag.title or path.stem,
-                artists=[tag.artist] if tag.artist else ["Unknown"],
+                artists=[artist] if artist else ["Unknown"],
                 album=tag.album or "",
                 length=int((tag.duration or 0) * 1000),
                 track_no=int(tag.track) if tag.track is not None else None,
