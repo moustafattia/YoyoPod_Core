@@ -62,7 +62,7 @@ class NowPlayingScreen(Screen):
             lvgl_view.sync()
             return
 
-        track_title, artist, progress, state_label, _is_playing = self._track_snapshot()
+        track_title, artist, progress, state_label, is_playing = self._track_snapshot()
 
         content_top = render_header(
             self.display,
@@ -119,9 +119,16 @@ class NowPlayingScreen(Screen):
         if fill_width > 0:
             self.display.rectangle(progress_x, progress_y, progress_x + fill_width, progress_y + 8, fill=LISTEN.accent)
 
-        hint = "Tap skip / Play / Hold back" if self.is_one_button_mode() else "A play | B back | X/Y tracks"
+        hint = self.get_footer_text(is_playing=is_playing)
         render_footer(self.display, hint, mode="listen")
         self.display.update()
+
+    def get_footer_text(self, *, is_playing: bool) -> str:
+        """Return the gesture hint for the active playback state."""
+
+        if self.is_one_button_mode():
+            return "Tap skip / Double pause" if is_playing else "Tap skip / Double play"
+        return "A play | B back | X/Y tracks"
 
     def _track_snapshot(self) -> tuple[str, str, float, str, bool]:
         """Return current track, artist, progress and state label."""

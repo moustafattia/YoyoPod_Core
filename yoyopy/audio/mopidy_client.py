@@ -303,9 +303,36 @@ class MopidyClient:
                 track = MopidyTrack.from_mopidy(tl_track["track"])
                 return track
 
+            queued_track = self._fallback_track_from_tracklist()
+            if queued_track is not None:
+                return queued_track
+
+            if self.current_track is not None:
+                return self.current_track
+
             return None
         except Exception as e:
             logger.error(f"Failed to get current track: {e}")
+            return None
+
+    def _fallback_track_from_tracklist(self) -> Optional[MopidyTrack]:
+        """Return the current queued track when Mopidy lags on current_tl_track."""
+
+        try:
+            tl_tracks = self._rpc_call("core.tracklist.get_tl_tracks")
+            if not tl_tracks:
+                return None
+
+            index = self._rpc_call("core.tracklist.index")
+            if not isinstance(index, int) or index < 0 or index >= len(tl_tracks):
+                index = 0
+
+            track_data = tl_tracks[index].get("track") if isinstance(tl_tracks[index], dict) else None
+            if not track_data:
+                return None
+            return MopidyTrack.from_mopidy(track_data)
+        except Exception as e:
+            logger.debug(f"Failed to derive current track from tracklist: {e}")
             return None
 
     def get_playback_state(self) -> str:
