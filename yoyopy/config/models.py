@@ -397,7 +397,6 @@ class VoIPAudioConfig:
     preferred_codec: str = "opus"
     echo_cancellation: bool = True
     mic_gain: int = 80
-    speaker_volume: int = 80
     playback_device_id: str = config_value(
         default="ALSA: wm8960-soundcard",
         env="YOYOPOD_PLAYBACK_DEVICE",

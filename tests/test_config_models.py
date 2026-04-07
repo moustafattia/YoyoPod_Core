@@ -158,10 +158,12 @@ def test_config_manager_keeps_typed_voip_audio_settings(tmp_path, monkeypatch) -
 
     monkeypatch.setenv("YOYOPOD_PLAYBACK_DEVICE", "ALSA: default")
     monkeypatch.setenv("YOYOPOD_RING_OUTPUT_DEVICE", "default")
+    monkeypatch.setenv("YOYOPOD_DEFAULT_VOLUME", "91")
 
     config_manager = ConfigManager(config_dir=str(tmp_path))
 
     assert config_manager.voip_settings.audio.playback_device_id == "ALSA: default"
+    assert config_manager.get_default_output_volume() == 91
     assert config_manager.get_playback_device_id() == "ALSA: default"
     assert config_manager.get_ring_output_device() == "default"
 
