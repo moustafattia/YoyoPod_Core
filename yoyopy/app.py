@@ -18,7 +18,7 @@ from loguru import logger
 
 from yoyopy.app_context import AppContext
 from yoyopy.audio import LocalMusicService, RecentTrackHistoryStore
-from yoyopy.audio.mopidy_client import MopidyClient
+from yoyopy.audio.music import MpvBackend, MusicConfig
 from yoyopy.config import ConfigManager, YoyoPodConfig
 from yoyopy.coordinators import (
     AppRuntimeState,
@@ -126,7 +126,7 @@ class YoyoPodApp:
 
         # Manager components
         self.voip_manager: Optional[VoIPManager] = None
-        self.mopidy_client: Optional[MopidyClient] = None
+        self.music_backend: Optional[MpvBackend] = None
         self.local_music_service: Optional[LocalMusicService] = None
         self.power_manager: Optional[PowerManager] = None
         self.call_history_store: Optional[CallHistoryStore] = None
@@ -196,7 +196,8 @@ class YoyoPodApp:
 
         # Recovery backoff state
         self._voip_recovery = _RecoveryState()
-        self._mopidy_recovery = _RecoveryState()
+        self._music_recovery = _RecoveryState()
+        self._mopidy_recovery = self._music_recovery
         self._next_power_poll_at = 0.0
         self._power_available: bool | None = None
         self._power_alert: _PowerAlert | None = None
@@ -238,6 +239,16 @@ class YoyoPodApp:
         self._voip_registered = value
         if self.call_coordinator is not None:
             self.call_coordinator.voip_registered = value
+
+    @property
+    def mopidy_client(self) -> Any | None:
+        """Compatibility alias during the mpv migration."""
+        return self.music_backend
+
+    @mopidy_client.setter
+    def mopidy_client(self, value: Any | None) -> None:
+        """Compatibility alias during the mpv migration."""
+        self.music_backend = value
 
     def setup(self) -> bool:
         """
@@ -488,19 +499,22 @@ class YoyoPodApp:
                     ready=False,
                 )
 
-            logger.info("  - MopidyClient")
-            mopidy_host = (
-                self.app_settings.audio.mopidy_host if self.app_settings else "localhost"
+            logger.info("  - MpvBackend")
+            audio_cfg = self.app_settings.audio if self.app_settings else None
+            music_config = MusicConfig(
+                music_dir=Path(audio_cfg.music_dir) if audio_cfg else Path("/home/pi/Music"),
+                mpv_socket=audio_cfg.mpv_socket if audio_cfg and audio_cfg.mpv_socket else "",
+                mpv_binary=audio_cfg.mpv_binary if audio_cfg else "mpv",
+                alsa_device=audio_cfg.alsa_device if audio_cfg else "default",
             )
-            mopidy_port = self.app_settings.audio.mopidy_port if self.app_settings else 6680
-            self.mopidy_client = MopidyClient(host=mopidy_host, port=mopidy_port)
+            self.music_backend = MpvBackend(music_config)
             self.local_music_service = LocalMusicService(
-                self.mopidy_client,
+                self.music_backend,
+                music_dir=music_config.music_dir,
                 recent_store=self.recent_track_store,
             )
-            if self.mopidy_client.connect():
+            if self.music_backend.start():
                 logger.info("    ✓ Mopidy connected successfully")
-                self.mopidy_client.start_polling()
             else:
                 logger.warning("    ⚠ Mopidy connection failed (VoIP-only mode)")
 
@@ -533,7 +547,7 @@ class YoyoPodApp:
             self.hub_screen = HubScreen(
                 self.display,
                 self.context,
-                mopidy_client=self.mopidy_client,
+                music_backend=self.music_backend,
                 local_music_service=self.local_music_service,
                 voip_manager=self.voip_manager,
             )
@@ -554,7 +568,7 @@ class YoyoPodApp:
             self.now_playing_screen = NowPlayingScreen(
                 self.display,
                 self.context,
-                mopidy_client=self.mopidy_client,
+                music_backend=self.music_backend,
             )
             self.playlist_screen = PlaylistScreen(
                 self.display,
@@ -754,16 +768,16 @@ class YoyoPodApp:
         """Register music event callbacks."""
         logger.info("Setting up music callbacks...")
 
-        if not self.mopidy_client:
-            logger.warning("  MopidyClient not available, skipping callbacks")
+        if not self.music_backend:
+            logger.warning("  MusicBackend not available, skipping callbacks")
             return
 
         self._ensure_coordinators()
-        self.mopidy_client.on_track_change(self.playback_coordinator.publish_track_change)
-        self.mopidy_client.on_playback_state_change(
+        self.music_backend.on_track_change(self.playback_coordinator.publish_track_change)
+        self.music_backend.on_playback_state_change(
             self.playback_coordinator.publish_playback_state_change
         )
-        self.mopidy_client.on_connection_change(
+        self.music_backend.on_connection_change(
             self.playback_coordinator.publish_availability_change
         )
         logger.info("  ✓ Music callbacks registered")
@@ -857,19 +871,22 @@ class YoyoPodApp:
         event: RecoveryAttemptCompletedEvent,
     ) -> None:
         """Finalize background recovery attempts on the coordinator thread."""
-        if event.manager != "mopidy":
+        if event.manager not in {"music", "mopidy"}:
             return
 
-        self._mopidy_recovery.in_flight = False
+        self._music_recovery.in_flight = False
         if self._stopping:
             return
 
-        if event.recovered and self.mopidy_client and not self.mopidy_client.polling:
-            self.mopidy_client.start_polling()
+        if event.recovered and self.music_backend:
+            if hasattr(self.music_backend, "polling") and not getattr(self.music_backend, "polling"):
+                start_polling = getattr(self.music_backend, "start_polling", None)
+                if start_polling is not None:
+                    start_polling()
 
         self._finalize_recovery_attempt(
-            "Mopidy",
-            self._mopidy_recovery,
+            "Music",
+            self._music_recovery,
             event.recovered,
             event.recovery_now,
         )
@@ -967,7 +984,7 @@ class YoyoPodApp:
             "battery_charging": self.context.battery_charging if self.context else None,
             "external_power": self.context.external_power if self.context else None,
             "voip_registered": self.voip_registered,
-            "music_available": self.mopidy_client.is_connected if self.mopidy_client else False,
+            "music_available": self.music_backend.is_connected if self.music_backend else False,
             "app_uptime_seconds": self.context.app_uptime_seconds if self.context else 0,
             "screen_on_seconds": self.context.screen_on_seconds if self.context else 0,
             "screen_awake": self.context.screen_awake if self.context else True,
@@ -996,7 +1013,7 @@ class YoyoPodApp:
             call_fsm=self.call_fsm,
             call_interruption_policy=self.call_interruption_policy,
             screen_manager=self.screen_manager,
-            mopidy_client=self.mopidy_client,
+            music_backend=self.music_backend,
             power_manager=self.power_manager,
             now_playing_screen=self.now_playing_screen,
             call_screen=self.call_screen,
@@ -1164,7 +1181,7 @@ class YoyoPodApp:
 
         recovery_now = time.monotonic() if now is None else now
         self._attempt_voip_recovery(recovery_now)
-        self._attempt_mopidy_recovery(recovery_now)
+        self._attempt_music_recovery(recovery_now)
 
     def _poll_power_status(self, now: float | None = None, force: bool = False) -> None:
         """Refresh PiSugar power telemetry on the coordinator thread."""
@@ -1378,48 +1395,69 @@ class YoyoPodApp:
             recovery_now,
         )
 
-    def _attempt_mopidy_recovery(self, recovery_now: float) -> None:
-        """Reconnect Mopidy when the HTTP client becomes unavailable."""
-        if self.mopidy_client is None:
+    def _start_music_backend(self) -> bool:
+        """Start the current music backend using the available lifecycle API."""
+        if self.music_backend is None:
+            return False
+
+        start = getattr(self.music_backend, "start", None)
+        if start is not None:
+            return bool(start())
+
+        connect = getattr(self.music_backend, "connect", None)
+        if connect is not None:
+            return bool(connect())
+
+        return False
+
+    def _attempt_music_recovery(self, recovery_now: float) -> None:
+        """Reconnect the music backend when it becomes unavailable."""
+        if self.music_backend is None:
             return
 
-        if self.mopidy_client.is_connected:
-            self._mopidy_recovery.reset()
+        if self.music_backend.is_connected:
+            self._music_recovery.reset()
             return
 
-        if self._mopidy_recovery.in_flight:
+        if self._music_recovery.in_flight:
             return
 
-        if recovery_now < self._mopidy_recovery.next_attempt_at:
+        if recovery_now < self._music_recovery.next_attempt_at:
             return
 
-        logger.info("Attempting Mopidy recovery")
-        self._mopidy_recovery.in_flight = True
+        logger.info("Attempting music backend recovery")
+        self._music_recovery.in_flight = True
         self._start_mopidy_recovery_worker(recovery_now)
 
-    def _start_mopidy_recovery_worker(self, recovery_now: float) -> None:
-        """Run blocking Mopidy reconnect attempts off the coordinator thread."""
+    def _start_music_recovery_worker(self, recovery_now: float) -> None:
         worker = threading.Thread(
-            target=self._run_mopidy_recovery_attempt,
+            target=self._run_music_recovery_attempt,
             args=(recovery_now,),
             daemon=True,
-            name="mopidy-recovery",
+            name="music-recovery",
         )
         worker.start()
 
-    def _run_mopidy_recovery_attempt(self, recovery_now: float) -> None:
-        """Execute one Mopidy reconnect attempt and publish the typed result."""
+    def _start_mopidy_recovery_worker(self, recovery_now: float) -> None:
+        """Compatibility wrapper for tests during the mpv migration."""
+        self._start_music_recovery_worker(recovery_now)
+
+    def _run_music_recovery_attempt(self, recovery_now: float) -> None:
         recovered = False
-        if not self._stopping and self.mopidy_client is not None:
-            recovered = self.mopidy_client.connect()
+        if not self._stopping and self.music_backend is not None:
+            recovered = self._start_music_backend()
 
         self.event_bus.publish(
             RecoveryAttemptCompletedEvent(
-                manager="mopidy",
+                manager="music",
                 recovered=recovered,
                 recovery_now=recovery_now,
             )
         )
+
+    def _run_mopidy_recovery_attempt(self, recovery_now: float) -> None:
+        """Compatibility wrapper for tests during the mpv migration."""
+        self._run_music_recovery_attempt(recovery_now)
 
     def _finalize_recovery_attempt(
         self,
@@ -1461,9 +1499,9 @@ class YoyoPodApp:
             logger.info("  VoIP not available")
         logger.info("")
         logger.info("Music Status:")
-        if self.mopidy_client and self.mopidy_client.is_connected:
+        if self.music_backend and self.music_backend.is_connected:
             logger.info("  Connected: True")
-            playback_state = self.mopidy_client.get_playback_state()
+            playback_state = self.music_backend.get_playback_state()
             logger.info(f"  Playback state: {playback_state}")
         else:
             logger.info("  Mopidy not connected")
@@ -1570,10 +1608,18 @@ class YoyoPodApp:
             logger.info("  - Stopping VoIP manager")
             self.voip_manager.stop(notify_events=False)
 
-        if self.mopidy_client:
-            logger.info("  - Stopping music polling")
-            self.mopidy_client.stop_polling()
-            self.mopidy_client.cleanup()
+        if self.music_backend:
+            logger.info("  - Stopping music backend")
+            stop = getattr(self.music_backend, "stop", None)
+            if stop is not None:
+                stop()
+            else:
+                stop_polling = getattr(self.music_backend, "stop_polling", None)
+                cleanup = getattr(self.music_backend, "cleanup", None)
+                if stop_polling is not None:
+                    stop_polling()
+                if cleanup is not None:
+                    cleanup()
 
         if self.input_manager:
             logger.info("  - Stopping input manager")
@@ -1613,7 +1659,7 @@ class YoyoPodApp:
             "music_was_playing": self.call_interruption_policy.music_interrupted_by_call,
             "auto_resume": self.auto_resume_after_call,
             "voip_available": self.voip_manager is not None and self.voip_manager.running,
-            "music_available": self.mopidy_client is not None and self.mopidy_client.is_connected,
+            "music_available": self.music_backend is not None and self.music_backend.is_connected,
             "power_available": power_snapshot.available if power_snapshot is not None else False,
             "battery_percent": self.context.battery_percent if self.context else None,
             "battery_charging": self.context.battery_charging if self.context else None,
