@@ -2,7 +2,7 @@
 <screen>
 	<styles>
 		<style
-			name="card"
+			name="hub_card"
 			bg_color="0x243532"
 			bg_opa="100%"
 			border_width="2"
@@ -13,7 +13,7 @@
 			pad_column="12"
 		/>
 		<style
-			name="halo"
+			name="hub_halo"
 			bg_color="0x23402e"
 			bg_opa="100%"
 			border_width="1"
@@ -22,7 +22,7 @@
 			pad_all="0"
 		/>
 		<style
-			name="chip"
+			name="hub_chip"
 			bg_color="0x34593c"
 			bg_opa="100%"
 			border_width="0"
@@ -32,26 +32,26 @@
 			pad_top="6"
 			pad_bottom="6"
 		/>
-		<style name="chip_text" text_color="0x69ea79" />
-		<style name="title" text_color="0x69ea79" />
-		<style name="subtitle" text_color="0xf3f7fa" />
-		<style name="footer" text_color="0x468f53" />
+		<style name="hub_chip_text" text_color="0x69ea79" />
+		<style name="hub_title" text_color="0x69ea79" />
+		<style name="hub_subtitle" text_color="0xf3f7fa" />
+		<style name="hub_footer" text_color="0x468f53" />
 		<style
-			name="dot_idle"
+			name="hub_dot_idle"
 			bg_color="0x34593c"
 			bg_opa="100%"
 			border_width="0"
 			radius="3"
 		/>
 		<style
-			name="dot_active"
+			name="hub_dot_active"
 			bg_color="0x69ea79"
 			bg_opa="100%"
 			border_width="0"
 			radius="4"
 		/>
 		<style
-			name="battery_frame"
+			name="hub_battery_frame"
 			bg_opa="0%"
 			border_width="1"
 			border_color="0x99a0ad"
@@ -103,7 +103,7 @@
 				style_flex_cross_place="center"
 			>
 				<lv_obj width="20" height="10">
-					<style name="battery_frame" />
+					<style name="hub_battery_frame" />
 				</lv_obj>
 				<lv_obj width="2" height="4" style_bg_color="0x99a0ad" style_bg_opa="100%" style_border_width="0" style_radius="1" />
 			</lv_obj>
@@ -116,7 +116,7 @@
 			style_flex_main_place="space_between"
 			style_flex_cross_place="center"
 		>
-			<style name="card" />
+			<style name="hub_card" />
 
 			<lv_obj
 				width="144"
@@ -125,12 +125,12 @@
 				style_flex_main_place="center"
 				style_flex_cross_place="center"
 			>
-				<style name="halo" />
+				<style name="hub_halo" />
 
 				<lv_obj width="content" height="content">
-					<style name="chip" />
+					<style name="hub_chip" />
 					<lv_label text="LISTEN">
-						<style name="chip_text" />
+						<style name="hub_chip_text" />
 					</lv_label>
 				</lv_obj>
 			</lv_obj>
@@ -146,10 +146,10 @@
 				style_flex_cross_place="center"
 			>
 				<lv_label text="Listen">
-					<style name="title" />
+					<style name="hub_title" />
 				</lv_label>
 				<lv_label text="On-device music">
-					<style name="subtitle" />
+					<style name="hub_subtitle" />
 				</lv_label>
 			</lv_obj>
 
@@ -164,22 +164,22 @@
 				style_flex_cross_place="center"
 			>
 				<lv_obj width="6" height="6">
-					<style name="dot_idle" />
+					<style name="hub_dot_idle" />
 				</lv_obj>
 				<lv_obj width="8" height="8">
-					<style name="dot_active" />
+					<style name="hub_dot_active" />
 				</lv_obj>
 				<lv_obj width="6" height="6">
-					<style name="dot_idle" />
+					<style name="hub_dot_idle" />
 				</lv_obj>
 				<lv_obj width="6" height="6">
-					<style name="dot_idle" />
+					<style name="hub_dot_idle" />
 				</lv_obj>
 			</lv_obj>
 		</lv_obj>
 
 		<lv_label text="Tap next / Double open">
-			<style name="footer" />
+			<style name="hub_footer" />
 		</lv_label>
 	</view>
 </screen>

@@ -2,7 +2,7 @@
 <screen>
 	<styles>
 		<style
-			name="mode_chip"
+			name="menu_mode_chip"
 			bg_color="0x34593c"
 			bg_opa="100%"
 			border_width="0"
@@ -12,18 +12,18 @@
 			pad_top="5"
 			pad_bottom="5"
 		/>
-		<style name="mode_chip_text" text_color="0x69ea79" />
-		<style name="title" text_color="0xf3f7fa" />
-		<style name="subtitle" text_color="0x99a0ad" />
+		<style name="menu_mode_chip_text" text_color="0x69ea79" />
+		<style name="menu_title" text_color="0xf3f7fa" />
+		<style name="menu_subtitle" text_color="0x99a0ad" />
 		<style
-			name="rule"
+			name="menu_rule"
 			bg_color="0x69ea79"
 			bg_opa="100%"
 			border_width="0"
 			radius="2"
 		/>
 		<style
-			name="shell"
+			name="menu_shell"
 			bg_color="0x1e2229"
 			bg_opa="100%"
 			border_width="0"
@@ -32,7 +32,7 @@
 			pad_row="8"
 		/>
 		<style
-			name="row_selected"
+			name="menu_row_selected"
 			bg_color="0x243532"
 			bg_opa="100%"
 			border_width="1"
@@ -44,7 +44,7 @@
 			pad_bottom="8"
 		/>
 		<style
-			name="row_idle"
+			name="menu_row_idle"
 			bg_color="0x1c212a"
 			bg_opa="100%"
 			border_width="1"
@@ -56,24 +56,24 @@
 			pad_bottom="8"
 		/>
 		<style
-			name="dot_selected"
+			name="menu_dot_selected"
 			bg_color="0x69ea79"
 			bg_opa="100%"
 			border_width="0"
 			radius="3"
 		/>
 		<style
-			name="dot_idle"
+			name="menu_dot_idle"
 			bg_color="0x4a4f5c"
 			bg_opa="100%"
 			border_width="0"
 			radius="3"
 		/>
-		<style name="row_title" text_color="0xf3f7fa" />
-		<style name="row_detail_selected" text_color="0x69ea79" />
-		<style name="row_detail_idle" text_color="0x99a0ad" />
+		<style name="menu_row_title" text_color="0xf3f7fa" />
+		<style name="menu_row_detail_selected" text_color="0x69ea79" />
+		<style name="menu_row_detail_idle" text_color="0x99a0ad" />
 		<style
-			name="badge_listen"
+			name="menu_badge_listen"
 			bg_color="0x34593c"
 			bg_opa="100%"
 			border_width="0"
@@ -84,7 +84,7 @@
 			pad_bottom="5"
 		/>
 		<style
-			name="badge_talk"
+			name="menu_badge_talk"
 			bg_color="0x2e5764"
 			bg_opa="100%"
 			border_width="0"
@@ -95,7 +95,7 @@
 			pad_bottom="5"
 		/>
 		<style
-			name="badge_ask"
+			name="menu_badge_ask"
 			bg_color="0x705c21"
 			bg_opa="100%"
 			border_width="0"
@@ -106,7 +106,7 @@
 			pad_bottom="5"
 		/>
 		<style
-			name="badge_setup"
+			name="menu_badge_setup"
 			bg_color="0x4d545c"
 			bg_opa="100%"
 			border_width="0"
@@ -116,11 +116,11 @@
 			pad_top="5"
 			pad_bottom="5"
 		/>
-		<style name="badge_listen_text" text_color="0x69ea79" />
-		<style name="badge_talk_text" text_color="0x52dcff" />
-		<style name="badge_ask_text" text_color="0xffd549" />
-		<style name="badge_setup_text" text_color="0xb7bec8" />
-		<style name="footer" text_color="0x468f53" />
+		<style name="menu_badge_listen_text" text_color="0x69ea79" />
+		<style name="menu_badge_talk_text" text_color="0x52dcff" />
+		<style name="menu_badge_ask_text" text_color="0xffd549" />
+		<style name="menu_badge_setup_text" text_color="0xb7bec8" />
+		<style name="menu_footer" text_color="0x468f53" />
 	</styles>
 
 	<view
@@ -155,22 +155,22 @@
 			style_pad_row="8"
 		>
 			<lv_obj width="content" height="content">
-				<style name="mode_chip" />
+				<style name="menu_mode_chip" />
 				<lv_label text="LISTEN">
-					<style name="mode_chip_text" />
+					<style name="menu_mode_chip_text" />
 				</lv_label>
 			</lv_obj>
 
 			<lv_label text="YoyoPod">
-				<style name="title" />
+				<style name="menu_title" />
 			</lv_label>
 
 			<lv_obj width="94" height="3">
-				<style name="rule" />
+				<style name="menu_rule" />
 			</lv_obj>
 
 			<lv_label text="Pick a mode for this adventure.">
-				<style name="subtitle" />
+				<style name="menu_subtitle" />
 			</lv_label>
 		</lv_obj>
 
@@ -179,7 +179,7 @@
 			flex_grow="1"
 			flex_flow="column"
 		>
-			<style name="shell" />
+			<style name="menu_shell" />
 
 			<lv_obj
 				width="100%"
@@ -188,7 +188,7 @@
 				style_flex_main_place="space_between"
 				style_flex_cross_place="center"
 			>
-				<style name="row_selected" />
+				<style name="menu_row_selected" />
 
 				<lv_obj
 					width="content"
@@ -201,20 +201,20 @@
 					style_flex_cross_place="center"
 				>
 					<lv_obj width="6" height="6">
-						<style name="dot_selected" />
+						<style name="menu_dot_selected" />
 					</lv_obj>
 					<lv_label text="Listen">
-						<style name="row_title" />
+						<style name="menu_row_title" />
 					</lv_label>
 					<lv_label text="- Music and playlists">
-						<style name="row_detail_selected" />
+						<style name="menu_row_detail_selected" />
 					</lv_label>
 				</lv_obj>
 
 				<lv_obj width="content" height="content">
-					<style name="badge_listen" />
+					<style name="menu_badge_listen" />
 					<lv_label text="OPEN">
-						<style name="badge_listen_text" />
+						<style name="menu_badge_listen_text" />
 					</lv_label>
 				</lv_obj>
 			</lv_obj>
@@ -226,7 +226,7 @@
 				style_flex_main_place="space_between"
 				style_flex_cross_place="center"
 			>
-				<style name="row_idle" />
+				<style name="menu_row_idle" />
 
 				<lv_obj
 					width="content"
@@ -239,20 +239,20 @@
 					style_flex_cross_place="center"
 				>
 					<lv_obj width="6" height="6">
-						<style name="dot_idle" />
+						<style name="menu_dot_idle" />
 					</lv_obj>
 					<lv_label text="Talk">
-						<style name="row_title" />
+						<style name="menu_row_title" />
 					</lv_label>
 					<lv_label text="- Calls and voice notes">
-						<style name="row_detail_idle" />
+						<style name="menu_row_detail_idle" />
 					</lv_label>
 				</lv_obj>
 
 				<lv_obj width="content" height="content">
-					<style name="badge_talk" />
+					<style name="menu_badge_talk" />
 					<lv_label text="TALK">
-						<style name="badge_talk_text" />
+						<style name="menu_badge_talk_text" />
 					</lv_label>
 				</lv_obj>
 			</lv_obj>
@@ -264,7 +264,7 @@
 				style_flex_main_place="space_between"
 				style_flex_cross_place="center"
 			>
-				<style name="row_idle" />
+				<style name="menu_row_idle" />
 
 				<lv_obj
 					width="content"
@@ -277,20 +277,20 @@
 					style_flex_cross_place="center"
 				>
 					<lv_obj width="6" height="6">
-						<style name="dot_idle" />
+						<style name="menu_dot_idle" />
 					</lv_obj>
 					<lv_label text="Ask">
-						<style name="row_title" />
+						<style name="menu_row_title" />
 					</lv_label>
 					<lv_label text="- Safe questions">
-						<style name="row_detail_idle" />
+						<style name="menu_row_detail_idle" />
 					</lv_label>
 				</lv_obj>
 
 				<lv_obj width="content" height="content">
-					<style name="badge_ask" />
+					<style name="menu_badge_ask" />
 					<lv_label text="ASK">
-						<style name="badge_ask_text" />
+						<style name="menu_badge_ask_text" />
 					</lv_label>
 				</lv_obj>
 			</lv_obj>
@@ -302,7 +302,7 @@
 				style_flex_main_place="space_between"
 				style_flex_cross_place="center"
 			>
-				<style name="row_idle" />
+				<style name="menu_row_idle" />
 
 				<lv_obj
 					width="content"
@@ -315,27 +315,27 @@
 					style_flex_cross_place="center"
 				>
 					<lv_obj width="6" height="6">
-						<style name="dot_idle" />
+						<style name="menu_dot_idle" />
 					</lv_obj>
 					<lv_label text="Setup">
-						<style name="row_title" />
+						<style name="menu_row_title" />
 					</lv_label>
 					<lv_label text="- Power and device care">
-						<style name="row_detail_idle" />
+						<style name="menu_row_detail_idle" />
 					</lv_label>
 				</lv_obj>
 
 				<lv_obj width="content" height="content">
-					<style name="badge_setup" />
+					<style name="menu_badge_setup" />
 					<lv_label text="SETUP">
-						<style name="badge_setup_text" />
+						<style name="menu_badge_setup_text" />
 					</lv_label>
 				</lv_obj>
 			</lv_obj>
 		</lv_obj>
 
 		<lv_label text="A open | B back | X/Y move">
-			<style name="footer" />
+			<style name="menu_footer" />
 		</lv_label>
 	</view>
 </screen>
