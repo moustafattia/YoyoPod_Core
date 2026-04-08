@@ -57,6 +57,14 @@ int yoyopy_lvgl_listen_sync(
     const char * item_1,
     const char * item_2,
     const char * item_3,
+    const char * subtitle_0,
+    const char * subtitle_1,
+    const char * subtitle_2,
+    const char * subtitle_3,
+    const char * icon_0,
+    const char * icon_1,
+    const char * icon_2,
+    const char * icon_3,
     int32_t item_count,
     int32_t selected_index,
     int32_t voip_state,
@@ -79,10 +87,18 @@ int yoyopy_lvgl_playlist_sync(
     const char * item_1,
     const char * item_2,
     const char * item_3,
+    const char * subtitle_0,
+    const char * subtitle_1,
+    const char * subtitle_2,
+    const char * subtitle_3,
     const char * badge_0,
     const char * badge_1,
     const char * badge_2,
     const char * badge_3,
+    const char * icon_0,
+    const char * icon_1,
+    const char * icon_2,
+    const char * icon_3,
     int32_t item_count,
     int32_t selected_visible_index,
     int32_t voip_state,
@@ -164,12 +180,15 @@ int yoyopy_lvgl_power_build(void);
 int yoyopy_lvgl_power_sync(
     const char * title_text,
     const char * page_text,
+    const char * icon_key,
     const char * footer,
     const char * item_0,
     const char * item_1,
     const char * item_2,
     const char * item_3,
     int32_t item_count,
+    int32_t current_page_index,
+    int32_t total_pages,
     int32_t voip_state,
     int32_t battery_percent,
     int32_t charging,
@@ -351,6 +370,8 @@ class LvglBinding:
         page_text: str | None,
         footer: str,
         items: list[str],
+        subtitles: list[str],
+        icon_keys: list[str],
         selected_index: int,
         voip_state: int,
         battery_percent: int,
@@ -363,6 +384,12 @@ class LvglBinding:
         normalized_items = list(items[:4])
         while len(normalized_items) < 4:
             normalized_items.append("")
+        normalized_subtitles = list(subtitles[:4])
+        while len(normalized_subtitles) < 4:
+            normalized_subtitles.append("")
+        normalized_icon_keys = list(icon_keys[:4])
+        while len(normalized_icon_keys) < 4:
+            normalized_icon_keys.append("")
 
         page_text_raw = (
             self.ffi.new("char[]", page_text.encode("utf-8"))
@@ -374,6 +401,14 @@ class LvglBinding:
         item_1_raw = self.ffi.new("char[]", normalized_items[1].encode("utf-8"))
         item_2_raw = self.ffi.new("char[]", normalized_items[2].encode("utf-8"))
         item_3_raw = self.ffi.new("char[]", normalized_items[3].encode("utf-8"))
+        subtitle_0_raw = self.ffi.new("char[]", normalized_subtitles[0].encode("utf-8"))
+        subtitle_1_raw = self.ffi.new("char[]", normalized_subtitles[1].encode("utf-8"))
+        subtitle_2_raw = self.ffi.new("char[]", normalized_subtitles[2].encode("utf-8"))
+        subtitle_3_raw = self.ffi.new("char[]", normalized_subtitles[3].encode("utf-8"))
+        icon_0_raw = self.ffi.new("char[]", normalized_icon_keys[0].encode("utf-8"))
+        icon_1_raw = self.ffi.new("char[]", normalized_icon_keys[1].encode("utf-8"))
+        icon_2_raw = self.ffi.new("char[]", normalized_icon_keys[2].encode("utf-8"))
+        icon_3_raw = self.ffi.new("char[]", normalized_icon_keys[3].encode("utf-8"))
         empty_title_raw = self.ffi.new("char[]", empty_title.encode("utf-8"))
         empty_subtitle_raw = self.ffi.new("char[]", empty_subtitle.encode("utf-8"))
 
@@ -384,6 +419,14 @@ class LvglBinding:
             item_1_raw,
             item_2_raw,
             item_3_raw,
+            subtitle_0_raw,
+            subtitle_1_raw,
+            subtitle_2_raw,
+            subtitle_3_raw,
+            icon_0_raw,
+            icon_1_raw,
+            icon_2_raw,
+            icon_3_raw,
             len(items),
             selected_index,
             voip_state,
@@ -413,7 +456,9 @@ class LvglBinding:
         status_chip_kind: int = 0,
         footer: str,
         items: list[str],
+        subtitles: list[str],
         badges: list[str],
+        icon_keys: list[str],
         selected_visible_index: int,
         voip_state: int,
         battery_percent: int,
@@ -427,10 +472,16 @@ class LvglBinding:
         normalized_items = list(items[:4])
         while len(normalized_items) < 4:
             normalized_items.append("")
+        normalized_subtitles = list(subtitles[:4])
+        while len(normalized_subtitles) < 4:
+            normalized_subtitles.append("")
 
         normalized_badges = list(badges[:4])
         while len(normalized_badges) < 4:
             normalized_badges.append("")
+        normalized_icon_keys = list(icon_keys[:4])
+        while len(normalized_icon_keys) < 4:
+            normalized_icon_keys.append("")
 
         title_raw = self.ffi.new("char[]", title_text.encode("utf-8"))
         page_text_raw = (
@@ -448,10 +499,18 @@ class LvglBinding:
         item_1_raw = self.ffi.new("char[]", normalized_items[1].encode("utf-8"))
         item_2_raw = self.ffi.new("char[]", normalized_items[2].encode("utf-8"))
         item_3_raw = self.ffi.new("char[]", normalized_items[3].encode("utf-8"))
+        subtitle_0_raw = self.ffi.new("char[]", normalized_subtitles[0].encode("utf-8"))
+        subtitle_1_raw = self.ffi.new("char[]", normalized_subtitles[1].encode("utf-8"))
+        subtitle_2_raw = self.ffi.new("char[]", normalized_subtitles[2].encode("utf-8"))
+        subtitle_3_raw = self.ffi.new("char[]", normalized_subtitles[3].encode("utf-8"))
         badge_0_raw = self.ffi.new("char[]", normalized_badges[0].encode("utf-8"))
         badge_1_raw = self.ffi.new("char[]", normalized_badges[1].encode("utf-8"))
         badge_2_raw = self.ffi.new("char[]", normalized_badges[2].encode("utf-8"))
         badge_3_raw = self.ffi.new("char[]", normalized_badges[3].encode("utf-8"))
+        icon_0_raw = self.ffi.new("char[]", normalized_icon_keys[0].encode("utf-8"))
+        icon_1_raw = self.ffi.new("char[]", normalized_icon_keys[1].encode("utf-8"))
+        icon_2_raw = self.ffi.new("char[]", normalized_icon_keys[2].encode("utf-8"))
+        icon_3_raw = self.ffi.new("char[]", normalized_icon_keys[3].encode("utf-8"))
         empty_title_raw = self.ffi.new("char[]", empty_title.encode("utf-8"))
         empty_subtitle_raw = self.ffi.new("char[]", empty_subtitle.encode("utf-8"))
         empty_icon_raw = self.ffi.new("char[]", empty_icon_key.encode("utf-8"))
@@ -466,10 +525,18 @@ class LvglBinding:
             item_1_raw,
             item_2_raw,
             item_3_raw,
+            subtitle_0_raw,
+            subtitle_1_raw,
+            subtitle_2_raw,
+            subtitle_3_raw,
             badge_0_raw,
             badge_1_raw,
             badge_2_raw,
             badge_3_raw,
+            icon_0_raw,
+            icon_1_raw,
+            icon_2_raw,
+            icon_3_raw,
             len(items),
             selected_visible_index,
             voip_state,
@@ -686,8 +753,11 @@ class LvglBinding:
         *,
         title_text: str,
         page_text: str | None,
+        icon_key: str,
         footer: str,
         items: list[str],
+        current_page_index: int,
+        total_pages: int,
         voip_state: int,
         battery_percent: int,
         charging: bool,
@@ -700,6 +770,7 @@ class LvglBinding:
 
         title_raw = self.ffi.new("char[]", title_text.encode("utf-8"))
         page_text_raw = self.ffi.new("char[]", page_text.encode("utf-8")) if page_text else self.ffi.NULL
+        icon_raw = self.ffi.new("char[]", icon_key.encode("utf-8"))
         footer_raw = self.ffi.new("char[]", footer.encode("utf-8"))
         item_0_raw = self.ffi.new("char[]", normalized_items[0].encode("utf-8"))
         item_1_raw = self.ffi.new("char[]", normalized_items[1].encode("utf-8"))
@@ -708,12 +779,15 @@ class LvglBinding:
         result = self.lib.yoyopy_lvgl_power_sync(
             title_raw,
             page_text_raw,
+            icon_raw,
             footer_raw,
             item_0_raw,
             item_1_raw,
             item_2_raw,
             item_3_raw,
             len(items),
+            current_page_index,
+            total_pages,
             voip_state,
             battery_percent,
             1 if charging else 0,

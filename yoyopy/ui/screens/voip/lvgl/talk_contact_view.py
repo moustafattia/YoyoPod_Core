@@ -31,16 +31,19 @@ class LvglTalkContactView:
         if not self._built or self.backend.binding is None:
             return
 
-        visible_items, visible_badges, selected_visible_index = self.screen.get_visible_actions()
+        visible_items, visible_subtitles, selected_visible_index = self.screen.get_visible_actions()
+        visible_icon_keys = self.screen.get_visible_action_icons()
         context = self.screen.context
         self.backend.binding.playlist_sync(
             title_text=self.screen.current_contact_name(),
             page_text=None,
             status_chip_text=None,
             status_chip_kind=0,
-            footer="Tap next / Double choose",
+            footer="Tap next / 2x choose / Hold back",
             items=visible_items,
-            badges=visible_badges,
+            subtitles=visible_subtitles,
+            badges=["" for _ in visible_items],
+            icon_keys=visible_icon_keys,
             selected_visible_index=selected_visible_index,
             voip_state=self._voip_state(context),
             battery_percent=self._battery_percent(context),

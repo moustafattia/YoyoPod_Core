@@ -34,6 +34,8 @@ class LvglVoiceNoteView:
         context = self.screen.context
         title_text, subtitle_text, footer_text, _icon_key = self.screen.current_view_model()
         items, badges, selected_index = self.screen.current_actions_for_view()
+        action_subtitles = self.screen.current_action_subtitles()
+        action_icon_keys = self.screen.current_action_icons()
         status_chip_text, status_chip_kind = self.screen.current_status_chip()
         page_text = self.screen._duration_label() or None
 
@@ -44,7 +46,9 @@ class LvglVoiceNoteView:
             status_chip_kind=status_chip_kind,
             footer=footer_text,
             items=items,
+            subtitles=action_subtitles,
             badges=badges,
+            icon_keys=action_icon_keys,
             selected_visible_index=selected_index,
             voip_state=self._voip_state(context),
             battery_percent=self._battery_percent(context),

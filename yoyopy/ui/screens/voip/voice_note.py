@@ -191,6 +191,34 @@ class VoiceNoteScreen(Screen):
             min(self._selected_action_index, max(0, len(actions) - 1)),
         )
 
+    def current_action_subtitles(self) -> list[str]:
+        """Return subtitles for the current action list."""
+
+        subtitles: list[str] = []
+        for action in self.actions():
+            if action.key == "send":
+                subtitles.append("Deliver this voice note")
+            elif action.key == "play":
+                subtitles.append("Listen before sending")
+            elif action.key == "again":
+                subtitles.append("Record a new version")
+            else:
+                subtitles.append("Try that step again")
+        return subtitles
+
+    def current_action_icons(self) -> list[str]:
+        """Return icon keys for the current action list."""
+
+        icons: list[str] = []
+        for action in self.actions():
+            if action.key == "send":
+                icons.append("call")
+            elif action.key == "play":
+                icons.append("music_note")
+            else:
+                icons.append("voice_note")
+        return icons
+
     def current_status_chip(self) -> tuple[str | None, int]:
         """Return the current state-chip label and style kind."""
 
@@ -277,9 +305,11 @@ class VoiceNoteScreen(Screen):
         items, badges, selected_index = self.current_actions_for_view()
         if items:
             panel_top = content_top + 8
+            subtitles = self.current_action_subtitles()
+            icons = self.current_action_icons()
             for row, item_title in enumerate(items):
-                y1 = panel_top + (row * 48)
-                y2 = y1 + 40
+                y1 = panel_top + (row * 52)
+                y2 = y1 + 44
                 draw_list_item(
                     self.display,
                     x1=18,
@@ -287,10 +317,11 @@ class VoiceNoteScreen(Screen):
                     x2=self.display.WIDTH - 18,
                     y2=y2,
                     title=item_title,
-                    subtitle="",
+                    subtitle=subtitles[row],
                     mode="talk",
                     selected=row == selected_index,
                     badge=badges[row] or None,
+                    icon=icons[row],
                 )
         else:
             draw_empty_state(

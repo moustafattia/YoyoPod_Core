@@ -10,15 +10,9 @@ from loguru import logger
 from yoyopy.ui.display import Display
 from yoyopy.ui.screens.base import Screen
 from yoyopy.ui.screens.theme import (
-    INK,
-    SURFACE,
-    TALK,
-    draw_icon,
     draw_list_item,
     render_footer,
-    render_status_bar,
-    rounded_panel,
-    text_fit,
+    render_header,
 )
 from yoyopy.ui.screens.voip.lvgl.talk_contact_view import LvglTalkContactView
 
@@ -100,8 +94,8 @@ class TalkContactScreen(Screen):
         """Return the available actions for the selected contact."""
 
         actions = [
-            TalkAction("call", "Call"),
-            TalkAction("voice_note", "Voice Note"),
+            TalkAction("call", "Call", "Start a voice call"),
+            TalkAction("voice_note", "Voice Note", "Record a short message"),
         ]
         latest_note = None
         if self.voip_manager is not None and hasattr(self.voip_manager, "latest_voice_note_for_contact"):
@@ -109,7 +103,7 @@ class TalkContactScreen(Screen):
                 self.current_contact_address(),
             )
         if latest_note is not None and latest_note.local_file_path:
-            actions.append(TalkAction("play_note", "Play Note"))
+            actions.append(TalkAction("play_note", "Play Note", "Listen to the latest note"))
         return actions
 
     def get_visible_actions(self) -> tuple[list[str], list[str], int]:
@@ -117,6 +111,19 @@ class TalkContactScreen(Screen):
 
         actions = self.actions()
         return [action.title for action in actions], [action.subtitle for action in actions], self.selected_index
+
+    def get_visible_action_icons(self) -> list[str]:
+        """Return the visible icon key for each action row."""
+
+        icons: list[str] = []
+        for action in self.actions():
+            if action.kind == "call":
+                icons.append("call")
+            elif action.kind == "voice_note":
+                icons.append("voice_note")
+            else:
+                icons.append("music_note")
+        return icons
 
     def render(self) -> None:
         """Render the contact action picker."""
@@ -126,44 +133,36 @@ class TalkContactScreen(Screen):
             lvgl_view.sync()
             return
 
-        render_status_bar(self.display, self.context, show_time=False)
-
-        panel_top = self.display.STATUS_BAR_HEIGHT + 18
-        panel_bottom = self.display.HEIGHT - 28
-        rounded_panel(
+        content_top = render_header(
             self.display,
-            12,
-            panel_top,
-            self.display.WIDTH - 12,
-            panel_bottom,
-            fill=SURFACE,
-            outline=TALK.accent_dim,
-            radius=24,
-            shadow=True,
+            self.context,
+            mode="talk",
+            title=self.current_contact_name(),
+            subtitle="Pick how you want to reach them.",
+            icon="talk",
+            show_time=False,
+            show_mode_chip=False,
         )
-
-        draw_icon(self.display, "talk", 24, panel_top + 12, 28, TALK.accent)
-        contact_name = text_fit(self.display, self.current_contact_name(), self.display.WIDTH - 72, 21)
-        self.display.text(contact_name, 60, panel_top + 16, color=INK, font_size=21)
-
-        item_top = panel_top + 58
+        item_top = content_top + 8
+        action_icons = self.get_visible_action_icons()
         for row, action in enumerate(self.actions()):
-            y1 = item_top + (row * 48)
-            y2 = y1 + 40
+            y1 = item_top + (row * 52)
+            y2 = y1 + 44
             draw_list_item(
                 self.display,
-                x1=20,
+                x1=18,
                 y1=y1,
-                x2=self.display.WIDTH - 20,
+                x2=self.display.WIDTH - 18,
                 y2=y2,
                 title=action.title,
-                subtitle="",
+                subtitle=action.subtitle,
                 mode="talk",
                 selected=row == self.selected_index,
                 badge=None,
+                icon=action_icons[row],
             )
 
-        render_footer(self.display, "Tap next / Double choose", mode="talk")
+        render_footer(self.display, "Tap = Next  ·  2× Tap = Choose  ·  Hold = Back", mode="talk")
         self.display.update()
 
     def _selected_action(self) -> TalkAction:

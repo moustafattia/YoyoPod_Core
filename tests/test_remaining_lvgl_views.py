@@ -275,7 +275,9 @@ def test_talk_contact_screen_syncs_actions_through_lvgl() -> None:
     payload = binding.playlist_sync_payloads[-1]
     assert payload["title_text"] == "Mama"
     assert payload["items"] == ["Call", "Voice Note"]
-    assert payload["footer"] == "Tap next / Double choose"
+    assert payload["subtitles"] == ["Start a voice call", "Record a short message"]
+    assert payload["icon_keys"] == ["call", "voice_note"]
+    assert payload["footer"] == "Tap next / 2x choose / Hold back"
 
     screen.exit()
     assert binding.playlist_destroy_calls == 1
@@ -306,7 +308,9 @@ def test_contact_list_screen_syncs_sorted_contacts_through_lvgl() -> None:
     assert payload["title_text"] == "Contacts"
     assert payload["page_text"] is None
     assert payload["items"] == ["Mama", "Zed", "Mona"]
+    assert payload["subtitles"] == ["", "", ""]
     assert payload["badges"] == ["", "", ""]
+    assert payload["icon_keys"] == ["talk", "talk", "talk"]
 
     screen.exit()
     assert binding.playlist_destroy_calls == 1
@@ -409,6 +413,7 @@ def test_voice_note_screen_uses_playlist_scene_with_talk_voice_note_copy() -> No
     assert payload["empty_subtitle"] == "Hold to record for Hagar."
     assert payload["footer"] == "Hold record / Double back"
     assert payload["empty_icon_key"] == "voice_note"
+    assert payload["icon_keys"] == []
 
     screen.exit()
     assert binding.playlist_destroy_calls == 1
@@ -445,6 +450,10 @@ def test_power_screen_cycles_three_lvgl_pages() -> None:
     payload = binding.power_sync_payloads[-1]
     assert payload["title_text"] == "Power"
     assert payload["page_text"] is None
+    assert payload["icon_key"] == "battery"
+    assert payload["current_page_index"] == 0
+    assert payload["total_pages"] == 3
+    assert payload["footer"] == "Tap = Page / Hold = Back"
     assert payload["items"] == [
         "Source: Unavailable",
         "Battery: Unknown",
@@ -455,12 +464,14 @@ def test_power_screen_cycles_three_lvgl_pages() -> None:
     screen.on_advance()
     screen.render()
     assert binding.power_sync_payloads[-1]["title_text"] == "Time"
+    assert binding.power_sync_payloads[-1]["icon_key"] == "clock"
     assert binding.power_sync_payloads[-1]["page_text"] is None
 
     screen.on_advance()
     screen.render()
     payload = binding.power_sync_payloads[-1]
     assert payload["title_text"] == "Care"
+    assert payload["icon_key"] == "care"
     assert payload["page_text"] is None
 
     screen.exit()

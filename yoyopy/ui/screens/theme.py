@@ -26,8 +26,8 @@ MUTED: Color = (180, 183, 190)
 MUTED_DIM: Color = (122, 125, 132)
 SUCCESS: Color = (61, 221, 83)
 ERROR: Color = (255, 103, 93)
-FOOTER_SAFE_HEIGHT_PORTRAIT = 20
-FOOTER_SAFE_HEIGHT_LANDSCAPE = 18
+FOOTER_SAFE_HEIGHT_PORTRAIT = 32
+FOOTER_SAFE_HEIGHT_LANDSCAPE = 28
 STATUS_SIDE_INSET_PORTRAIT = 16
 STATUS_SIDE_INSET_LANDSCAPE = 10
 STATUS_TEXT_TOP_PORTRAIT = 7
@@ -113,6 +113,7 @@ PHOSPHOR_ICON_FILES = {
     "talk": "hub-talk.png",
     "ask": "hub-ask.png",
     "voice_note": "microphone.png",
+    "call": "phone-call.png",
     "setup": "hub-setup.png",
     "power": "gear-six.png",
 }
@@ -443,31 +444,45 @@ def draw_list_item(
     mode: str,
     selected: bool,
     badge: str | None = None,
+    icon: str | None = None,
 ) -> None:
     """Render one rounded list card."""
 
     theme = theme_for(mode)
-    fill = mix(theme.accent, SURFACE, 0.9) if selected else SURFACE
-    outline = theme.accent_soft if selected else SURFACE_BORDER
-    rounded_panel(display, x1, y1, x2, y2, fill=fill, outline=outline, radius=16, shadow=False)
+    fill = (250, 250, 250) if selected else SURFACE_RAISED
+    outline = None if selected else SURFACE_BORDER
+    rounded_panel(display, x1, y1, x2, y2, fill=fill, outline=outline, radius=14, shadow=False)
 
-    title_color = INK if selected else mix(INK, MUTED, 0.12)
-    subtitle_color = mix(theme.accent, MUTED, 0.72) if selected else MUTED
+    title_color = BACKGROUND if selected else INK
+    subtitle_color = mix(BACKGROUND, MUTED, 0.55) if selected else MUTED
     badge_width = 0
     if badge:
-        badge_width = display.get_text_size(badge, 9)[0] + 18
+        badge_width = display.get_text_size(badge, 10)[0] + 18
 
-    title_text = text_fit(display, title, x2 - x1 - 26 - badge_width, 15)
-    title_height = display.get_text_size(title_text, 15)[1]
+    icon_size = 22 if icon else 0
+    icon_left = x1 + 18
+    text_left = x1 + (54 if icon else 16)
+    if icon:
+        icon_y = y1 + max(8, ((y2 - y1) - icon_size) // 2)
+        draw_icon(display, icon, icon_left, icon_y, icon_size, theme.accent)
+
+    title_text = text_fit(display, title, x2 - text_left - 14 - badge_width, 16)
+    title_height = display.get_text_size(title_text, 16)[1]
     title_y = y1 + 9
     if not subtitle:
         title_y = y1 + max(6, ((y2 - y1) - title_height) // 2)
-    display.text(title_text, x1 + 14, title_y, color=title_color, font_size=15)
+    display.text(title_text, text_left, title_y, color=title_color, font_size=16)
     if subtitle:
-        display.text(text_fit(display, subtitle, x2 - x1 - 26, 10), x1 + 14, y1 + 26, color=subtitle_color, font_size=10)
+        display.text(
+            text_fit(display, subtitle, x2 - text_left - 14, 12),
+            text_left,
+            y1 + 28,
+            color=subtitle_color,
+            font_size=12,
+        )
 
     if selected:
-        display.circle(x1 + 7, y1 + 7, 3, fill=theme.accent)
+        display.circle(x1 + 14, y1 + 14, 3, fill=theme.accent)
 
     if badge:
         _pill(
@@ -475,9 +490,9 @@ def draw_list_item(
             x2 - badge_width - 10,
             y1 + 8,
             badge,
-            fill=theme.accent_dim,
-            text_color=theme.accent,
-            font_size=9,
+            fill=theme.accent_dim if not selected else mix(theme.accent, INK, 0.75),
+            text_color=theme.accent if not selected else BACKGROUND,
+            font_size=10,
             padding=6,
         )
 
@@ -497,19 +512,41 @@ def draw_empty_state(
     panel_left = 18
     panel_top = top + 10
     panel_right = display.WIDTH - 18
-    panel_bottom = min(display.HEIGHT - 28, panel_top + 134)
-    rounded_panel(display, panel_left, panel_top, panel_right, panel_bottom, fill=SURFACE, outline=theme.accent_dim, radius=22)
-    draw_icon(display, icon, (display.WIDTH // 2) - 22, panel_top + 16, 44, theme.accent)
+    panel_bottom = min(display.HEIGHT - 32, panel_top + 156)
+    rounded_panel(
+        display,
+        panel_left,
+        panel_top,
+        panel_right,
+        panel_bottom,
+        fill=SURFACE,
+        outline=None,
+        radius=22,
+    )
+    halo_size = 64
+    halo_left = (display.WIDTH - halo_size) // 2
+    halo_top = panel_top + 18
+    rounded_panel(
+        display,
+        halo_left,
+        halo_top,
+        halo_left + halo_size,
+        halo_top + halo_size,
+        fill=mix(theme.accent, BACKGROUND, 0.82),
+        outline=None,
+        radius=32,
+    )
+    draw_icon(display, icon, halo_left + 14, halo_top + 14, 36, mix(theme.accent, INK, 0.18))
 
-    title_width, title_height = display.get_text_size(title, 16)
-    display.text(title, (display.WIDTH - title_width) // 2, panel_top + 68, color=INK, font_size=16)
+    title_width, _ = display.get_text_size(title, 18)
+    display.text(title, (display.WIDTH - title_width) // 2, panel_top + 96, color=INK, font_size=18)
 
-    lines = wrap_text(display, subtitle, panel_right - panel_left - 26, 11, max_lines=2)
-    line_y = panel_top + 92
+    lines = wrap_text(display, subtitle, panel_right - panel_left - 28, 12, max_lines=2)
+    line_y = panel_top + 126
     for line in lines:
-        line_width, _ = display.get_text_size(line, 11)
-        display.text(line, (display.WIDTH - line_width) // 2, line_y, color=MUTED, font_size=11)
-        line_y += 13
+        line_width, _ = display.get_text_size(line, 12)
+        display.text(line, (display.WIDTH - line_width) // 2, line_y, color=MUTED, font_size=12)
+        line_y += 15
 
 
 def render_footer(display: Display, text: str, *, mode: str) -> None:
@@ -518,17 +555,21 @@ def render_footer(display: Display, text: str, *, mode: str) -> None:
     if not text:
         return
 
-    font_size = 9 if display.is_portrait() else 10
-    footer_width, footer_height = display.get_text_size(text, font_size)
+    font_size = 11 if display.is_portrait() else 10
     footer_safe_height = FOOTER_SAFE_HEIGHT_PORTRAIT if display.is_portrait() else FOOTER_SAFE_HEIGHT_LANDSCAPE
     footer_top = display.HEIGHT - footer_safe_height
 
     # Reserve a clean bottom strip so helper text never collides with panels or list rows.
     display.rectangle(0, footer_top, display.WIDTH, display.HEIGHT, fill=FOOTER_BAR)
-
-    footer_x = (display.WIDTH - footer_width) // 2
-    footer_y = footer_top + max(0, (footer_safe_height - footer_height) // 2) - 1
-    display.text(text, footer_x, footer_y, color=MUTED_DIM, font_size=font_size)
+    lines = wrap_text(display, text, display.WIDTH - 24, font_size, max_lines=2) or [text]
+    line_height = display.get_text_size("Ag", font_size)[1]
+    total_height = len(lines) * line_height
+    footer_y = footer_top + max(0, (footer_safe_height - total_height) // 2) - 1
+    for line in lines:
+        footer_width, _ = display.get_text_size(line, font_size)
+        footer_x = (display.WIDTH - footer_width) // 2
+        display.text(line, footer_x, footer_y, color=MUTED_DIM, font_size=font_size)
+        footer_y += line_height
 
 
 def _pill(
@@ -567,14 +608,24 @@ def draw_icon(display: Display, icon: str, x: int, y: int, size: int, color: Col
     draw = _get_draw(display)
     if icon == "listen":
         _draw_listen_icon(display, draw, x, y, size, color)
+    elif icon == "music_note":
+        _draw_music_note_icon(display, draw, x, y, size, color)
     elif icon == "talk":
         _draw_talk_icon(display, draw, x, y, size, color)
     elif icon == "ask":
         _draw_ask_icon(display, draw, x, y, size, color)
+    elif icon == "care":
+        _draw_care_icon(display, draw, x, y, size, color)
+    elif icon == "clock":
+        _draw_clock_icon(display, draw, x, y, size, color)
+    elif icon == "battery":
+        _draw_battery_icon(display, draw, x, y, size, color)
     elif icon in {"setup", "power"}:
         _draw_setup_icon(display, draw, x, y, size, color)
     elif icon == "playlist":
         _draw_playlist_icon(display, draw, x, y, size, color)
+    elif icon == "call":
+        _draw_call_icon(display, draw, x, y, size, color)
     elif icon == "incoming":
         _draw_talk_icon(display, draw, x, y, size, color)
         display.line(x + size - 10, y + 8, x + size - 22, y + 20, color=color, width=3)
@@ -651,6 +702,62 @@ def _draw_listen_icon(display: Display, draw, x: int, y: int, size: int, color: 
     display.line(note_x, note_y + 2, note_x + max(4, size // 10), note_y + 4, color=color, width=stroke)
 
 
+def _draw_music_note_icon(display: Display, draw, x: int, y: int, size: int, color: Color) -> None:
+    stroke = max(2, size // 10)
+    stem_x = x + max(8, size // 2)
+    stem_top = y + max(3, size // 8)
+    stem_bottom = y + size - max(8, size // 4)
+    left_note_x = x + max(6, size // 4)
+    right_note_x = x + size - max(6, size // 4)
+    note_y = y + size - max(8, size // 4)
+    display.line(stem_x, stem_top, stem_x, stem_bottom, color=color, width=stroke)
+    display.line(
+        stem_x,
+        stem_top + max(1, size // 12),
+        right_note_x,
+        stem_top + max(5, size // 6),
+        color=color,
+        width=stroke,
+    )
+    display.circle(left_note_x, note_y, max(3, size // 7), fill=color)
+    display.circle(right_note_x, note_y - max(4, size // 8), max(3, size // 7), fill=color)
+
+
+def _draw_call_icon(display: Display, draw, x: int, y: int, size: int, color: Color) -> None:
+    stroke = max(2, size // 14)
+    handle_left = x + max(4, size // 8)
+    handle_top = y + max(10, size // 4)
+    handle_right = x + size - max(4, size // 8)
+    handle_bottom = y + size - max(10, size // 4)
+    rounded_panel(
+        display,
+        handle_left,
+        handle_top,
+        handle_right,
+        handle_bottom,
+        fill=None,
+        outline=color,
+        radius=max(9, size // 4),
+        width=stroke,
+    )
+    display.line(
+        handle_left + max(5, size // 6),
+        handle_bottom - max(2, size // 10),
+        handle_left + max(1, size // 10),
+        handle_bottom + max(5, size // 8),
+        color=color,
+        width=stroke,
+    )
+    display.line(
+        handle_right - max(5, size // 6),
+        handle_top + max(2, size // 10),
+        handle_right - max(1, size // 10),
+        handle_top - max(5, size // 8),
+        color=color,
+        width=stroke,
+    )
+
+
 def _draw_talk_icon(display: Display, draw, x: int, y: int, size: int, color: Color) -> None:
     stroke = max(2, size // 14)
     small_left = x + max(2, size // 20)
@@ -707,6 +814,37 @@ def _draw_setup_icon(display: Display, draw, x: int, y: int, size: int, color: C
         (-(offset - 3), offset - 3),
     ):
         display.circle(center_x + offset_x, center_y + offset_y, tooth_r, fill=color)
+
+
+def _draw_care_icon(display: Display, draw, x: int, y: int, size: int, color: Color) -> None:
+    stroke = max(2, size // 12)
+    center_x = x + (size // 2)
+    center_y = y + (size // 2) + max(1, size // 16)
+    inner_r = max(1, size // 18)
+    left = x + max(3, size // 8)
+    top = y + max(4, size // 5)
+    right = x + size - max(3, size // 8)
+    bottom = y + size - max(3, size // 8)
+    mid_x = center_x
+    if draw is not None and hasattr(draw, "line"):
+        points = [
+            (mid_x, bottom),
+            (left, y + max(10, size // 3)),
+            (x + max(7, size // 4), top),
+            (mid_x, y + max(10, size // 3)),
+            (right - max(4, size // 7), top),
+            (right, y + max(10, size // 3)),
+            (mid_x, bottom),
+        ]
+        draw.line(points, fill=color, width=stroke, joint="curve")
+        return
+
+    display.line(mid_x, bottom, left, y + max(10, size // 3), color=color, width=stroke)
+    display.line(left, y + max(10, size // 3), x + max(7, size // 4), top, color=color, width=stroke)
+    display.line(x + max(7, size // 4), top, mid_x, y + max(10, size // 3), color=color, width=stroke)
+    display.line(mid_x, y + max(10, size // 3), right - max(4, size // 7), top, color=color, width=stroke)
+    display.line(right - max(4, size // 7), top, right, y + max(10, size // 3), color=color, width=stroke)
+    display.line(right, y + max(10, size // 3), mid_x, bottom, color=color, width=stroke)
     display.circle(center_x, center_y, inner_r, outline=color, width=stroke)
 
 
@@ -715,6 +853,51 @@ def _draw_playlist_icon(display: Display, draw, x: int, y: int, size: int, color
     display.line(x + 12, y + 16, x + size - 12, y + 16, color=color, width=3)
     display.line(x + 12, y + 24, x + size - 16, y + 24, color=color, width=3)
     display.line(x + 12, y + 32, x + size - 20, y + 32, color=color, width=3)
+
+
+def _draw_clock_icon(display: Display, draw, x: int, y: int, size: int, color: Color) -> None:
+    stroke = max(2, size // 14)
+    center_x = x + (size // 2)
+    center_y = y + (size // 2)
+    radius = max(8, size // 3)
+    display.circle(center_x, center_y, radius, outline=color, width=stroke)
+    display.line(center_x, center_y, center_x, center_y - max(5, size // 6), color=color, width=stroke)
+    display.line(center_x, center_y, center_x + max(5, size // 6), center_y + max(2, size // 12), color=color, width=stroke)
+
+
+def _draw_battery_icon(display: Display, draw, x: int, y: int, size: int, color: Color) -> None:
+    stroke = max(2, size // 14)
+    body_left = x + max(3, size // 8)
+    body_top = y + max(7, size // 4)
+    body_right = x + size - max(7, size // 5)
+    body_bottom = y + size - max(7, size // 4)
+    rounded_panel(
+        display,
+        body_left,
+        body_top,
+        body_right,
+        body_bottom,
+        fill=None,
+        outline=color,
+        radius=max(5, size // 8),
+        width=stroke,
+    )
+    display.rectangle(
+        body_left + max(4, size // 8),
+        body_top + max(4, size // 8),
+        body_right - max(4, size // 8),
+        body_bottom - max(4, size // 8),
+        fill=color,
+    )
+    tip_left = body_right + max(1, size // 16)
+    tip_top = y + (size // 2) - max(4, size // 10)
+    display.rectangle(
+        tip_left,
+        tip_top,
+        tip_left + max(4, size // 10),
+        tip_top + max(8, size // 5),
+        fill=color,
+    )
 
 
 def _voip_state(context: AppContext | None) -> str:

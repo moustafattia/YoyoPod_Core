@@ -9,12 +9,10 @@ from loguru import logger
 from yoyopy.ui.display import Display
 from yoyopy.ui.screens.base import Screen
 from yoyopy.ui.screens.theme import (
-    SURFACE,
     draw_empty_state,
     draw_list_item,
     render_footer,
     render_header,
-    rounded_panel,
     text_fit,
 )
 from yoyopy.ui.screens.voip.lvgl import LvglContactListView
@@ -141,39 +139,28 @@ class ContactListScreen(Screen):
         elif self.selected_index >= self.scroll_offset + self.max_visible_items:
             self.scroll_offset = self.selected_index - self.max_visible_items + 1
 
-        panel_top = content_top + 6
-        panel_bottom = self.display.HEIGHT - 28
-        rounded_panel(
-            self.display,
-            12,
-            panel_top,
-            self.display.WIDTH - 12,
-            panel_bottom,
-            fill=SURFACE,
-            outline=None,
-            radius=24,
-        )
-
-        item_height = 46
+        item_height = 52
+        list_top = content_top + 8
         for row in range(self.max_visible_items):
             contact_index = self.scroll_offset + row
             if contact_index >= len(self.contacts):
                 break
 
             contact = self.contacts[contact_index]
-            y1 = panel_top + 10 + (row * item_height)
-            y2 = y1 + 38
+            y1 = list_top + (row * item_height)
+            y2 = y1 + 44
             draw_list_item(
                 self.display,
-                x1=20,
+                x1=18,
                 y1=y1,
-                x2=self.display.WIDTH - 20,
+                x2=self.display.WIDTH - 18,
                 y2=y2,
                 title=text_fit(self.display, contact.display_name, self.display.WIDTH - 90, 15),
                 subtitle="",
                 mode="talk",
                 selected=contact_index == self.selected_index,
                 badge=None,
+                icon="talk",
             )
 
         render_footer(self.display, self._instruction_text(), mode="talk")
@@ -208,6 +195,18 @@ class ContactListScreen(Screen):
                 selected_visible_index = row
 
         return visible_titles, visible_badges, selected_visible_index
+
+    def get_visible_subtitles(self) -> list[str]:
+        """Return visible subtitles for the shared LVGL scene."""
+
+        visible_titles, _, _ = self.get_visible_window()
+        return ["" for _ in visible_titles]
+
+    def get_visible_icon_keys(self) -> list[str]:
+        """Return visible icon keys for the shared LVGL scene."""
+
+        visible_titles, _, _ = self.get_visible_window()
+        return ["talk" for _ in visible_titles]
 
     def _instruction_text(self) -> str:
         """Return footer hints for the current action mode."""
