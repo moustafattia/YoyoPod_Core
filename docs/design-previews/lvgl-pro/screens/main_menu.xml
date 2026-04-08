@@ -3,7 +3,7 @@
 	<styles>
 		<style
 			name="menu_chip"
-			bg_color="#listen_dim"
+			bg_color="0x34593c"
 			bg_opa="100%"
 			border_width="0"
 			radius="12"
@@ -11,22 +11,22 @@
 		/>
 		<style
 			name="menu_chip_text"
-			text_color="#listen_accent"
+			text_color="0x69ea79"
 		/>
 		<style
 			name="menu_title"
-			text_color="#ink"
+			text_color="0xf3f7fa"
 		/>
 		<style
 			name="menu_rule"
-			bg_color="#listen_accent"
+			bg_color="0x69ea79"
 			bg_opa="100%"
 			border_width="0"
 			radius="2"
 		/>
 		<style
 			name="menu_subtitle"
-			text_color="#muted"
+			text_color="0x99a0ad"
 		/>
 		<style
 			name="menu_shell"
@@ -38,55 +38,55 @@
 		/>
 		<style
 			name="row_selected"
-			bg_color="#listen_card"
+			bg_color="0x243532"
 			bg_opa="100%"
 			border_width="1"
-			border_color="#listen_soft"
+			border_color="0x468f53"
 			radius="16"
 			pad_all="0"
 		/>
 		<style
 			name="row_idle"
-			bg_color="#surface"
+			bg_color="0x1c212a"
 			bg_opa="100%"
 			border_width="1"
-			border_color="#surface_border"
+			border_color="0x4a4f5c"
 			radius="16"
 			pad_all="0"
 		/>
 		<style
 			name="row_dot_selected"
-			bg_color="#listen_accent"
+			bg_color="0x69ea79"
 			bg_opa="100%"
 			border_width="0"
 			radius="3"
 		/>
 		<style
 			name="row_dot_idle"
-			bg_color="#surface_border"
+			bg_color="0x4a4f5c"
 			bg_opa="100%"
 			border_width="0"
 			radius="3"
 		/>
 		<style
 			name="row_title_selected"
-			text_color="#ink"
+			text_color="0xf3f7fa"
 		/>
 		<style
 			name="row_title_idle"
-			text_color="#ink"
+			text_color="0xf3f7fa"
 		/>
 		<style
 			name="row_detail_selected"
-			text_color="#listen_accent"
+			text_color="0x69ea79"
 		/>
 		<style
 			name="row_detail_idle"
-			text_color="#muted"
+			text_color="0x99a0ad"
 		/>
 		<style
 			name="row_badge_listen"
-			bg_color="#listen_dim"
+			bg_color="0x34593c"
 			bg_opa="100%"
 			border_width="0"
 			radius="12"
@@ -94,7 +94,7 @@
 		/>
 		<style
 			name="row_badge_talk"
-			bg_color="#talk_dim"
+			bg_color="0x2e5764"
 			bg_opa="100%"
 			border_width="0"
 			radius="12"
@@ -102,7 +102,7 @@
 		/>
 		<style
 			name="row_badge_ask"
-			bg_color="#ask_dim"
+			bg_color="0x705c21"
 			bg_opa="100%"
 			border_width="0"
 			radius="12"
@@ -110,7 +110,7 @@
 		/>
 		<style
 			name="row_badge_setup"
-			bg_color="#setup_dim"
+			bg_color="0x4d545c"
 			bg_opa="100%"
 			border_width="0"
 			radius="12"
@@ -118,31 +118,30 @@
 		/>
 		<style
 			name="row_badge_text_listen"
-			text_color="#listen_accent"
+			text_color="0x69ea79"
 		/>
 		<style
 			name="row_badge_text_talk"
-			text_color="#talk_accent"
+			text_color="0x52dcff"
 		/>
 		<style
 			name="row_badge_text_ask"
-			text_color="#ask_accent"
+			text_color="0xffd549"
 		/>
 		<style
 			name="row_badge_text_setup"
-			text_color="#setup_accent"
+			text_color="0xb7bec8"
 		/>
 		<style
 			name="menu_footer"
-			text_color="#listen_soft"
+			text_color="0x468f53"
 		/>
 	</styles>
 
-	<view>
-		<style name="screen_root" />
+	<view style_bg_color="0x12151c" style_bg_opa="100%" style_border_width="0">
 
-		<lv_obj x="10" y="8" width="8" height="8" style_bg_color="#success" style_bg_opa="100%" style_radius="4" style_border_width="0" />
-		<lv_label x="24" y="2" text="YoyoPod" style_text_color="#ink" />
+		<lv_obj x="10" y="8" width="8" height="8" style_bg_color="0x3ddd53" style_bg_opa="100%" style_radius="4" style_border_width="0" />
+		<lv_label x="24" y="2" text="YoyoPod" style_text_color="0xf3f7fa" />
 
 		<lv_obj x="16" y="28" width="72" height="24">
 			<style name="menu_chip" />
@@ -241,7 +240,7 @@
 			<style name="row_badge_text_setup" />
 		</lv_label>
 
-		<lv_label x="84" y="222" width="152" text="A open | B back | X/Y move" style_text_align="center">
+		<lv_label x="84" y="222" width="152" text="A open | B back | X/Y move">
 			<style name="menu_footer" />
 		</lv_label>
 	</view>

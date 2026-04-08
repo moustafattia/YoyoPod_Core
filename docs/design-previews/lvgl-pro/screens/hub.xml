@@ -2,30 +2,26 @@
 <screen>
 	<styles>
 		<style
-			name="status_time"
-			text_color="#ink"
-		/>
-		<style
 			name="hub_card"
-			bg_color="#listen_card"
+			bg_color="0x243532"
 			bg_opa="100%"
 			border_width="2"
-			border_color="#listen_dim"
+			border_color="0x34593c"
 			radius="28"
 			pad_all="0"
 		/>
 		<style
 			name="hub_halo"
-			bg_color="#listen_halo"
+			bg_color="0x23402e"
 			bg_opa="100%"
 			border_width="1"
-			border_color="#listen_halo_outline"
+			border_color="0x2c5037"
 			radius="22"
 			pad_all="0"
 		/>
 		<style
 			name="hub_mode_pill"
-			bg_color="#listen_dim"
+			bg_color="0x34593c"
 			bg_opa="100%"
 			border_width="0"
 			radius="14"
@@ -33,51 +29,44 @@
 		/>
 		<style
 			name="hub_mode_text"
-			text_color="#listen_accent"
+			text_color="0x69ea79"
 		/>
 		<style
 			name="hub_title"
-			text_color="#listen_accent"
+			text_color="0x69ea79"
 		/>
 		<style
 			name="hub_subtitle"
-			text_color="#ink"
+			text_color="0xf3f7fa"
 		/>
 		<style
 			name="hub_dot_active"
-			bg_color="#listen_accent"
+			bg_color="0x69ea79"
 			bg_opa="100%"
 			border_width="0"
 			radius="4"
 		/>
 		<style
 			name="hub_dot_idle"
-			bg_color="#listen_dim"
+			bg_color="0x34593c"
 			bg_opa="100%"
 			border_width="0"
 			radius="3"
 		/>
 		<style
 			name="hub_footer"
-			text_color="#listen_soft"
+			text_color="0x468f53"
 		/>
 	</styles>
 
-	<view>
-		<style name="screen_root" />
+	<view style_bg_color="0x12151c" style_bg_opa="100%" style_border_width="0">
 
-		<lv_obj x="16" y="11" width="8" height="8" style_bg_color="#success" style_bg_opa="100%" style_radius="4" style_border_width="0" />
-		<lv_label x="28" y="4" text="09:41" style_text_color="#ink" />
+		<lv_obj x="16" y="11" width="8" height="8" style_bg_color="0x3ddd53" style_bg_opa="100%" style_radius="4" style_border_width="0" />
+		<lv_label x="28" y="4" text="09:41" style_text_color="0xf3f7fa" />
 
-		<lv_obj x="202" y="6" width="20" height="10">
-			<style name="battery_frame" />
-		</lv_obj>
-		<lv_obj x="203" y="7" width="14" height="8">
-			<style name="battery_fill" />
-		</lv_obj>
-		<lv_obj x="222" y="9" width="2" height="4">
-			<style name="battery_tip" />
-		</lv_obj>
+		<lv_obj x="202" y="6" width="20" height="10" style_bg_opa="0%" style_border_width="1" style_border_color="0x99a0ad" style_radius="2" />
+		<lv_obj x="203" y="7" width="14" height="8" style_bg_color="0xf3f7fa" style_bg_opa="100%" style_border_width="0" style_radius="1" />
+		<lv_obj x="222" y="9" width="2" height="4" style_bg_color="0x99a0ad" style_bg_opa="100%" style_border_width="0" style_radius="1" />
 
 		<lv_obj x="16" y="48" width="208" height="194">
 			<style name="hub_card" />
@@ -94,11 +83,11 @@
 			<style name="hub_mode_text" />
 		</lv_label>
 
-		<lv_label x="64" y="164" width="112" text="Listen" style_text_align="center">
+		<lv_label x="64" y="164" width="112" text="Listen">
 			<style name="hub_title" />
 		</lv_label>
 
-		<lv_label x="47" y="193" width="146" text="On-device music" style_text_align="center">
+		<lv_label x="47" y="193" width="146" text="On-device music">
 			<style name="hub_subtitle" />
 		</lv_label>
 
@@ -115,7 +104,7 @@
 			<style name="hub_dot_idle" />
 		</lv_obj>
 
-		<lv_label x="51" y="258" width="138" text="Tap next / Double open" style_text_align="center">
+		<lv_label x="51" y="258" width="138" text="Tap next / Double open">
 			<style name="hub_footer" />
 		</lv_label>
 	</view>
