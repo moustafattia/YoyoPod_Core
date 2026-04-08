@@ -1,0 +1,248 @@
+<!-- Viewer-friendly recreation of yoyopy/ui/screens/navigation/menu.py -->
+<screen>
+	<styles>
+		<style
+			name="menu_chip"
+			bg_color="#listen_dim"
+			bg_opa="100%"
+			border_width="0"
+			radius="12"
+			pad_all="0"
+		/>
+		<style
+			name="menu_chip_text"
+			text_color="#listen_accent"
+		/>
+		<style
+			name="menu_title"
+			text_color="#ink"
+		/>
+		<style
+			name="menu_rule"
+			bg_color="#listen_accent"
+			bg_opa="100%"
+			border_width="0"
+			radius="2"
+		/>
+		<style
+			name="menu_subtitle"
+			text_color="#muted"
+		/>
+		<style
+			name="menu_shell"
+			bg_color="0x1e2229"
+			bg_opa="100%"
+			border_width="0"
+			radius="24"
+			pad_all="0"
+		/>
+		<style
+			name="row_selected"
+			bg_color="#listen_card"
+			bg_opa="100%"
+			border_width="1"
+			border_color="#listen_soft"
+			radius="16"
+			pad_all="0"
+		/>
+		<style
+			name="row_idle"
+			bg_color="#surface"
+			bg_opa="100%"
+			border_width="1"
+			border_color="#surface_border"
+			radius="16"
+			pad_all="0"
+		/>
+		<style
+			name="row_dot_selected"
+			bg_color="#listen_accent"
+			bg_opa="100%"
+			border_width="0"
+			radius="3"
+		/>
+		<style
+			name="row_dot_idle"
+			bg_color="#surface_border"
+			bg_opa="100%"
+			border_width="0"
+			radius="3"
+		/>
+		<style
+			name="row_title_selected"
+			text_color="#ink"
+		/>
+		<style
+			name="row_title_idle"
+			text_color="#ink"
+		/>
+		<style
+			name="row_detail_selected"
+			text_color="#listen_accent"
+		/>
+		<style
+			name="row_detail_idle"
+			text_color="#muted"
+		/>
+		<style
+			name="row_badge_listen"
+			bg_color="#listen_dim"
+			bg_opa="100%"
+			border_width="0"
+			radius="12"
+			pad_all="0"
+		/>
+		<style
+			name="row_badge_talk"
+			bg_color="#talk_dim"
+			bg_opa="100%"
+			border_width="0"
+			radius="12"
+			pad_all="0"
+		/>
+		<style
+			name="row_badge_ask"
+			bg_color="#ask_dim"
+			bg_opa="100%"
+			border_width="0"
+			radius="12"
+			pad_all="0"
+		/>
+		<style
+			name="row_badge_setup"
+			bg_color="#setup_dim"
+			bg_opa="100%"
+			border_width="0"
+			radius="12"
+			pad_all="0"
+		/>
+		<style
+			name="row_badge_text_listen"
+			text_color="#listen_accent"
+		/>
+		<style
+			name="row_badge_text_talk"
+			text_color="#talk_accent"
+		/>
+		<style
+			name="row_badge_text_ask"
+			text_color="#ask_accent"
+		/>
+		<style
+			name="row_badge_text_setup"
+			text_color="#setup_accent"
+		/>
+		<style
+			name="menu_footer"
+			text_color="#listen_soft"
+		/>
+	</styles>
+
+	<view>
+		<style name="screen_root" />
+
+		<lv_obj x="10" y="8" width="8" height="8" style_bg_color="#success" style_bg_opa="100%" style_radius="4" style_border_width="0" />
+		<lv_label x="24" y="2" text="YoyoPod" style_text_color="#ink" />
+
+		<lv_obj x="16" y="28" width="72" height="24">
+			<style name="menu_chip" />
+		</lv_obj>
+		<lv_label x="31" y="34" text="LISTEN">
+			<style name="menu_chip_text" />
+		</lv_label>
+
+		<lv_label x="16" y="58" text="YoyoPod">
+			<style name="menu_title" />
+		</lv_label>
+		<lv_obj x="16" y="80" width="94" height="3">
+			<style name="menu_rule" />
+		</lv_obj>
+		<lv_label x="16" y="90" text="Pick a mode for this adventure.">
+			<style name="menu_subtitle" />
+		</lv_label>
+
+		<lv_obj x="12" y="108" width="296" height="110">
+			<style name="menu_shell" />
+		</lv_obj>
+
+		<lv_obj x="20" y="116" width="280" height="22">
+			<style name="row_selected" />
+		</lv_obj>
+		<lv_obj x="27" y="124" width="6" height="6">
+			<style name="row_dot_selected" />
+		</lv_obj>
+		<lv_label x="40" y="120" text="Listen">
+			<style name="row_title_selected" />
+		</lv_label>
+		<lv_label x="92" y="120" text="- Music and playlists">
+			<style name="row_detail_selected" />
+		</lv_label>
+		<lv_obj x="238" y="117" width="52" height="20">
+			<style name="row_badge_listen" />
+		</lv_obj>
+		<lv_label x="252" y="121" text="OPEN">
+			<style name="row_badge_text_listen" />
+		</lv_label>
+
+		<lv_obj x="20" y="143" width="280" height="22">
+			<style name="row_idle" />
+		</lv_obj>
+		<lv_obj x="26" y="151" width="6" height="6">
+			<style name="row_dot_idle" />
+		</lv_obj>
+		<lv_label x="38" y="147" text="Talk">
+			<style name="row_title_idle" />
+		</lv_label>
+		<lv_label x="74" y="147" text="- Calls and voice notes">
+			<style name="row_detail_idle" />
+		</lv_label>
+		<lv_obj x="246" y="144" width="44" height="20">
+			<style name="row_badge_talk" />
+		</lv_obj>
+		<lv_label x="259" y="148" text="TALK">
+			<style name="row_badge_text_talk" />
+		</lv_label>
+
+		<lv_obj x="20" y="170" width="280" height="22">
+			<style name="row_idle" />
+		</lv_obj>
+		<lv_obj x="26" y="178" width="6" height="6">
+			<style name="row_dot_idle" />
+		</lv_obj>
+		<lv_label x="38" y="174" text="Ask">
+			<style name="row_title_idle" />
+		</lv_label>
+		<lv_label x="68" y="174" text="- Safe questions">
+			<style name="row_detail_idle" />
+		</lv_label>
+		<lv_obj x="248" y="171" width="42" height="20">
+			<style name="row_badge_ask" />
+		</lv_obj>
+		<lv_label x="261" y="175" text="ASK">
+			<style name="row_badge_text_ask" />
+		</lv_label>
+
+		<lv_obj x="20" y="197" width="280" height="22">
+			<style name="row_idle" />
+		</lv_obj>
+		<lv_obj x="26" y="205" width="6" height="6">
+			<style name="row_dot_idle" />
+		</lv_obj>
+		<lv_label x="38" y="201" text="Setup">
+			<style name="row_title_idle" />
+		</lv_label>
+		<lv_label x="84" y="201" text="- Power and device care">
+			<style name="row_detail_idle" />
+		</lv_label>
+		<lv_obj x="236" y="198" width="54" height="20">
+			<style name="row_badge_setup" />
+		</lv_obj>
+		<lv_label x="248" y="202" text="SETUP">
+			<style name="row_badge_text_setup" />
+		</lv_label>
+
+		<lv_label x="84" y="222" width="152" text="A open | B back | X/Y move" style_text_align="center">
+			<style name="menu_footer" />
+		</lv_label>
+	</view>
+</screen>

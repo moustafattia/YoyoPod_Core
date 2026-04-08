@@ -1,0 +1,10 @@
+<project name="yoyopod_design_preview">
+	<targets>
+		<target name="whisplay_portrait">
+			<display width="240" height="280" />
+		</target>
+		<target name="standard_landscape">
+			<display width="320" height="240" />
+		</target>
+	</targets>
+</project>

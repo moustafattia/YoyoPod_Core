@@ -1,0 +1,70 @@
+<globals>
+	<api>
+		<!-- Intentionally empty for viewer-only mockups. -->
+	</api>
+
+	<consts>
+		<int name="unit_xs" value="4" />
+		<int name="unit_sm" value="8" />
+		<int name="unit_md" value="12" />
+		<int name="unit_lg" value="16" />
+		<int name="unit_xl" value="24" />
+
+		<color name="bg" value="0x12151c" />
+		<color name="surface" value="0x1c212a" />
+		<color name="surface_raised" value="0x232834" />
+		<color name="surface_border" value="0x4a4f5c" />
+		<color name="ink" value="0xf3f7fa" />
+		<color name="muted" value="0x99a0ad" />
+		<color name="muted_dim" value="0x6f7684" />
+		<color name="success" value="0x3ddd53" />
+		<color name="danger" value="0xff675d" />
+
+		<color name="listen_accent" value="0x69ea79" />
+		<color name="listen_soft" value="0x468f53" />
+		<color name="listen_dim" value="0x34593c" />
+		<color name="listen_card" value="0x243532" />
+		<color name="listen_halo" value="0x23402e" />
+		<color name="listen_halo_outline" value="0x2c5037" />
+
+		<color name="talk_accent" value="0x52dcff" />
+		<color name="talk_dim" value="0x2e5764" />
+		<color name="ask_accent" value="0xffd549" />
+		<color name="ask_dim" value="0x705c21" />
+		<color name="setup_accent" value="0xb7bec8" />
+		<color name="setup_dim" value="0x4d545c" />
+	</consts>
+
+	<styles>
+		<style
+			name="screen_root"
+			bg_color="#bg"
+			bg_opa="100%"
+			border_width="0"
+			pad_all="0"
+		/>
+		<style
+			name="battery_frame"
+			bg_opa="0%"
+			border_width="1"
+			border_color="#muted"
+			radius="2"
+			pad_all="0"
+		/>
+		<style name="battery_tip" bg_color="#muted" bg_opa="100%" border_width="0" radius="1" />
+		<style name="battery_fill" bg_color="#ink" bg_opa="100%" border_width="0" radius="1" />
+		<style name="footer_text" text_color="#muted" />
+	</styles>
+
+	<subjects>
+		<!-- Intentionally empty for now. -->
+	</subjects>
+
+	<images>
+		<!-- Intentionally empty. -->
+	</images>
+
+	<fonts>
+		<!-- Let the viewer/editor use its default font stack. -->
+	</fonts>
+</globals>

@@ -1,0 +1,122 @@
+<!-- Viewer-friendly recreation of yoyopy/ui/screens/navigation/hub.py -->
+<screen>
+	<styles>
+		<style
+			name="status_time"
+			text_color="#ink"
+		/>
+		<style
+			name="hub_card"
+			bg_color="#listen_card"
+			bg_opa="100%"
+			border_width="2"
+			border_color="#listen_dim"
+			radius="28"
+			pad_all="0"
+		/>
+		<style
+			name="hub_halo"
+			bg_color="#listen_halo"
+			bg_opa="100%"
+			border_width="1"
+			border_color="#listen_halo_outline"
+			radius="22"
+			pad_all="0"
+		/>
+		<style
+			name="hub_mode_pill"
+			bg_color="#listen_dim"
+			bg_opa="100%"
+			border_width="0"
+			radius="14"
+			pad_all="0"
+		/>
+		<style
+			name="hub_mode_text"
+			text_color="#listen_accent"
+		/>
+		<style
+			name="hub_title"
+			text_color="#listen_accent"
+		/>
+		<style
+			name="hub_subtitle"
+			text_color="#ink"
+		/>
+		<style
+			name="hub_dot_active"
+			bg_color="#listen_accent"
+			bg_opa="100%"
+			border_width="0"
+			radius="4"
+		/>
+		<style
+			name="hub_dot_idle"
+			bg_color="#listen_dim"
+			bg_opa="100%"
+			border_width="0"
+			radius="3"
+		/>
+		<style
+			name="hub_footer"
+			text_color="#listen_soft"
+		/>
+	</styles>
+
+	<view>
+		<style name="screen_root" />
+
+		<lv_obj x="16" y="11" width="8" height="8" style_bg_color="#success" style_bg_opa="100%" style_radius="4" style_border_width="0" />
+		<lv_label x="28" y="4" text="09:41" style_text_color="#ink" />
+
+		<lv_obj x="202" y="6" width="20" height="10">
+			<style name="battery_frame" />
+		</lv_obj>
+		<lv_obj x="203" y="7" width="14" height="8">
+			<style name="battery_fill" />
+		</lv_obj>
+		<lv_obj x="222" y="9" width="2" height="4">
+			<style name="battery_tip" />
+		</lv_obj>
+
+		<lv_obj x="16" y="48" width="208" height="194">
+			<style name="hub_card" />
+		</lv_obj>
+
+		<lv_obj x="48" y="54" width="144" height="96">
+			<style name="hub_halo" />
+		</lv_obj>
+
+		<lv_obj x="82" y="86" width="76" height="28">
+			<style name="hub_mode_pill" />
+		</lv_obj>
+		<lv_label x="97" y="92" text="LISTEN">
+			<style name="hub_mode_text" />
+		</lv_label>
+
+		<lv_label x="64" y="164" width="112" text="Listen" style_text_align="center">
+			<style name="hub_title" />
+		</lv_label>
+
+		<lv_label x="47" y="193" width="146" text="On-device music" style_text_align="center">
+			<style name="hub_subtitle" />
+		</lv_label>
+
+		<lv_obj x="93" y="222" width="6" height="6">
+			<style name="hub_dot_idle" />
+		</lv_obj>
+		<lv_obj x="109" y="221" width="8" height="8">
+			<style name="hub_dot_active" />
+		</lv_obj>
+		<lv_obj x="127" y="222" width="6" height="6">
+			<style name="hub_dot_idle" />
+		</lv_obj>
+		<lv_obj x="145" y="222" width="6" height="6">
+			<style name="hub_dot_idle" />
+		</lv_obj>
+
+		<lv_label x="51" y="258" width="138" text="Tap next / Double open" style_text_align="center">
+			<style name="hub_footer" />
+		</lv_label>
+	</view>
+</screen>
