@@ -10,6 +10,7 @@ from scripts.pi_remote import (
     build_logs_command,
     build_lvgl_soak_command,
     build_native_shim_refresh_command,
+    build_parser,
     build_power_command,
     build_restart_command,
     build_rtc_command,
@@ -24,11 +25,13 @@ from scripts.pi_remote import (
     load_pi_deploy_config,
     quote_remote_project_dir,
     resolve_local_executable,
+    run_screenshot,
     should_use_direct_rsync,
     sync_path_is_excluded,
 )
 from argparse import Namespace
 from pathlib import Path
+from types import SimpleNamespace
 
 DEPLOY_CONFIG = PiDeployConfig(
     host="rpi-zero",
@@ -422,8 +425,90 @@ def test_build_restart_command_reuses_pid_and_startup_contract() -> None:
     assert "rm -f /tmp/yoyopod.pid" in command
     assert "killall -9 python" in command
     assert "killall -9 linphonec" in command
+    assert (
+        'sudo systemctl stop yoyopod@"$(id -un)".service >/dev/null 2>&1 || true; '
+        "rm -f /tmp/yoyopod.pid; "
+        "killall -9 python >/dev/null 2>&1 || true; "
+        "killall -9 linphonec >/dev/null 2>&1 || true; "
+        'sudo systemctl start yoyopod@"$(id -un)".service;'
+    ) in command
     assert "source .venv/bin/activate && (nohup python yoyopod.py > /dev/null 2>&1 &)" in command
     assert "grep -F 'YoyoPod starting' logs/yoyopod.log" in command
+
+
+def test_build_parser_describes_current_screenshot_signal_contract() -> None:
+    """CLI help should match the screenshot signal mapping used by main.py."""
+
+    parser = build_parser(DEPLOY_CONFIG)
+    screenshot_parser = next(
+        action for action in parser._actions if getattr(action, "dest", "") == "command"
+    ).choices["screenshot"]
+    readback_action = next(
+        action for action in screenshot_parser._actions if getattr(action, "dest", "") == "readback"
+    )
+
+    assert "SIGUSR1" in readback_action.help
+    assert "SIGUSR2" in readback_action.help
+
+
+def test_run_screenshot_uses_sigusr1_for_readback(monkeypatch, tmp_path) -> None:
+    """The explicit readback path should target the app's SIGUSR1 handler."""
+
+    recorded_commands: list[str] = []
+
+    def fake_run_remote_capture(_config, command: str):
+        recorded_commands.append(command)
+        if command.startswith("test -f "):
+            return SimpleNamespace(returncode=0, stdout="ALIVE\n", stderr="")
+        if command.startswith("kill -"):
+            return SimpleNamespace(returncode=0, stdout="", stderr="")
+        return SimpleNamespace(returncode=0, stdout="READY\n", stderr="")
+
+    def fake_subprocess_run(command, check=False):
+        return SimpleNamespace(returncode=0)
+
+    monkeypatch.setattr("scripts.pi_remote.run_remote_capture", fake_run_remote_capture)
+    monkeypatch.setattr("scripts.pi_remote.subprocess.run", fake_subprocess_run)
+
+    args = Namespace(readback=True, output=str(tmp_path / "pi_screenshot.png"))
+    exit_code = run_screenshot(
+        RemoteConfig(host="rpi-zero", user="pi", project_dir="~/yoyo-py", branch="main"),
+        DEPLOY_CONFIG,
+        args,
+    )
+
+    assert exit_code == 0
+    assert any(command.startswith("kill -USR1 ") for command in recorded_commands)
+
+
+def test_run_screenshot_uses_sigusr2_for_default_shadow_path(monkeypatch, tmp_path) -> None:
+    """The default CLI path should preserve the legacy shadow-first capture contract."""
+
+    recorded_commands: list[str] = []
+
+    def fake_run_remote_capture(_config, command: str):
+        recorded_commands.append(command)
+        if command.startswith("test -f "):
+            return SimpleNamespace(returncode=0, stdout="ALIVE\n", stderr="")
+        if command.startswith("kill -"):
+            return SimpleNamespace(returncode=0, stdout="", stderr="")
+        return SimpleNamespace(returncode=0, stdout="READY\n", stderr="")
+
+    def fake_subprocess_run(command, check=False):
+        return SimpleNamespace(returncode=0)
+
+    monkeypatch.setattr("scripts.pi_remote.run_remote_capture", fake_run_remote_capture)
+    monkeypatch.setattr("scripts.pi_remote.subprocess.run", fake_subprocess_run)
+
+    args = Namespace(readback=False, output=str(tmp_path / "pi_screenshot.png"))
+    exit_code = run_screenshot(
+        RemoteConfig(host="rpi-zero", user="pi", project_dir="~/yoyo-py", branch="main"),
+        DEPLOY_CONFIG,
+        args,
+    )
+
+    assert exit_code == 0
+    assert any(command.startswith("kill -USR2 ") for command in recorded_commands)
 
 
 def test_build_service_command_supports_install_and_logs() -> None:

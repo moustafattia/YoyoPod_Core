@@ -332,7 +332,7 @@ def build_parser(deploy_config: PiDeployConfig) -> argparse.ArgumentParser:
     screenshot_parser.add_argument(
         "--readback",
         action="store_true",
-        help="Use LVGL readback (SIGUSR2) instead of the shadow buffer (SIGUSR1)",
+        help="Use LVGL readback/default capture (SIGUSR1) instead of the legacy shadow-first path (SIGUSR2)",
     )
     screenshot_parser.add_argument(
         "--output",
@@ -989,8 +989,6 @@ def build_restart_command(deploy_config: PiDeployConfig) -> str:
         f"rm -f {pid_file}",
     ]
     for process_name in deploy_config.kill_processes:
-        if process_name == "python":
-            continue
         cleanup_commands.append(
             f"killall -9 {shell_quote(process_name)} >/dev/null 2>&1 || true"
         )
@@ -1389,7 +1387,7 @@ def run_screenshot(
             print(alive_result.stderr.strip())
         return 1
 
-    signal_name = "USR2" if args.readback else "USR1"
+    signal_name = "USR1" if args.readback else "USR2"
     signal_result = run_remote_capture(
         config,
         f"kill -{signal_name} $(cat {pid_file})",
