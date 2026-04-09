@@ -47,10 +47,18 @@ class PowerScreen(Screen):
         *,
         power_manager: Optional["PowerManager"] = None,
         status_provider: Optional[Callable[[], dict[str, object]]] = None,
+        volume_up_action: Optional[Callable[[int], int | None]] = None,
+        volume_down_action: Optional[Callable[[int], int | None]] = None,
+        mute_action: Optional[Callable[[], bool]] = None,
+        unmute_action: Optional[Callable[[], bool]] = None,
     ) -> None:
         super().__init__(display, context, "PowerStatus")
         self.power_manager = power_manager
         self.status_provider = status_provider or (lambda: {})
+        self.volume_up_action = volume_up_action
+        self.volume_down_action = volume_down_action
+        self.mute_action = mute_action
+        self.unmute_action = unmute_action
         self.page_index = 0
         self.selected_row = 0
         self._lvgl_view: "ScreenView | None" = None
@@ -75,7 +83,9 @@ class PowerScreen(Screen):
         if getattr(self.display, "backend_kind", "pil") != "lvgl":
             return None
 
-        ui_backend = self.display.get_ui_backend() if hasattr(self.display, "get_ui_backend") else None
+        ui_backend = (
+            self.display.get_ui_backend() if hasattr(self.display, "get_ui_backend") else None
+        )
         if ui_backend is None or not getattr(ui_backend, "initialized", False):
             return None
 
@@ -325,7 +335,10 @@ class PowerScreen(Screen):
             ("Idle", self._format_duration_short(status.get("screen_idle_seconds"))),
             ("Timeout", self._format_duration_short(status.get("screen_timeout_seconds"))),
             ("Warn/Crit", f"{warning_percent}/{critical_percent}"),
-            ("Shutdown", shutdown_value if delay_seconds == "0s" else f"{shutdown_value} ({delay_seconds})"),
+            (
+                "Shutdown",
+                shutdown_value if delay_seconds == "0s" else f"{shutdown_value} ({delay_seconds})",
+            ),
             ("Watchdog", self._format_watchdog(status)),
         ]
 
@@ -489,16 +502,28 @@ class PowerScreen(Screen):
             self.context.configure_voice(commands_enabled=not self.context.voice.commands_enabled)
             return
         if row_index == 1:
-            self.context.configure_voice(ai_requests_enabled=not self.context.voice.ai_requests_enabled)
+            self.context.configure_voice(
+                ai_requests_enabled=not self.context.voice.ai_requests_enabled
+            )
             return
         if row_index == 2:
-            self.context.configure_voice(screen_read_enabled=not self.context.voice.screen_read_enabled)
+            self.context.configure_voice(
+                screen_read_enabled=not self.context.voice.screen_read_enabled
+            )
             return
         if row_index == 3:
-            self.context.toggle_mic_muted()
+            self._apply_mic_state(not self.context.voice.mic_muted)
             return
-        volume = self.context.voice.output_volume + (5 * direction)
-        self.context.set_volume(max(0, min(100, volume)))
+        current = None
+        if direction > 0 and self.volume_up_action is not None:
+            current = self.volume_up_action(5)
+        elif direction < 0 and self.volume_down_action is not None:
+            current = self.volume_down_action(5)
+        else:
+            volume = self.context.voice.output_volume + (5 * direction)
+            self.context.set_volume(max(0, min(100, volume)))
+            return
+        self._sync_context_output_volume(current)
 
     def _next_page(self) -> None:
         """Advance to the next page with wraparound."""
@@ -555,3 +580,20 @@ class PowerScreen(Screen):
             self._apply_voice_setting(+1)
             return
         self._next_page()
+
+    def _apply_mic_state(self, muted: bool) -> None:
+        """Keep the cached voice mic state aligned with the live VoIP mute path when available."""
+
+        if self.context is not None:
+            self.context.set_mic_muted(muted)
+        action = self.mute_action if muted else self.unmute_action
+        if action is not None:
+            action()
+
+    def _sync_context_output_volume(self, volume: int | None) -> None:
+        """Refresh cached volume state after routing through the real output path."""
+
+        if volume is None or self.context is None:
+            return
+        self.context.playback.volume = volume
+        self.context.voice.output_volume = volume

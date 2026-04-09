@@ -5,10 +5,15 @@ from __future__ import annotations
 from pathlib import Path
 
 from yoyopy.voice.commands import VoiceCommandMatch, match_voice_command
-from yoyopy.voice.capture import AudioCaptureBackend, NullAudioCaptureBackend, SubprocessAudioCaptureBackend
-from yoyopy.voice.models import VoiceCaptureRequest, VoiceCaptureResult, VoiceSettings, VoiceTranscript
-from yoyopy.voice.stt import NullSpeechToTextBackend, SpeechToTextBackend, VoskSpeechToTextBackend
-from yoyopy.voice.tts import EspeakNgTextToSpeechBackend, NullTextToSpeechBackend, TextToSpeechBackend
+from yoyopy.voice.capture import AudioCaptureBackend, SubprocessAudioCaptureBackend
+from yoyopy.voice.models import (
+    VoiceCaptureRequest,
+    VoiceCaptureResult,
+    VoiceSettings,
+    VoiceTranscript,
+)
+from yoyopy.voice.stt import SpeechToTextBackend, VoskSpeechToTextBackend
+from yoyopy.voice.tts import EspeakNgTextToSpeechBackend, TextToSpeechBackend
 
 
 class VoiceService:
@@ -58,7 +63,12 @@ class VoiceService:
         capture_result = self.capture_audio(request)
         if capture_result.audio_path is None:
             return VoiceTranscript(text="", confidence=0.0, is_final=True)
-        return self.transcribe(capture_result.audio_path)
+        should_cleanup = capture_result.recorded and request.audio_path is None
+        try:
+            return self.transcribe(capture_result.audio_path)
+        finally:
+            if should_cleanup:
+                capture_result.audio_path.unlink(missing_ok=True)
 
     def match_command(self, transcript: str) -> VoiceCommandMatch:
         """Map a transcript to the deterministic local command set."""

@@ -12,6 +12,7 @@ from yoyopy.voice import (
     AlsaOutputPlayer,
     EspeakNgTextToSpeechBackend,
     SubprocessAudioCaptureBackend,
+    VOICE_COMMAND_GRAMMAR,
     VoiceCaptureRequest,
     VoiceCommandIntent,
     VoiceService,
@@ -67,6 +68,16 @@ class FakeCaptureBackend:
         return VoiceCaptureResult(audio_path=self.path, recorded=True)
 
 
+def test_voice_command_grammar_contains_basic_templates() -> None:
+    """The grammar table should declare the baseline fuzzy commands explicitly."""
+
+    intents = {template.intent for template in VOICE_COMMAND_GRAMMAR}
+
+    assert VoiceCommandIntent.CALL_CONTACT in intents
+    assert VoiceCommandIntent.VOLUME_UP in intents
+    assert VoiceCommandIntent.PLAY_MUSIC in intents
+
+
 def test_match_voice_command_extracts_contact_name() -> None:
     """Call commands should retain the spoken contact label."""
 
@@ -83,6 +94,14 @@ def test_match_voice_command_handles_basic_device_actions() -> None:
     assert match_voice_command("volume up").intent is VoiceCommandIntent.VOLUME_UP
     assert match_voice_command("mute microphone").intent is VoiceCommandIntent.MUTE_MIC
     assert match_voice_command("what time is it").intent is VoiceCommandIntent.UNKNOWN
+
+
+def test_match_voice_command_accepts_fuzzy_basic_phrases() -> None:
+    """The grammar layer should tolerate basic filler words and phrasing variants."""
+
+    assert match_voice_command("please call mom").intent is VoiceCommandIntent.CALL_CONTACT
+    assert match_voice_command("turn it up").intent is VoiceCommandIntent.VOLUME_UP
+    assert match_voice_command("play some music").intent is VoiceCommandIntent.PLAY_MUSIC
 
 
 def test_voice_service_uses_injected_backends() -> None:
@@ -121,13 +140,34 @@ def test_voice_service_can_capture_then_transcribe() -> None:
     settings = VoiceSettings()
     capture_backend = FakeCaptureBackend()
     stt_backend = FakeSttBackend()
-    service = VoiceService(settings=settings, capture_backend=capture_backend, stt_backend=stt_backend)
+    service = VoiceService(
+        settings=settings, capture_backend=capture_backend, stt_backend=stt_backend
+    )
 
-    transcript = service.capture_and_transcribe(VoiceCaptureRequest(mode="voice_commands", timeout_seconds=3.0))
+    transcript = service.capture_and_transcribe(
+        VoiceCaptureRequest(mode="voice_commands", timeout_seconds=3.0)
+    )
 
     assert transcript.text == "call mom"
     assert capture_backend.calls[0][0].mode == "voice_commands"
     assert stt_backend.calls == [(Path("/tmp/captured.wav"), settings)]
+
+
+def test_voice_service_cleans_up_captured_temp_file_after_transcribe(tmp_path) -> None:
+    """Service-level capture helpers should not leak temporary recordings."""
+
+    audio_path = tmp_path / "captured.wav"
+    audio_path.write_bytes(b"RIFF")
+    service = VoiceService(
+        settings=VoiceSettings(),
+        capture_backend=FakeCaptureBackend(path=audio_path),
+        stt_backend=FakeSttBackend(),
+    )
+
+    transcript = service.capture_and_transcribe(VoiceCaptureRequest(mode="voice_commands"))
+
+    assert transcript.text == "call mom"
+    assert not audio_path.exists()
 
 
 def _make_pcm(amplitude: int, chunks: int, chunk_frames: int = 1280) -> bytes:
@@ -155,13 +195,33 @@ class _FakePopen:
         pass
 
 
+class _CountingStdout(io.BytesIO):
+    """BytesIO variant that tracks how many capture reads occurred."""
+
+    def __init__(self, data: bytes) -> None:
+        super().__init__(data)
+        self.read_calls = 0
+
+    def read(self, size: int = -1) -> bytes:
+        self.read_calls += 1
+        return super().read(size)
+
+
+class _CountingPopen(_FakePopen):
+    """Popen double with read-call accounting for timeout tests."""
+
+    def __init__(self, args: list[str], data: bytes = b"", returncode: int = 0) -> None:
+        super().__init__(args, data=data, returncode=returncode)
+        self.stdout = _CountingStdout(data)
+
+
 def test_subprocess_audio_capture_backend_builds_arecord_command(monkeypatch) -> None:
     """Capture should invoke arecord in raw streaming mode on the correct device."""
 
     popen_calls: list[list[str]] = []
     # 3 silent + 4 speech (≥ _SPEECH_CONFIRM_CHUNKS=2) + 6 silent chunks
     pcm = (
-        _make_pcm(100, 3)    # silence  (below _SPEECH_RMS_THRESHOLD)
+        _make_pcm(100, 3)  # silence  (below _SPEECH_RMS_THRESHOLD)
         + _make_pcm(800, 4)  # speech   (≥ _SPEECH_CONFIRM_CHUNKS consecutive)
         + _make_pcm(100, 6)  # silence  (triggers stop after _SILENCE_AFTER_SPEECH_MS)
     )
@@ -170,12 +230,20 @@ def test_subprocess_audio_capture_backend_builds_arecord_command(monkeypatch) ->
         popen_calls.append(args)
         return _FakePopen(args, data=pcm)
 
-    monkeypatch.setattr("yoyopy.voice.capture.shutil.which", lambda b: "/usr/bin/arecord" if b == "arecord" else None)
-    monkeypatch.setattr("yoyopy.voice.capture.subprocess.run", lambda args, **_kw: subprocess.CompletedProcess(args, 0, "", ""))
+    monkeypatch.setattr(
+        "yoyopy.voice.capture.shutil.which",
+        lambda b: "/usr/bin/arecord" if b == "arecord" else None,
+    )
+    monkeypatch.setattr(
+        "yoyopy.voice.capture.subprocess.run",
+        lambda args, **_kw: subprocess.CompletedProcess(args, 0, "", ""),
+    )
     monkeypatch.setattr("yoyopy.voice.capture.subprocess.Popen", fake_popen)
 
     backend = SubprocessAudioCaptureBackend()
-    result = backend.capture(VoiceCaptureRequest(mode="voice_commands", timeout_seconds=4.0), VoiceSettings())
+    result = backend.capture(
+        VoiceCaptureRequest(mode="voice_commands", timeout_seconds=4.0), VoiceSettings()
+    )
 
     assert result.recorded is True
     assert result.audio_path is not None and result.audio_path.exists()
@@ -185,32 +253,113 @@ def test_subprocess_audio_capture_backend_builds_arecord_command(monkeypatch) ->
 
 
 def test_subprocess_audio_capture_backend_falls_back_to_discovered_device(monkeypatch) -> None:
-    """Capture should retry discovered ALSA devices when the default path is broken."""
+    """Configured capture-device names should map to the right discovered ALSA route first."""
 
     pcm = _make_pcm(100, 3) + _make_pcm(800, 4) + _make_pcm(100, 6)
     popen_calls: list[list[str]] = []
 
     def fake_popen(args: list[str], **_kwargs) -> _FakePopen:
         popen_calls.append(args)
-        # Fail unless the device is the specific discovered one
-        if "-D" in args and args[args.index("-D") + 1] == "plughw:CARD=SE,DEV=0":
+        if "-D" in args and args[args.index("-D") + 1] == "plughw:CARD=wm8960soundcard,DEV=0":
             return _FakePopen(args, data=pcm, returncode=0)
         return _FakePopen(args, data=b"", returncode=1)
 
     def fake_run(args: list[str], **_kwargs) -> subprocess.CompletedProcess[str]:
         if args == ["arecord", "-L"]:
-            return subprocess.CompletedProcess(args, 0, "plughw:CARD=SE,DEV=0\nhw:CARD=SE,DEV=0\n", "")
+            return subprocess.CompletedProcess(
+                args,
+                0,
+                "hw:CARD=SE,DEV=0\nplughw:CARD=wm8960soundcard,DEV=0\nhw:CARD=wm8960soundcard,DEV=0\n",
+                "",
+            )
         return subprocess.CompletedProcess(args, 0, "", "")
 
-    monkeypatch.setattr("yoyopy.voice.capture.shutil.which", lambda b: "/usr/bin/arecord" if b == "arecord" else None)
+    monkeypatch.setattr(
+        "yoyopy.voice.capture.shutil.which",
+        lambda b: "/usr/bin/arecord" if b == "arecord" else None,
+    )
     monkeypatch.setattr("yoyopy.voice.capture.subprocess.run", fake_run)
     monkeypatch.setattr("yoyopy.voice.capture.subprocess.Popen", fake_popen)
 
     backend = SubprocessAudioCaptureBackend()
-    result = backend.capture(VoiceCaptureRequest(mode="voice_commands", timeout_seconds=2.0), VoiceSettings())
+    result = backend.capture(
+        VoiceCaptureRequest(mode="voice_commands", timeout_seconds=2.0),
+        VoiceSettings(capture_device_id="ALSA: wm8960-soundcard"),
+    )
 
     assert result.recorded is True
-    assert any("-D" in call and call[call.index("-D") + 1] == "plughw:CARD=SE,DEV=0" for call in popen_calls)
+    assert popen_calls[0][popen_calls[0].index("-D") + 1] == "plughw:CARD=wm8960soundcard,DEV=0"
+
+
+def test_subprocess_audio_capture_backend_falls_back_when_preferred_device_breaks(
+    monkeypatch,
+) -> None:
+    """A stale preferred device should not block fallback to the configured/discovered route."""
+
+    pcm = _make_pcm(100, 3) + _make_pcm(800, 4) + _make_pcm(100, 6)
+    popen_calls: list[list[str]] = []
+
+    def fake_popen(args: list[str], **_kwargs) -> _FakePopen:
+        popen_calls.append(args)
+        if "-D" in args and args[args.index("-D") + 1] == "plughw:CARD=wm8960soundcard,DEV=0":
+            return _FakePopen(args, data=pcm, returncode=0)
+        return _FakePopen(args, data=b"", returncode=1)
+
+    def fake_run(args: list[str], **_kwargs) -> subprocess.CompletedProcess[str]:
+        if args == ["arecord", "-L"]:
+            return subprocess.CompletedProcess(args, 0, "plughw:CARD=wm8960soundcard,DEV=0\n", "")
+        return subprocess.CompletedProcess(args, 0, "", "")
+
+    monkeypatch.setattr(
+        "yoyopy.voice.capture.shutil.which",
+        lambda b: "/usr/bin/arecord" if b == "arecord" else None,
+    )
+    monkeypatch.setattr("yoyopy.voice.capture.subprocess.run", fake_run)
+    monkeypatch.setattr("yoyopy.voice.capture.subprocess.Popen", fake_popen)
+
+    backend = SubprocessAudioCaptureBackend()
+    backend._preferred_device = "plughw:CARD=old,DEV=0"
+
+    result = backend.capture(
+        VoiceCaptureRequest(mode="voice_commands", timeout_seconds=2.0),
+        VoiceSettings(capture_device_id="ALSA: wm8960-soundcard"),
+    )
+
+    assert result.recorded is True
+    assert popen_calls[0][popen_calls[0].index("-D") + 1] == "plughw:CARD=old,DEV=0"
+    assert popen_calls[1][popen_calls[1].index("-D") + 1] == "plughw:CARD=wm8960soundcard,DEV=0"
+
+
+def test_subprocess_audio_capture_backend_hard_timeout_stays_within_requested_window(
+    monkeypatch,
+) -> None:
+    """Once speech starts, capture should not add the full pre-speech window on top."""
+
+    popens: list[_CountingPopen] = []
+    pcm = _make_pcm(800, 200)
+
+    def fake_popen(args: list[str], **_kwargs) -> _CountingPopen:
+        proc = _CountingPopen(args, data=pcm)
+        popens.append(proc)
+        return proc
+
+    monkeypatch.setattr(
+        "yoyopy.voice.capture.shutil.which",
+        lambda b: "/usr/bin/arecord" if b == "arecord" else None,
+    )
+    monkeypatch.setattr(
+        "yoyopy.voice.capture.subprocess.run",
+        lambda args, **_kw: subprocess.CompletedProcess(args, 0, "", ""),
+    )
+    monkeypatch.setattr("yoyopy.voice.capture.subprocess.Popen", fake_popen)
+
+    backend = SubprocessAudioCaptureBackend()
+    result = backend.capture(
+        VoiceCaptureRequest(mode="voice_commands", timeout_seconds=4.0), VoiceSettings()
+    )
+
+    assert result.recorded is True
+    assert popens[0].stdout.read_calls <= math.ceil((4.0 + 1.0) * 1000 / 80)
 
 
 def test_espeak_backend_builds_expected_command(monkeypatch) -> None:
@@ -224,7 +373,10 @@ def test_espeak_backend_builds_expected_command(monkeypatch) -> None:
             Path(args[2]).write_bytes(b"RIFF")
         return subprocess.CompletedProcess(args=args, returncode=0, stdout="", stderr="")
 
-    monkeypatch.setattr("yoyopy.voice.tts.shutil.which", lambda binary: "/usr/bin/espeak-ng" if binary == "espeak-ng" else None)
+    monkeypatch.setattr(
+        "yoyopy.voice.tts.shutil.which",
+        lambda binary: "/usr/bin/espeak-ng" if binary == "espeak-ng" else None,
+    )
     monkeypatch.setattr("yoyopy.voice.tts.subprocess.run", fake_run)
 
     backend = EspeakNgTextToSpeechBackend()
@@ -266,7 +418,10 @@ def test_alsa_output_player_prefers_usb_card_routes(monkeypatch, tmp_path) -> No
             return subprocess.CompletedProcess(args=args, returncode=0, stdout="", stderr="")
         return subprocess.CompletedProcess(args=args, returncode=1, stdout="", stderr="bad")
 
-    monkeypatch.setattr("yoyopy.voice.output.shutil.which", lambda binary: "/usr/bin/aplay" if binary == "aplay" else None)
+    monkeypatch.setattr(
+        "yoyopy.voice.output.shutil.which",
+        lambda binary: "/usr/bin/aplay" if binary == "aplay" else None,
+    )
     monkeypatch.setattr("yoyopy.voice.output.subprocess.run", fake_run)
 
     player = AlsaOutputPlayer()
@@ -281,4 +436,7 @@ def test_vosk_backend_requires_module_and_model(tmp_path, monkeypatch) -> None:
     monkeypatch.setattr("yoyopy.voice.stt.importlib.util.find_spec", lambda name: None)
     backend = VoskSpeechToTextBackend()
 
-    assert backend.is_available(VoiceSettings(vosk_model_path=str(tmp_path / "missing-model"))) is False
+    assert (
+        backend.is_available(VoiceSettings(vosk_model_path=str(tmp_path / "missing-model")))
+        is False
+    )

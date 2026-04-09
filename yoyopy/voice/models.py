@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+from threading import Event
 
 
 @dataclass(slots=True, frozen=True)
@@ -20,6 +21,7 @@ class VoiceSettings:
     stt_backend: str = "vosk"
     tts_backend: str = "espeak-ng"
     vosk_model_path: str = "models/vosk-model-small-en-us"
+    capture_device_id: str | None = None
     sample_rate_hz: int = 16000
     record_seconds: int = 4
     tts_rate_wpm: int = 155
@@ -34,6 +36,7 @@ class VoiceCaptureRequest:
     audio_path: Path | None = None
     prompt: str = ""
     timeout_seconds: float = 4.0
+    cancel_event: Event | None = None
 
 
 @dataclass(slots=True, frozen=True)

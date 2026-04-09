@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import math
-import subprocess
 import threading
 import wave
 from dataclasses import dataclass
@@ -28,7 +27,7 @@ from yoyopy.ui.screens.theme import (
     text_fit,
     wrap_text,
 )
-from yoyopy.voice import VoiceCaptureRequest, VoiceService, VoiceSettings
+from yoyopy.voice import VoiceCaptureRequest, VoiceCommandIntent, VoiceService, VoiceSettings
 from yoyopy.voice.output import AlsaOutputPlayer
 
 if TYPE_CHECKING:
@@ -152,6 +151,7 @@ class VoiceCommandsScreen(Screen):
         ("mom", "mama", "mum", "mommy", "mother"),
         ("dad", "dada", "daddy", "papa", "father"),
     )
+    _HINT_TEXT = "Say things like call mom, play music, volume up, mute mic, or read screen."
 
     def __init__(
         self,
@@ -162,6 +162,9 @@ class VoiceCommandsScreen(Screen):
         voip_manager: Optional["VoIPManager"] = None,
         volume_up_action: Optional[Callable[[int], int | None]] = None,
         volume_down_action: Optional[Callable[[int], int | None]] = None,
+        mute_action: Optional[Callable[[], bool]] = None,
+        unmute_action: Optional[Callable[[], bool]] = None,
+        play_music_action: Optional[Callable[[], bool]] = None,
         voice_settings_provider: Optional[Callable[[], VoiceSettings]] = None,
         voice_service_factory: Optional[Callable[[VoiceSettings], VoiceService]] = None,
     ) -> None:
@@ -170,26 +173,38 @@ class VoiceCommandsScreen(Screen):
         self.voip_manager = voip_manager
         self.volume_up_action = volume_up_action
         self.volume_down_action = volume_down_action
+        self.mute_action = mute_action
+        self.unmute_action = unmute_action
+        self.play_music_action = play_music_action
         self.voice_settings_provider = voice_settings_provider
         self.voice_service_factory = voice_service_factory
         self._cached_voice_service: VoiceService | None = None
         self._state = "idle"
         self._headline = "Voice Commands"
-        self._body = "Say things like call mom, call dad, volume up, mute mic, or read screen."
+        self._body = self._HINT_TEXT
         self._auto_listen_started = False
         self._capture_in_flight = False
+        self._listen_generation = 0
+        self._active_capture_cancel: threading.Event | None = None
         self._output_player = AlsaOutputPlayer()
 
     def enter(self) -> None:
         """Reset to a ready state when entering command mode."""
 
         super().enter()
+        self._cancel_listening_cycle()
         self._state = "idle"
         self._headline = "Voice Commands"
-        self._body = "Say things like call mom, call dad, volume up, mute mic, or read screen."
+        self._body = self._HINT_TEXT
         self._auto_listen_started = False
         self._capture_in_flight = False
         self._begin_listening_on_entry()
+
+    def exit(self) -> None:
+        """Invalidate any in-flight result before leaving the screen."""
+
+        self._cancel_listening_cycle()
+        super().exit()
 
     def render(self) -> None:
         """Render the current command-mode state."""
@@ -216,7 +231,9 @@ class VoiceCommandsScreen(Screen):
             radius=24,
         )
 
-        draw_icon(self.display, "ask", (self.display.WIDTH // 2) - 24, panel_top + 18, 48, ASK.accent)
+        draw_icon(
+            self.display, "ask", (self.display.WIDTH // 2) - 24, panel_top + 18, 48, ASK.accent
+        )
 
         headline = text_fit(self.display, self._headline, self.display.WIDTH - 40, 18)
         headline_width, _ = self.display.get_text_size(headline, 18)
@@ -240,7 +257,9 @@ class VoiceCommandsScreen(Screen):
             )
             line_y += 15
 
-        help_text = "Double listen / Hold back" if self.is_one_button_mode() else "A listen | B back"
+        help_text = (
+            "Double listen / Hold back" if self.is_one_button_mode() else "A listen | B back"
+        )
         render_footer(self.display, help_text, mode="ask")
         self.display.update()
 
@@ -280,7 +299,9 @@ class VoiceCommandsScreen(Screen):
                 tts_available=voice_service.tts_available(),
             )
         if not voice_service.capture_available():
-            self._set_response("Mic Unavailable", "Local recording is not ready on this device yet.")
+            self._set_response(
+                "Mic Unavailable", "Local recording is not ready on this device yet."
+            )
             self._refresh_after_state_change()
             return
         if not voice_service.stt_available():
@@ -293,48 +314,92 @@ class VoiceCommandsScreen(Screen):
         self._headline = "Listening"
         self._body = "Speak a direct command now."
         self._refresh_after_state_change()
+        self._listen_generation += 1
+        generation = self._listen_generation
+        cancel_event = threading.Event()
+        self._active_capture_cancel = cancel_event
 
         if async_capture:
             threading.Thread(
                 target=self._run_listening_cycle,
-                args=(voice_service,),
+                args=(voice_service, generation, cancel_event),
                 daemon=True,
                 name="VoiceCommandsCapture",
             ).start()
             return
 
-        self._run_listening_cycle(voice_service)
+        self._run_listening_cycle(voice_service, generation, cancel_event)
 
-    def _run_listening_cycle(self, voice_service: VoiceService) -> None:
+    def _run_listening_cycle(
+        self,
+        voice_service: VoiceService,
+        generation: int,
+        cancel_event: threading.Event,
+    ) -> None:
         """Record, transcribe, and apply one command cycle."""
 
         self._play_attention_tone()
         request = VoiceCaptureRequest(
             mode="voice_commands",
             timeout_seconds=4.0,
+            cancel_event=cancel_event,
         )
         capture_result = voice_service.capture_audio(request)
+        if cancel_event.is_set():
+            if capture_result.audio_path is not None:
+                capture_result.audio_path.unlink(missing_ok=True)
+            return
         if capture_result.audio_path is None:
-            self._dispatch_listen_result("", capture_failed=True)
+            self._dispatch_listen_result("", capture_failed=True, generation=generation)
             return
 
-        transcript = voice_service.transcribe(capture_result.audio_path)
-        self._dispatch_listen_result(transcript.text.strip(), capture_failed=False)
+        try:
+            transcript = voice_service.transcribe(capture_result.audio_path)
+        except Exception as exc:
+            logger.warning("Voice command transcription failed: {}", exc)
+            self._dispatch_listen_result("", capture_failed=True, generation=generation)
+            return
+        finally:
+            capture_result.audio_path.unlink(missing_ok=True)
 
-    def _dispatch_listen_result(self, transcript: str, *, capture_failed: bool) -> None:
+        if cancel_event.is_set():
+            return
+
+        self._dispatch_listen_result(
+            transcript.text.strip(),
+            capture_failed=False,
+            generation=generation,
+        )
+
+    def _dispatch_listen_result(
+        self,
+        transcript: str,
+        *,
+        capture_failed: bool,
+        generation: int,
+    ) -> None:
         """Apply one listen result, marshalled onto the UI thread when possible."""
 
         def apply_result() -> None:
+            if generation != self._listen_generation:
+                return
+            self._active_capture_cancel = None
             self._capture_in_flight = False
             if capture_failed:
-                self._set_response("Mic Unavailable", "The Pi microphone input is busy or unavailable.")
+                self._set_response(
+                    "Mic Unavailable", "The Pi microphone input is busy or unavailable."
+                )
             elif transcript:
                 self.on_voice_command({"transcript": transcript})
             else:
                 self._set_response("No Speech", "I did not catch a command.")
             self._refresh_after_state_change()
 
-        scheduler = getattr(self.screen_manager, "action_scheduler", None) if self.screen_manager is not None else None
+        scheduler = (
+            getattr(self.screen_manager, "action_scheduler", None)
+            if self.screen_manager is not None
+            else None
+        )
         if scheduler is not None:
             scheduler(apply_result)
             return
@@ -378,13 +443,18 @@ class VoiceCommandsScreen(Screen):
             frames = bytearray()
             for index in range(frame_count):
                 envelope = 1.0 - (index / frame_count)
-                sample = int(amplitude * envelope * math.sin((2.0 * math.pi * frequency_hz * index) / sample_rate))
+                sample = int(
+                    amplitude
+                    * envelope
+                    * math.sin((2.0 * math.pi * frequency_hz * index) / sample_rate)
+                )
                 frames.extend(sample.to_bytes(2, byteorder="little", signed=True))
             handle.writeframes(bytes(frames))
 
     def on_back(self, data=None) -> None:
         """Return to the Ask submenu."""
 
+        self._cancel_listening_cycle()
         self.request_route("back")
 
     def on_voice_command(self, data=None) -> None:
@@ -402,30 +472,31 @@ class VoiceCommandsScreen(Screen):
         if not command.is_command:
             self._speak_response(
                 "Not Recognized",
-                f"I heard '{transcript}' but that is not a voice command. Try: call mom, volume up, or mute mic.",
+                f"I heard '{transcript}' but that is not a voice command. Try: call mom, play music, or volume up.",
             )
             return
 
-        if command.intent.value == "call_contact":
+        if command.intent is VoiceCommandIntent.CALL_CONTACT:
             self._handle_call_command(command.contact_name)
             return
-        if command.intent.value == "volume_up":
+        if command.intent is VoiceCommandIntent.VOLUME_UP:
             self._handle_volume_change(+5)
             return
-        if command.intent.value == "volume_down":
+        if command.intent is VoiceCommandIntent.VOLUME_DOWN:
             self._handle_volume_change(-5)
             return
-        if command.intent.value == "mute_mic":
-            if self.context is not None:
-                self.context.set_mic_muted(True)
-            self._speak_response("Mic Muted", "The microphone is muted.")
+        if command.intent is VoiceCommandIntent.PLAY_MUSIC:
+            self._handle_play_music_command()
             return
-        if command.intent.value == "unmute_mic":
-            if self.context is not None:
-                self.context.set_mic_muted(False)
-            self._speak_response("Mic Live", "The microphone is active.")
+        if command.intent is VoiceCommandIntent.MUTE_MIC:
+            self._apply_mic_state(muted=True)
+            self._speak_response("Mic Muted", "Voice commands mic is muted.")
             return
-        if command.intent.value == "read_screen":
+        if command.intent is VoiceCommandIntent.UNMUTE_MIC:
+            self._apply_mic_state(muted=False)
+            self._speak_response("Mic Live", "Voice commands mic is live.")
+            return
+        if command.intent is VoiceCommandIntent.READ_SCREEN:
             self._speak_response("Screen Read", self._screen_summary())
             return
 
@@ -467,6 +538,11 @@ class VoiceCommandsScreen(Screen):
                 tts_enabled=voice.tts_enabled,
                 mic_muted=voice.mic_muted,
                 output_volume=voice.output_volume,
+                capture_device_id=(
+                    self.config_manager.get_capture_device_id()
+                    if self.config_manager is not None
+                    else None
+                ),
             )
         return VoiceSettings()
 
@@ -479,11 +555,30 @@ class VoiceCommandsScreen(Screen):
         elif delta < 0 and self.volume_down_action is not None:
             current = self.volume_down_action(abs(delta))
         elif self.context is not None:
-            current = self.context.volume_up(abs(delta)) if delta > 0 else self.context.volume_down(abs(delta))
+            current = (
+                self.context.volume_up(abs(delta))
+                if delta > 0
+                else self.context.volume_down(abs(delta))
+            )
 
+        self._sync_context_output_volume(current)
         if current is None and self.context is not None:
             current = self.context.voice.output_volume
-        self._speak_response("Volume", f"Volume is {current if current is not None else 'updated'}.")
+        self._speak_response(
+            "Volume", f"Volume is {current if current is not None else 'updated'}."
+        )
+
+    def _handle_play_music_command(self) -> None:
+        """Start local music playback when the app provides a playback hook."""
+
+        if self.play_music_action is None:
+            self._set_response("Music Off", "Local music playback is not ready yet.")
+            return
+        if not self.play_music_action():
+            self._set_response("Music Empty", "I could not find any local music to play.")
+            return
+        self._set_response("Playing", "Starting local music.")
+        self.request_route("shuffle_started")
 
     def _handle_call_command(self, spoken_name: str) -> None:
         """Resolve a contact and place a call when the VoIP manager is available."""
@@ -570,6 +665,35 @@ class VoiceCommandsScreen(Screen):
         if not self._voice_service().speak(body):
             logger.debug("Voice response not spoken: {}", body)
 
+    def _apply_mic_state(self, *, muted: bool) -> None:
+        """Keep local voice mute state in sync with the live VoIP mute path when available."""
+
+        if self.context is not None:
+            self.context.set_mic_muted(muted)
+        action = self.mute_action if muted else self.unmute_action
+        if action is not None:
+            try:
+                action()
+            except Exception as exc:
+                logger.warning("Voice mic state update failed: {}", exc)
+
+    def _cancel_listening_cycle(self) -> None:
+        """Invalidate the current listen cycle and request capture cancellation."""
+
+        self._listen_generation += 1
+        if self._active_capture_cancel is not None:
+            self._active_capture_cancel.set()
+            self._active_capture_cancel = None
+        self._capture_in_flight = False
+
+    def _sync_context_output_volume(self, volume: int | None) -> None:
+        """Refresh cached volume state after routing through the shared output path."""
+
+        if volume is None or self.context is None:
+            return
+        self.context.playback.volume = volume
+        self.context.voice.output_volume = volume
+
 
 class AIRequestsScreen(Screen):
     """Placeholder screen for future conversational AI requests."""
@@ -577,7 +701,9 @@ class AIRequestsScreen(Screen):
     def __init__(self, display: Display, context: Optional["AppContext"] = None) -> None:
         super().__init__(display, context, "AIRequests")
         self._state = "idle"
-        self._body = "Conversational AI replies are planned next. Use Voice Commands for device actions now."
+        self._body = (
+            "Conversational AI replies are planned next. Use Voice Commands for device actions now."
+        )
 
     def render(self) -> None:
         """Render the AI Requests placeholder."""
@@ -604,7 +730,9 @@ class AIRequestsScreen(Screen):
             radius=24,
         )
 
-        draw_icon(self.display, "ask", (self.display.WIDTH // 2) - 24, panel_top + 18, 48, ASK.accent)
+        draw_icon(
+            self.display, "ask", (self.display.WIDTH // 2) - 24, panel_top + 18, 48, ASK.accent
+        )
 
         title = "Coming Soon" if self._state == "idle" else "AI Later"
         title_width, _ = self.display.get_text_size(title, 18)
@@ -636,7 +764,9 @@ class AIRequestsScreen(Screen):
         """Explain that AI replies are still pending."""
 
         self._state = "response"
-        self._body = "AI responses are not available yet. Use Voice Commands for calls and device control."
+        self._body = (
+            "AI responses are not available yet. Use Voice Commands for calls and device control."
+        )
         if self.context is not None:
             self.context.record_voice_response(self._body)
 

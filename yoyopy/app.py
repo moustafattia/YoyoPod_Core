@@ -369,9 +369,7 @@ class YoyoPodApp:
 
         try:
             logger.info("  - Display")
-            display_hardware = (
-                self.app_settings.display.hardware if self.app_settings else "auto"
-            )
+            display_hardware = self.app_settings.display.hardware if self.app_settings else "auto"
             whisplay_renderer = (
                 self.app_settings.display.whisplay_renderer
                 if self.app_settings is not None
@@ -472,7 +470,9 @@ class YoyoPodApp:
         logger.info("Initializing managers...")
 
         self.display.clear(self.display.COLOR_BLACK)
-        self.display.text("Connecting VoIP...", 10, 80, color=self.display.COLOR_WHITE, font_size=16)
+        self.display.text(
+            "Connecting VoIP...", 10, 80, color=self.display.COLOR_WHITE, font_size=16
+        )
         self.display.text(
             "Starting Music...",
             10,
@@ -665,17 +665,46 @@ class YoyoPodApp:
                 voip_manager=self.voip_manager,
                 volume_up_action=self.volume_up,
                 volume_down_action=self.volume_down,
+                mute_action=self.voip_manager.mute if self.voip_manager is not None else None,
+                unmute_action=self.voip_manager.unmute if self.voip_manager is not None else None,
+                play_music_action=(
+                    self.local_music_service.shuffle_all
+                    if self.local_music_service is not None
+                    else None
+                ),
                 voice_settings_provider=lambda: VoiceSettings(
-                    commands_enabled=self.context.voice.commands_enabled if self.context is not None else True,
-                    ai_requests_enabled=self.context.voice.ai_requests_enabled if self.context is not None else True,
-                    screen_read_enabled=self.context.voice.screen_read_enabled if self.context is not None else False,
-                    stt_enabled=self.context.voice.stt_enabled if self.context is not None else True,
-                    tts_enabled=self.context.voice.tts_enabled if self.context is not None else True,
+                    commands_enabled=(
+                        self.context.voice.commands_enabled if self.context is not None else True
+                    ),
+                    ai_requests_enabled=(
+                        self.context.voice.ai_requests_enabled if self.context is not None else True
+                    ),
+                    screen_read_enabled=(
+                        self.context.voice.screen_read_enabled
+                        if self.context is not None
+                        else False
+                    ),
+                    stt_enabled=(
+                        self.context.voice.stt_enabled if self.context is not None else True
+                    ),
+                    tts_enabled=(
+                        self.context.voice.tts_enabled if self.context is not None else True
+                    ),
                     mic_muted=self.context.voice.mic_muted if self.context is not None else False,
-                    output_volume=self.get_output_volume() or (self.context.voice.output_volume if self.context is not None else 50),
+                    output_volume=self.get_output_volume()
+                    or (self.context.voice.output_volume if self.context is not None else 50),
                     stt_backend=voice_cfg.stt_backend if voice_cfg is not None else "vosk",
                     tts_backend=voice_cfg.tts_backend if voice_cfg is not None else "espeak-ng",
-                    vosk_model_path=voice_cfg.vosk_model_path if voice_cfg is not None else "models/vosk-model-small-en-us",
+                    vosk_model_path=(
+                        voice_cfg.vosk_model_path
+                        if voice_cfg is not None
+                        else "models/vosk-model-small-en-us"
+                    ),
+                    capture_device_id=(
+                        self.config_manager.get_capture_device_id()
+                        if self.config_manager is not None
+                        else None
+                    ),
                     sample_rate_hz=voice_cfg.sample_rate_hz if voice_cfg is not None else 16000,
                     record_seconds=voice_cfg.record_seconds if voice_cfg is not None else 4,
                     tts_rate_wpm=voice_cfg.tts_rate_wpm if voice_cfg is not None else 155,
@@ -688,6 +717,10 @@ class YoyoPodApp:
                 self.context,
                 power_manager=self.power_manager,
                 status_provider=self.get_status,
+                volume_up_action=self.volume_up,
+                volume_down_action=self.volume_down,
+                mute_action=self.voip_manager.mute if self.voip_manager is not None else None,
+                unmute_action=self.voip_manager.unmute if self.voip_manager is not None else None,
             )
             self.now_playing_screen = NowPlayingScreen(
                 self.display,
@@ -778,7 +811,9 @@ class YoyoPodApp:
             logger.info("    - Listen flow: listen, playlists, recent_tracks, now_playing")
             logger.info("    - Ask flow: ask, voice_commands, ai_requests")
             logger.info("    - Power screen: power")
-            logger.info("    - VoIP screens: call, talk_contact, call_history, contacts, voice_note, incoming_call, outgoing_call, in_call")
+            logger.info(
+                "    - VoIP screens: call, talk_contact, call_history, contacts, voice_note, incoming_call, outgoing_call, in_call"
+            )
             logger.info("    - Navigation: home, menu")
 
             initial_screen = self._get_initial_screen_name()
@@ -1006,7 +1041,9 @@ class YoyoPodApp:
             return
 
         if event.recovered and self.music_backend:
-            if hasattr(self.music_backend, "polling") and not getattr(self.music_backend, "polling"):
+            if hasattr(self.music_backend, "polling") and not getattr(
+                self.music_backend, "polling"
+            ):
                 start_polling = getattr(self.music_backend, "start_polling", None)
                 if start_polling is not None:
                     start_polling()
@@ -1105,7 +1142,9 @@ class YoyoPodApp:
 
         payload = {
             "saved_at": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
-            "state": self.coordinator_runtime.get_state_name() if self.coordinator_runtime else None,
+            "state": (
+                self.coordinator_runtime.get_state_name() if self.coordinator_runtime else None
+            ),
             "current_screen": current_screen,
             "battery_percent": self.context.battery_percent if self.context else None,
             "battery_charging": self.context.battery_charging if self.context else None,
@@ -1392,7 +1431,10 @@ class YoyoPodApp:
 
         if now >= self._power_alert.expires_at:
             self._power_alert = None
-            if self.screen_manager is not None and self.screen_manager.get_current_screen() is not None:
+            if (
+                self.screen_manager is not None
+                and self.screen_manager.get_current_screen() is not None
+            ):
                 self.screen_manager.get_current_screen().render()
             return False
 
@@ -1770,7 +1812,9 @@ class YoyoPodApp:
                 self._pending_shutdown.execute_at - time.monotonic(),
             )
 
-        power_snapshot = self.power_manager.get_snapshot() if self.power_manager is not None else None
+        power_snapshot = (
+            self.power_manager.get_snapshot() if self.power_manager is not None else None
+        )
 
         return {
             "state": self.coordinator_runtime.get_state_name(),

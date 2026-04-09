@@ -118,11 +118,28 @@ def test_power_screen_voice_page_toggles_runtime_voice_settings() -> None:
     display = Display(simulate=True)
     try:
         context = AppContext()
+        mute_calls: list[str] = []
+        volume_calls: list[tuple[str, int]] = []
+
+        def volume_up(step: int) -> int:
+            volume_calls.append(("up", step))
+            context.set_volume(context.voice.output_volume + step)
+            return context.voice.output_volume
+
+        def volume_down(step: int) -> int:
+            volume_calls.append(("down", step))
+            context.set_volume(context.voice.output_volume - step)
+            return context.voice.output_volume
+
         screen = PowerScreen(
             display,
             context,
             power_manager=StubPowerManager(_snapshot()),
             status_provider=lambda: {},
+            volume_up_action=volume_up,
+            volume_down_action=volume_down,
+            mute_action=lambda: mute_calls.append("mute") or True,
+            unmute_action=lambda: mute_calls.append("unmute") or True,
         )
 
         screen.page_index = 3
@@ -142,13 +159,20 @@ def test_power_screen_voice_page_toggles_runtime_voice_settings() -> None:
         screen.on_advance()
         screen.on_select()
         assert context.voice.mic_muted is True
+        assert mute_calls == ["mute"]
+
+        screen.on_select()
+        assert context.voice.mic_muted is False
+        assert mute_calls == ["mute", "unmute"]
 
         screen.on_advance()
         context.set_volume(50)
         screen.on_select()
         assert context.voice.output_volume == 55
+        assert volume_calls == [("up", 5)]
 
         screen.on_left()
         assert context.voice.output_volume == 50
+        assert volume_calls == [("up", 5), ("down", 5)]
     finally:
         display.cleanup()

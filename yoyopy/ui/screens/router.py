@@ -115,6 +115,7 @@ class ScreenRouter:
             "voice_commands": {
                 "back": NavigationRequest.pop(),
                 "call_started": NavigationRequest.push("outgoing_call"),
+                "shuffle_started": NavigationRequest.push("now_playing"),
             },
             "ai_requests": {
                 "back": NavigationRequest.pop(),

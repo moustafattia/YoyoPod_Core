@@ -9,6 +9,7 @@ import subprocess
 import tempfile
 import wave
 from pathlib import Path
+from threading import Event
 from typing import Protocol
 
 from loguru import logger
@@ -16,13 +17,13 @@ from loguru import logger
 from yoyopy.voice.models import VoiceCaptureRequest, VoiceCaptureResult, VoiceSettings
 
 # VAD tuning constants
-_SPEECH_RMS_THRESHOLD = 500      # RMS above this = speech
-_SILENCE_RMS_THRESHOLD = 300     # RMS below this = silence
-_CHUNK_DURATION_MS = 80          # ms per analysis chunk
-_SPEECH_CONFIRM_CHUNKS = 2       # consecutive speech chunks required (filters startup clicks)
-_SILENCE_AFTER_SPEECH_MS = 400   # stop after this much silence post-speech
-_PRE_SPEECH_TIMEOUT_MS = 3500    # give up if no speech within this window
-_HARD_TIMEOUT_EXTRA_S = 1        # extra seconds on top of request timeout
+_SPEECH_RMS_THRESHOLD = 500  # RMS above this = speech
+_SILENCE_RMS_THRESHOLD = 300  # RMS below this = silence
+_CHUNK_DURATION_MS = 80  # ms per analysis chunk
+_SPEECH_CONFIRM_CHUNKS = 2  # consecutive speech chunks required (filters startup clicks)
+_SILENCE_AFTER_SPEECH_MS = 400  # stop after this much silence post-speech
+_PRE_SPEECH_TIMEOUT_MS = 3500  # give up if no speech within this window
+_HARD_TIMEOUT_EXTRA_S = 1  # extra seconds on top of request timeout
 
 
 def _rms(chunk: bytes) -> float:
@@ -30,7 +31,7 @@ def _rms(chunk: bytes) -> float:
     n = len(chunk) // 2
     if n == 0:
         return 0.0
-    samples = struct.unpack(f"<{n}h", chunk[:n * 2])
+    samples = struct.unpack(f"<{n}h", chunk[: n * 2])
     return math.sqrt(sum(s * s for s in samples) / n)
 
 
@@ -72,18 +73,21 @@ class SubprocessAudioCaptureBackend:
         if not self.is_available(settings):
             return VoiceCaptureResult(audio_path=None, recorded=False)
 
-        with tempfile.NamedTemporaryFile(prefix="yoyopy-voice-", suffix=".wav", delete=False) as handle:
+        with tempfile.NamedTemporaryFile(
+            prefix="yoyopy-voice-", suffix=".wav", delete=False
+        ) as handle:
             audio_path = Path(handle.name)
 
         max_seconds = float(request.timeout_seconds or settings.record_seconds)
 
-        for device in self._device_candidates():
+        for device in self._device_candidates(settings):
             try:
                 recorded = self._capture_vad(
                     audio_path=audio_path,
                     device=device,
                     sample_rate_hz=settings.sample_rate_hz,
                     max_seconds=max_seconds,
+                    cancel_event=request.cancel_event,
                 )
             except Exception as exc:
                 logger.warning("VAD capture failed on device {}: {}", device, exc)
@@ -104,6 +108,7 @@ class SubprocessAudioCaptureBackend:
         device: str | None,
         sample_rate_hz: int,
         max_seconds: float,
+        cancel_event: Event | None,
     ) -> bool:
         """Stream raw PCM from arecord, stop on silence after speech, write WAV.
 
@@ -114,10 +119,22 @@ class SubprocessAudioCaptureBackend:
 
         silence_chunks_needed = math.ceil(_SILENCE_AFTER_SPEECH_MS / _CHUNK_DURATION_MS)
         pre_speech_chunks_max = math.ceil(_PRE_SPEECH_TIMEOUT_MS / _CHUNK_DURATION_MS)
-        hard_max_chunks = math.ceil(max_seconds * 1000 / _CHUNK_DURATION_MS)
+        hard_max_chunks = math.ceil(
+            (max_seconds + _HARD_TIMEOUT_EXTRA_S) * 1000 / _CHUNK_DURATION_MS
+        )
 
-        command = [self.arecord_binary, "-t", "raw", "-f", "S16_LE",
-                   "-r", str(sample_rate_hz), "-c", "1", "-q"]
+        command = [
+            self.arecord_binary,
+            "-t",
+            "raw",
+            "-f",
+            "S16_LE",
+            "-r",
+            str(sample_rate_hz),
+            "-c",
+            "1",
+            "-q",
+        ]
         if device:
             command.extend(["-D", device])
         command.append("-")
@@ -130,12 +147,14 @@ class SubprocessAudioCaptureBackend:
 
         frames = bytearray()
         speech_detected = False
-        speech_run = 0    # consecutive loud chunks (filters startup click)
+        speech_run = 0  # consecutive loud chunks (filters startup click)
         silence_run = 0
         pre_speech_chunk_count = 0
 
         try:
-            for _chunk_idx in range(hard_max_chunks + pre_speech_chunks_max):
+            for _chunk_idx in range(hard_max_chunks):
+                if cancel_event is not None and cancel_event.is_set():
+                    break
                 raw = proc.stdout.read(chunk_bytes)  # type: ignore[union-attr]
                 if not raw:
                     break
@@ -182,12 +201,24 @@ class SubprocessAudioCaptureBackend:
 
         return True
 
-    def _device_candidates(self) -> list[str | None]:
+    def _device_candidates(self, settings: VoiceSettings) -> list[str | None]:
         """Return capture-device candidates, prioritizing any known-good device."""
 
-        # Skip the slow arecord -L scan if we already know a working device.
+        discovered_devices = self._scan_devices()
+        configured_devices = self._configured_device_candidates(
+            settings.capture_device_id,
+            discovered_devices,
+        )
+        candidates: list[str | None] = []
         if self._preferred_device is not None:
-            return [self._preferred_device]
+            candidates.append(self._preferred_device)
+        candidates.extend(configured_devices)
+        candidates.extend(discovered_devices)
+        candidates.extend([None, "default", "sysdefault"])
+        return self._unique_devices(candidates)
+
+    def _scan_devices(self) -> list[str]:
+        """Return discovered ALSA capture devices in preferred order."""
 
         try:
             result = subprocess.run(
@@ -198,10 +229,10 @@ class SubprocessAudioCaptureBackend:
                 check=False,
             )
         except Exception:
-            return self._unique_devices([None, "default", "sysdefault"])
+            return []
 
         if result.returncode != 0:
-            return self._unique_devices([None, "default", "sysdefault"])
+            return []
 
         parsed_devices: list[str] = []
         for line in result.stdout.splitlines():
@@ -213,16 +244,77 @@ class SubprocessAudioCaptureBackend:
             if device.startswith(
                 (
                     "plughw:",
-                    "hw:",
                     "default:CARD=",
                     "sysdefault:CARD=",
                     "front:CARD=",
                     "dsnoop:CARD=",
+                    "hw:",
                 )
             ):
                 parsed_devices.append(device)
-        candidates: list[str | None] = [*parsed_devices, None, "default", "sysdefault"]
-        return self._unique_devices(candidates)
+        return sorted(parsed_devices, key=self._device_sort_key)
+
+    def _configured_device_candidates(
+        self,
+        capture_device_id: str | None,
+        discovered_devices: list[str],
+    ) -> list[str]:
+        """Map the configured capture device to concrete arecord candidates."""
+
+        if not capture_device_id:
+            return []
+
+        candidates: list[str] = []
+        normalized_target = self._normalize_alsa_name(capture_device_id)
+        if self._looks_like_arecord_device(capture_device_id):
+            candidates.append(capture_device_id)
+
+        for device in discovered_devices:
+            if normalized_target and normalized_target in self._normalize_alsa_name(device):
+                candidates.append(device)
+        return sorted(self._unique_devices(candidates), key=self._device_sort_key)
+
+    @staticmethod
+    def _looks_like_arecord_device(device: str) -> bool:
+        """Return True when the config already looks like an arecord device selector."""
+
+        return device.startswith(
+            (
+                "plughw:",
+                "hw:",
+                "default",
+                "sysdefault",
+                "front:",
+                "dsnoop:",
+            )
+        )
+
+    @staticmethod
+    def _normalize_alsa_name(value: str) -> str:
+        """Normalize ALSA identifiers so config names match discovered routes."""
+
+        raw = value.strip()
+        if raw.upper().startswith("ALSA:"):
+            raw = raw.split(":", 1)[1]
+        return "".join(ch for ch in raw.lower() if ch.isalnum())
+
+    @staticmethod
+    def _device_sort_key(device: str) -> tuple[int, str]:
+        """Prefer plughw/default-style routes over raw hw devices."""
+
+        if device.startswith("plughw:"):
+            return (0, device)
+        if device.startswith("default:CARD="):
+            return (1, device)
+        if device.startswith("sysdefault:CARD="):
+            return (2, device)
+        if device.startswith("front:CARD="):
+            return (3, device)
+        if device.startswith("dsnoop:CARD="):
+            return (4, device)
+        if device.startswith("hw:"):
+            return (5, device)
+        return (6, device)
 
     @staticmethod
     def _unique_devices(devices: list[str | None]) -> list[str | None]:
