@@ -61,6 +61,45 @@ int yoyopy_lvgl_hub_sync(
     int32_t power_available
 );
 void yoyopy_lvgl_hub_destroy(void);
+int yoyopy_lvgl_talk_build(void);
+int yoyopy_lvgl_talk_sync(
+    const char * title_text,
+    const char * icon_key,
+    int32_t outlined,
+    const char * footer,
+    int32_t selected_index,
+    int32_t total_cards,
+    int32_t voip_state,
+    int32_t battery_percent,
+    int32_t charging,
+    int32_t power_available,
+    uint32_t accent_rgb
+);
+void yoyopy_lvgl_talk_destroy(void);
+int yoyopy_lvgl_talk_actions_build(void);
+int yoyopy_lvgl_talk_actions_sync(
+    const char * contact_name,
+    const char * title_text,
+    const char * status_text,
+    int32_t status_kind,
+    const char * footer,
+    const char * icon_0,
+    int32_t color_kind_0,
+    const char * icon_1,
+    int32_t color_kind_1,
+    const char * icon_2,
+    int32_t color_kind_2,
+    int32_t action_count,
+    int32_t selected_index,
+    int32_t layout_kind,
+    int32_t button_size_kind,
+    int32_t voip_state,
+    int32_t battery_percent,
+    int32_t charging,
+    int32_t power_available,
+    uint32_t accent_rgb
+);
+void yoyopy_lvgl_talk_actions_destroy(void);
 int yoyopy_lvgl_listen_build(void);
 int yoyopy_lvgl_listen_sync(
     const char * page_text,

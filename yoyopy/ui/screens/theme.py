@@ -25,7 +25,9 @@ INK: Color = (255, 255, 255)
 MUTED: Color = (180, 183, 190)
 MUTED_DIM: Color = (122, 125, 132)
 SUCCESS: Color = (61, 221, 83)
+WARNING: Color = (255, 208, 0)
 ERROR: Color = (255, 103, 93)
+NEUTRAL: Color = (156, 163, 175)
 FOOTER_SAFE_HEIGHT_PORTRAIT = 32
 FOOTER_SAFE_HEIGHT_LANDSCAPE = 28
 STATUS_SIDE_INSET_PORTRAIT = 16
@@ -459,12 +461,36 @@ def draw_list_item(
     if badge:
         badge_width = display.get_text_size(badge, 10)[0] + 18
 
+    monogram = ""
+    if icon and icon.startswith("mono:"):
+        monogram = icon.split(":", 1)[1]
+
     icon_size = 22 if icon else 0
     icon_left = x1 + 18
     text_left = x1 + (54 if icon else 16)
     if icon:
         icon_y = y1 + max(8, ((y2 - y1) - icon_size) // 2)
-        draw_icon(display, icon, icon_left, icon_y, icon_size, theme.accent)
+        if monogram:
+            rounded_panel(
+                display,
+                icon_left - 2,
+                icon_y - 2,
+                icon_left + 24,
+                icon_y + 24,
+                fill=mix(theme.accent, BACKGROUND, 0.85),
+                outline=None,
+                radius=8,
+            )
+            mono_width, mono_height = display.get_text_size(monogram, 12)
+            display.text(
+                monogram,
+                icon_left + 10 - (mono_width // 2),
+                icon_y + 10 - (mono_height // 2),
+                color=theme.accent,
+                font_size=12,
+            )
+        else:
+            draw_icon(display, icon, icon_left, icon_y, icon_size, theme.accent)
 
     title_text = text_fit(display, title, x2 - text_left - 14 - badge_width, 16)
     title_height = display.get_text_size(title_text, 16)[1]
@@ -599,6 +625,234 @@ def _pill(
     display.text(text, x + padding, y + 4, color=text_color, font_size=font_size)
 
 
+def talk_monogram(name: str, fallback: str = "?") -> str:
+    """Return a compact 1-2 character monogram for a contact label."""
+
+    parts = [part for part in name.replace("-", " ").split() if part]
+    if not parts:
+        return fallback
+    if len(parts) == 1:
+        return parts[0][:2].upper()
+    return f"{parts[0][0]}{parts[1][0]}".upper()
+
+
+def draw_talk_large_card(
+    display: Display,
+    *,
+    left: int,
+    top: int,
+    size: int,
+    color: Color,
+    label: str | None = None,
+    icon: str | None = None,
+    outlined: bool = False,
+) -> tuple[int, int]:
+    """Draw the large Talk card used by the person carousel and call states."""
+
+    fill = mix(color, BACKGROUND, 0.78) if outlined else color
+    outline = color if outlined else None
+    shadow = not outlined
+    rounded_panel(
+        display,
+        left,
+        top,
+        left + size,
+        top + size,
+        fill=fill,
+        outline=outline,
+        radius=16,
+        width=2 if outlined else 0,
+        shadow=shadow,
+    )
+
+    if icon:
+        icon_size = 64 if size >= 96 else max(28, size // 2)
+        draw_icon(
+            display,
+            icon,
+            left + (size - icon_size) // 2,
+            top + (size - icon_size) // 2,
+            icon_size,
+            color if outlined else INK,
+        )
+        return left + size, top + size
+
+    if label:
+        font_size = 42 if size >= 96 else 22
+        label_width, label_height = display.get_text_size(label, font_size)
+        display.text(
+            label,
+            left + (size - label_width) // 2,
+            top + (size - label_height) // 2 - 2,
+            color=color if outlined else INK,
+            font_size=font_size,
+        )
+
+    return left + size, top + size
+
+
+def draw_talk_person_header(
+    display: Display,
+    *,
+    center_x: int,
+    top: int,
+    name: str,
+    label: str | None = None,
+    size: str = "small",
+    color: Color = TALK.accent,
+) -> int:
+    """Draw the small Talk person header with monogram/label and name."""
+
+    box_size = 56 if size == "medium" else 48
+    left = center_x - (box_size // 2)
+    rounded_panel(
+        display,
+        left,
+        top,
+        left + box_size,
+        top + box_size,
+        fill=mix(color, BACKGROUND, 0.85),
+        outline=None,
+        radius=12,
+    )
+    avatar = label or talk_monogram(name)
+    font_size = 22 if size == "medium" else 18
+    avatar_width, avatar_height = display.get_text_size(avatar, font_size)
+    display.text(
+        avatar,
+        center_x - (avatar_width // 2),
+        top + ((box_size - avatar_height) // 2) - 1,
+        color=color,
+        font_size=font_size,
+    )
+    display_name = text_fit(display, name, 112, 12 if size == "small" else 14)
+    name_width, name_height = display.get_text_size(display_name, 12 if size == "small" else 14)
+    display.text(
+        display_name,
+        center_x - (name_width // 2),
+        top + box_size + 6,
+        color=MUTED,
+        font_size=12 if size == "small" else 14,
+    )
+    return top + box_size + name_height + 6
+
+
+def draw_talk_action_button(
+    display: Display,
+    *,
+    center_x: int,
+    center_y: int,
+    button_size: str,
+    color: Color,
+    icon: str,
+    filled: bool = False,
+    active: bool = True,
+) -> tuple[int, int, int, int]:
+    """Draw a circular Talk action button."""
+
+    diameter = {
+        "large": 88,
+        "medium": 64,
+        "small": 56,
+    }.get(button_size, 64)
+    left = center_x - (diameter // 2)
+    top = center_y - (diameter // 2)
+
+    base_color = color if active else mix(color, BACKGROUND, 0.45)
+    fill = color if filled else SURFACE_RAISED
+    if filled and not active:
+        fill = mix(color, BACKGROUND, 0.45)
+    outline = None if filled else base_color
+    rounded_panel(
+        display,
+        left,
+        top,
+        left + diameter,
+        top + diameter,
+        fill=fill,
+        outline=outline,
+        radius=diameter // 2,
+        width=2 if not filled else 0,
+        shadow=filled and active,
+    )
+
+    icon_size = {
+        "large": 48,
+        "medium": 40,
+        "small": 28,
+    }.get(button_size, 40)
+    icon_color = INK if filled else base_color
+    if filled and not active:
+        icon_color = mix(INK, BACKGROUND, 0.45)
+    draw_icon(
+        display,
+        icon,
+        center_x - (icon_size // 2),
+        center_y - (icon_size // 2),
+        icon_size,
+        icon_color,
+    )
+    return left, top, left + diameter, top + diameter
+
+
+def draw_talk_page_dots(
+    display: Display,
+    *,
+    center_x: int,
+    top: int,
+    total: int,
+    current: int,
+    color: Color = TALK.accent,
+) -> None:
+    """Draw centered Talk pagination dots."""
+
+    if total <= 0:
+        return
+    gap = 14
+    total_width = ((total - 1) * gap) + 8
+    start_x = center_x - (total_width // 2)
+    for index in range(total):
+        radius = 4 if index == current else 3
+        fill = color if index == current else mix(color, BACKGROUND, 0.72)
+        display.circle(start_x + (index * gap), top, radius, fill=fill)
+
+
+def draw_talk_status_chip(
+    display: Display,
+    *,
+    center_x: int,
+    top: int,
+    text: str,
+    color: Color,
+    icon: str | None = None,
+) -> int:
+    """Draw a centered pill chip used across Talk call and voice-note states."""
+
+    font_size = 12
+    text_width, text_height = display.get_text_size(text, font_size)
+    icon_width = 0
+    if icon:
+        icon_width = 16
+    chip_width = text_width + icon_width + 24
+    left = center_x - (chip_width // 2)
+    rounded_panel(
+        display,
+        left,
+        top,
+        left + chip_width,
+        top + text_height + 10,
+        fill=mix(color, BACKGROUND, 0.85),
+        outline=None,
+        radius=14,
+    )
+    text_x = left + 12
+    if icon:
+        draw_icon(display, icon, left + 9, top + 5, 12, color)
+        text_x += 14
+    display.text(text, text_x, top + 4, color=color, font_size=font_size)
+    return top + text_height + 10
+
+
 def draw_icon(display: Display, icon: str, x: int, y: int, size: int, color: Color) -> None:
     """Draw a lightweight doodle icon."""
 
@@ -626,6 +880,8 @@ def draw_icon(display: Display, icon: str, x: int, y: int, size: int, color: Col
         _draw_playlist_icon(display, draw, x, y, size, color)
     elif icon == "call":
         _draw_call_icon(display, draw, x, y, size, color)
+    elif icon == "people":
+        _draw_people_icon(display, draw, x, y, size, color)
     elif icon == "incoming":
         _draw_talk_icon(display, draw, x, y, size, color)
         display.line(x + size - 10, y + 8, x + size - 22, y + 20, color=color, width=3)
@@ -637,6 +893,16 @@ def draw_icon(display: Display, icon: str, x: int, y: int, size: int, color: Col
     elif icon == "live":
         _draw_talk_icon(display, draw, x, y, size, color)
         display.circle(x + size - 10, y + 12, 4, fill=color)
+    elif icon == "play":
+        _draw_play_icon(display, draw, x, y, size, color)
+    elif icon == "retry":
+        _draw_retry_icon(display, draw, x, y, size, color)
+    elif icon == "close":
+        _draw_close_icon(display, draw, x, y, size, color)
+    elif icon == "check":
+        _draw_check_icon(display, draw, x, y, size, color)
+    elif icon == "mic_off":
+        _draw_mic_off_icon(display, draw, x, y, size, color)
     else:
         display.circle(x + (size // 2), y + (size // 2), size // 3, outline=color, width=3)
 
@@ -776,6 +1042,37 @@ def _draw_talk_icon(display: Display, draw, x: int, y: int, size: int, color: Co
     display.circle(large_left + max(18, size // 3), large_top + max(10, size // 6), max(1, size // 18), fill=color)
 
 
+def _draw_people_icon(display: Display, draw, x: int, y: int, size: int, color: Color) -> None:
+    stroke = max(2, size // 14)
+    head_radius = max(4, size // 9)
+    back_head_radius = max(3, size // 10)
+    center_x = x + (size // 2)
+    display.circle(center_x - head_radius - 5, y + head_radius + 6, back_head_radius, outline=color, width=stroke)
+    display.circle(center_x + head_radius - 1, y + head_radius + 4, head_radius, outline=color, width=stroke)
+    rounded_panel(
+        display,
+        center_x - 20,
+        y + size // 2,
+        center_x + 18,
+        y + size - 6,
+        fill=None,
+        outline=color,
+        radius=max(8, size // 6),
+        width=stroke,
+    )
+    rounded_panel(
+        display,
+        center_x - 30,
+        y + size // 2 + 6,
+        center_x - 2,
+        y + size - 10,
+        fill=None,
+        outline=color,
+        radius=max(7, size // 7),
+        width=stroke,
+    )
+
+
 def _draw_ask_icon(display: Display, draw, x: int, y: int, size: int, color: Color) -> None:
     stroke = max(2, size // 14)
     bubble_left = x + max(4, size // 12)
@@ -863,6 +1160,51 @@ def _draw_clock_icon(display: Display, draw, x: int, y: int, size: int, color: C
     display.circle(center_x, center_y, radius, outline=color, width=stroke)
     display.line(center_x, center_y, center_x, center_y - max(5, size // 6), color=color, width=stroke)
     display.line(center_x, center_y, center_x + max(5, size // 6), center_y + max(2, size // 12), color=color, width=stroke)
+
+
+def _draw_play_icon(display: Display, draw, x: int, y: int, size: int, color: Color) -> None:
+    left = x + max(5, size // 5)
+    top = y + max(4, size // 6)
+    bottom = y + size - max(4, size // 6)
+    right = x + size - max(5, size // 5)
+    display.line(left, top, right, y + size // 2, color=color, width=max(3, size // 7))
+    display.line(left, bottom, right, y + size // 2, color=color, width=max(3, size // 7))
+    display.line(left, top, left, bottom, color=color, width=max(3, size // 7))
+
+
+def _draw_retry_icon(display: Display, draw, x: int, y: int, size: int, color: Color) -> None:
+    stroke = max(2, size // 12)
+    center_x = x + (size // 2)
+    center_y = y + (size // 2)
+    radius = max(8, size // 3)
+    if draw is not None and hasattr(draw, "arc"):
+        draw.arc(
+            [(center_x - radius, center_y - radius), (center_x + radius, center_y + radius)],
+            start=40,
+            end=320,
+            fill=color,
+            width=stroke,
+        )
+    display.line(center_x + radius - 3, center_y - radius + 4, center_x + radius + 4, center_y - radius + 10, color=color, width=stroke)
+    display.line(center_x + radius - 3, center_y - radius + 4, center_x + radius - 7, center_y - radius + 12, color=color, width=stroke)
+
+
+def _draw_close_icon(display: Display, draw, x: int, y: int, size: int, color: Color) -> None:
+    stroke = max(3, size // 8)
+    inset = max(6, size // 4)
+    display.line(x + inset, y + inset, x + size - inset, y + size - inset, color=color, width=stroke)
+    display.line(x + size - inset, y + inset, x + inset, y + size - inset, color=color, width=stroke)
+
+
+def _draw_check_icon(display: Display, draw, x: int, y: int, size: int, color: Color) -> None:
+    stroke = max(3, size // 8)
+    display.line(x + size // 5, y + (size * 3) // 5, x + size // 2, y + size - size // 5, color=color, width=stroke)
+    display.line(x + size // 2, y + size - size // 5, x + size - size // 5, y + size // 4, color=color, width=stroke)
+
+
+def _draw_mic_off_icon(display: Display, draw, x: int, y: int, size: int, color: Color) -> None:
+    _draw_setup_icon(display, draw, x + size // 4, y + size // 4, size // 2, color)
+    _draw_close_icon(display, draw, x, y, size, color)
 
 
 def _draw_battery_icon(display: Display, draw, x: int, y: int, size: int, color: Color) -> None:

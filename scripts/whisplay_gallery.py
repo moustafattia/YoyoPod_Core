@@ -488,16 +488,34 @@ def _build_power_status() -> dict[str, object]:
 
 
 def _build_talk_contact_screen(display: Display) -> TalkContactScreen:
-    """Build a Talk contact screen with a latest-note action."""
+    """Build the main Talk contact-action screen."""
 
     context = _build_context()
     context.set_talk_contact(name="Mama", sip_address="sip:mama@example.com")
     return TalkContactScreen(
         display,
         context,
-        voip_manager=FakeVoipManager(
-            latest_notes={"sip:mama@example.com": DemoVoiceNote("data/voice_notes/mama.wav")}
-        ),
+        voip_manager=FakeVoipManager(),
+    )
+
+
+def _build_voice_note_recording_screen(display: Display) -> VoiceNoteScreen:
+    """Build the voice-note recording state."""
+
+    context = _build_context()
+    context.set_voice_note_recipient(name="Mama", sip_address="sip:mama@example.com")
+    draft = DemoVoiceNoteDraft(
+        recipient_address="sip:mama@example.com",
+        recipient_name="Mama",
+        file_path="data/voice_notes/mama.wav",
+        duration_ms=3200,
+        send_state="recording",
+        status_text="Recording...",
+    )
+    return VoiceNoteScreen(
+        display,
+        context,
+        voip_manager=FakeVoipManager(active_voice_note=draft),
     )
 
 
@@ -513,6 +531,27 @@ def _build_voice_note_review_screen(display: Display) -> VoiceNoteScreen:
         duration_ms=4200,
         send_state="review",
         status_text="Ready to send",
+    )
+    return VoiceNoteScreen(
+        display,
+        context,
+        voip_manager=FakeVoipManager(active_voice_note=draft),
+    )
+
+
+def _build_voice_note_sent_screen(display: Display) -> VoiceNoteScreen:
+    """Build the voice-note sent state."""
+
+    context = _build_context()
+    context.set_voice_note_recipient(name="Mama", sip_address="sip:mama@example.com")
+    draft = DemoVoiceNoteDraft(
+        recipient_address="sip:mama@example.com",
+        recipient_name="Mama",
+        file_path="data/voice_notes/mama.wav",
+        duration_ms=4200,
+        send_state="sent",
+        status_text="Sent",
+        message_id="demo-note",
     )
     return VoiceNoteScreen(
         display,
@@ -632,9 +671,16 @@ def build_capture_specs(display: Display) -> list[CaptureSpec]:
             prepare=lambda screen: setattr(screen, "selected_index", 1),
         ),
         CaptureSpec(
-            "09_voice_note_review",
+            "09_voice_note_recording",
+            lambda: _build_voice_note_recording_screen(display),
+        ),
+        CaptureSpec(
+            "09b_voice_note_review",
             lambda: _build_voice_note_review_screen(display),
-            prepare=lambda screen: setattr(screen, "_selected_action_index", 1),
+        ),
+        CaptureSpec(
+            "09c_voice_note_sent",
+            lambda: _build_voice_note_sent_screen(display),
         ),
         CaptureSpec(
             "10_ask_idle",
@@ -706,6 +752,18 @@ def build_capture_specs(display: Display) -> list[CaptureSpec]:
                     caller_info={"display_name": "Mama"},
                     duration_seconds=187,
                     muted=False,
+                ),
+            ),
+        ),
+        CaptureSpec(
+            "17b_in_call_muted",
+            lambda: InCallScreen(
+                display,
+                _build_context(),
+                voip_manager=FakeVoipManager(
+                    caller_info={"display_name": "Mama"},
+                    duration_seconds=187,
+                    muted=True,
                 ),
             ),
         ),

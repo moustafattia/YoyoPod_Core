@@ -486,11 +486,11 @@ def test_voice_note_screen_uses_hold_to_record_in_one_button_mode(
     assert voip_manager.send_attempts == 1
 
 
-def test_contact_list_advance_wraps_and_select_calls_contact(
+def test_contact_list_advance_wraps_and_select_opens_contact(
     display: Display,
     one_button_context: AppContext,
 ) -> None:
-    """The contact list should wrap on ADVANCE and call on SELECT."""
+    """The contact list should wrap on ADVANCE and open TalkContact on SELECT."""
     voip_manager = FakeVoIPManager()
     contacts = [
         FakeContact("Alice", "sip:alice@example.com", favorite=True),
@@ -509,8 +509,10 @@ def test_contact_list_advance_wraps_and_select_calls_contact(
     screen.on_select()
 
     assert screen.selected_index == 0
-    assert voip_manager.make_calls == [("sip:alice@example.com", "Alice")]
-    assert screen.consume_navigation_request() == NavigationRequest.route("call_started")
+    assert one_button_context.talk_contact_name == "Alice"
+    assert one_button_context.talk_contact_address == "sip:alice@example.com"
+    assert voip_manager.make_calls == []
+    assert screen.consume_navigation_request() == NavigationRequest.route("open_contact")
 
 
 def test_incoming_call_select_answers_and_back_rejects(

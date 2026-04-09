@@ -13,6 +13,7 @@ from yoyopy.ui.screens.theme import (
     draw_list_item,
     render_footer,
     render_header,
+    talk_monogram,
     text_fit,
 )
 from yoyopy.ui.screens.voip.lvgl import LvglContactListView
@@ -47,7 +48,7 @@ class ContactListScreen(Screen):
     def title_text(self) -> str:
         """Return the screen title for the current Talk subflow."""
 
-        return "Voice Note" if self.action_mode == "voice_note" else "Contacts"
+        return "Voice Note" if self.action_mode == "voice_note" else "More People"
 
     @property
     def empty_title(self) -> str:
@@ -160,7 +161,7 @@ class ContactListScreen(Screen):
                 mode="talk",
                 selected=contact_index == self.selected_index,
                 badge=None,
-                icon="talk",
+                icon=f"mono:{talk_monogram(contact.display_name)}",
             )
 
         render_footer(self.display, self._instruction_text(), mode="talk")
@@ -205,15 +206,22 @@ class ContactListScreen(Screen):
     def get_visible_icon_keys(self) -> list[str]:
         """Return visible icon keys for the shared LVGL scene."""
 
-        visible_titles, _, _ = self.get_visible_window()
-        return ["talk" for _ in visible_titles]
+        icons: list[str] = []
+        for row in range(self.max_visible_items):
+            contact_index = self.scroll_offset + row
+            if contact_index >= len(self.contacts):
+                break
+            icons.append(f"mono:{talk_monogram(self.contacts[contact_index].display_name)}")
+        return icons
 
     def _instruction_text(self) -> str:
         """Return footer hints for the current action mode."""
 
+        if self.is_one_button_mode():
+            return "Tap Next | 2x Open | Hold Back"
         if self.action_mode == "voice_note":
-            return "Tap next / Double choose" if self.is_one_button_mode() else "A choose | B back | X/Y move"
-        return "Tap next / Double call" if self.is_one_button_mode() else "A call | B back | X/Y move"
+            return "A open | B back | X/Y move"
+        return "A open | B back | X/Y move"
 
     def select_next(self) -> None:
         """Move selection to next contact."""
@@ -230,6 +238,21 @@ class ContactListScreen(Screen):
         """Move selection to previous contact."""
         if self.contacts and self.selected_index > 0:
             self.selected_index -= 1
+
+    def open_selected_contact(self) -> None:
+        """Store the chosen contact and open the shared Talk action screen."""
+
+        if not self.contacts or self.selected_index >= len(self.contacts):
+            logger.warning("No contact selected")
+            return
+
+        contact = self.contacts[self.selected_index]
+        if self.context is not None:
+            self.context.set_talk_contact(
+                name=contact.display_name,
+                sip_address=contact.sip_address,
+            )
+        self.request_route("open_contact")
 
     def call_selected_contact(self) -> None:
         """Initiate a call to the selected contact."""
@@ -263,11 +286,11 @@ class ContactListScreen(Screen):
         self.request_route("voice_note_selected")
 
     def on_select(self, data=None) -> None:
-        """Call or choose the selected contact depending on the mode."""
+        """Open the selected contact flow depending on the current mode."""
         if self.action_mode == "voice_note":
             self.choose_voice_note_recipient()
             return
-        self.call_selected_contact()
+        self.open_selected_contact()
 
     def on_back(self, data=None) -> None:
         """Go back."""
