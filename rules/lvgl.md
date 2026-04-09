@@ -6,6 +6,8 @@ Applies to: `yoyopy/ui/lvgl_binding/**`, `yoyopy/ui/display/adapters/whisplay.py
 
 LVGL 9.5.0 is the standard rendering layer for all hardware displays. The architecture is display-hardware-agnostic -- LVGL renders to its internal buffer, then flush callbacks route pixels to whatever SPI display is connected.
 
+For the Figma-to-Whisplay implementation workflow, screen extraction order, and hardware validation loop, also follow `rules/design-fidelity.md`.
+
 ## Rendering Pipeline
 
 ```
