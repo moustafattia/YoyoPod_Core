@@ -52,10 +52,13 @@ def get_display(
     """Create the appropriate display adapter."""
 
     if simulate:
-        hardware = "simulation"
-        logger.info("Forcing simulation mode (--simulate flag)")
-
-    if hardware == "auto":
+        if hardware == "auto":
+            hardware = "whisplay"
+        logger.info(
+            "Forcing simulation mode (--simulate flag) while preserving {} display profile",
+            hardware,
+        )
+    elif hardware == "auto":
         hardware = detect_hardware()
 
     hardware = hardware.lower()
@@ -85,17 +88,16 @@ def get_display(
 
         adapter = SimulationDisplayAdapter(simulate=True)
 
-        if simulate or hardware == "simulation":
-            try:
-                from yoyopy.ui.web_server import get_server
+        try:
+            from yoyopy.ui.web_server import get_server
 
-                server = get_server()
-                adapter.web_server = server
-                server.start()
-                logger.info("Web server started - view display at http://localhost:5000")
-            except Exception as exc:
-                logger.warning("Failed to start web server: {}", exc)
-                logger.warning("Simulation display will work without web view")
+            server = get_server()
+            adapter.web_server = server
+            server.start()
+            logger.info("Web server started - view display at http://localhost:5000")
+        except Exception as exc:
+            logger.warning("Failed to start web server: {}", exc)
+            logger.warning("Simulation display will work without web view")
 
         return adapter
 

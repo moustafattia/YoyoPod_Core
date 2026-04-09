@@ -45,6 +45,7 @@ from yoyopy.ui.display import Display
 from yoyopy.ui.input import InputManager, InteractionProfile, get_input_manager
 from yoyopy.ui.lvgl_binding import LvglDisplayBackend, LvglInputBridge
 from yoyopy.ui.screens import (
+    AIRequestsScreen,
     AskScreen,
     CallScreen,
     CallHistoryScreen,
@@ -62,8 +63,10 @@ from yoyopy.ui.screens import (
     RecentTracksScreen,
     ScreenManager,
     TalkContactScreen,
+    VoiceCommandsScreen,
     VoiceNoteScreen,
 )
+from yoyopy.voice import VoiceSettings
 from yoyopy.voip import CallHistoryStore, VoIPConfig, VoIPManager
 
 
@@ -139,6 +142,8 @@ class YoyoPodApp:
         self.menu_screen: Optional[MenuScreen] = None
         self.listen_screen: Optional[ListenScreen] = None
         self.ask_screen: Optional[AskScreen] = None
+        self.voice_commands_screen: Optional[VoiceCommandsScreen] = None
+        self.ai_requests_screen: Optional[AIRequestsScreen] = None
         self.power_screen: Optional[PowerScreen] = None
         self.now_playing_screen: Optional[NowPlayingScreen] = None
         self.playlist_screen: Optional[PlaylistScreen] = None
@@ -412,6 +417,15 @@ class YoyoPodApp:
                     ),
                     ready=False,
                 )
+            if self.context is not None and self.app_settings is not None:
+                voice_cfg = self.app_settings.voice
+                self.context.configure_voice(
+                    commands_enabled=voice_cfg.commands_enabled,
+                    ai_requests_enabled=voice_cfg.ai_requests_enabled,
+                    screen_read_enabled=voice_cfg.screen_read_enabled,
+                    stt_enabled=voice_cfg.stt_enabled,
+                    tts_enabled=voice_cfg.tts_enabled,
+                )
                 self._refresh_talk_summary()
             self._update_screen_runtime_metrics(time.monotonic())
 
@@ -544,12 +558,14 @@ class YoyoPodApp:
                 resolved = self.output_volume.get_volume()
                 if self.context is not None and resolved is not None:
                     self.context.playback.volume = resolved
+                    self.context.voice.output_volume = resolved
                 logger.info("    Startup output volume set to {}%", resolved or volume)
                 return
             logger.warning("    Failed to set startup output volume to {}%", volume)
 
         if self.context is not None:
             self.context.playback.volume = volume
+            self.context.voice.output_volume = volume
 
         if self.music_backend is None or not self.music_backend.is_connected:
             return
@@ -565,6 +581,7 @@ class YoyoPodApp:
             volume = self.output_volume.get_volume()
             if self.context is not None and volume is not None:
                 self.context.playback.volume = volume
+                self.context.voice.output_volume = volume
             return volume
         if self.context is not None:
             return self.context.playback.volume
@@ -583,6 +600,7 @@ class YoyoPodApp:
         if self.context is not None:
             resolved = self.get_output_volume()
             self.context.playback.volume = resolved if resolved is not None else target
+            self.context.voice.output_volume = resolved if resolved is not None else target
 
         return applied
 
@@ -611,6 +629,7 @@ class YoyoPodApp:
 
         if self.output_volume.sync_music_backend(volume) and self.context is not None:
             self.context.playback.volume = volume
+            self.context.voice.output_volume = volume
 
     def _setup_screens(self) -> bool:
         """Create and register all screens."""
@@ -638,6 +657,32 @@ class YoyoPodApp:
                 music_service=self.local_music_service,
             )
             self.ask_screen = AskScreen(self.display, self.context)
+            voice_cfg = self.app_settings.voice if self.app_settings is not None else None
+            self.voice_commands_screen = VoiceCommandsScreen(
+                self.display,
+                self.context,
+                config_manager=self.config_manager,
+                voip_manager=self.voip_manager,
+                volume_up_action=self.volume_up,
+                volume_down_action=self.volume_down,
+                voice_settings_provider=lambda: VoiceSettings(
+                    commands_enabled=self.context.voice.commands_enabled if self.context is not None else True,
+                    ai_requests_enabled=self.context.voice.ai_requests_enabled if self.context is not None else True,
+                    screen_read_enabled=self.context.voice.screen_read_enabled if self.context is not None else False,
+                    stt_enabled=self.context.voice.stt_enabled if self.context is not None else True,
+                    tts_enabled=self.context.voice.tts_enabled if self.context is not None else True,
+                    mic_muted=self.context.voice.mic_muted if self.context is not None else False,
+                    output_volume=self.get_output_volume() or (self.context.voice.output_volume if self.context is not None else 50),
+                    stt_backend=voice_cfg.stt_backend if voice_cfg is not None else "vosk",
+                    tts_backend=voice_cfg.tts_backend if voice_cfg is not None else "espeak-ng",
+                    vosk_model_path=voice_cfg.vosk_model_path if voice_cfg is not None else "models/vosk-model-small-en-us",
+                    sample_rate_hz=voice_cfg.sample_rate_hz if voice_cfg is not None else 16000,
+                    record_seconds=voice_cfg.record_seconds if voice_cfg is not None else 4,
+                    tts_rate_wpm=voice_cfg.tts_rate_wpm if voice_cfg is not None else 155,
+                    tts_voice=voice_cfg.tts_voice if voice_cfg is not None else "en",
+                ),
+            )
+            self.ai_requests_screen = AIRequestsScreen(self.display, self.context)
             self.power_screen = PowerScreen(
                 self.display,
                 self.context,
@@ -713,6 +758,8 @@ class YoyoPodApp:
             self.screen_manager.register_screen("menu", self.menu_screen)
             self.screen_manager.register_screen("listen", self.listen_screen)
             self.screen_manager.register_screen("ask", self.ask_screen)
+            self.screen_manager.register_screen("voice_commands", self.voice_commands_screen)
+            self.screen_manager.register_screen("ai_requests", self.ai_requests_screen)
             self.screen_manager.register_screen("power", self.power_screen)
             self.screen_manager.register_screen("now_playing", self.now_playing_screen)
             self.screen_manager.register_screen("playlists", self.playlist_screen)
@@ -729,7 +776,7 @@ class YoyoPodApp:
 
             logger.info("  ✓ All screens registered")
             logger.info("    - Listen flow: listen, playlists, recent_tracks, now_playing")
-            logger.info("    - Ask flow: ask")
+            logger.info("    - Ask flow: ask, voice_commands, ai_requests")
             logger.info("    - Power screen: power")
             logger.info("    - VoIP screens: call, talk_contact, call_history, contacts, voice_note, incoming_call, outgoing_call, in_call")
             logger.info("    - Navigation: home, menu")

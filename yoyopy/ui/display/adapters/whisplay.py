@@ -22,6 +22,8 @@ from typing import Optional, Tuple
 from pathlib import Path
 from PIL import Image, ImageDraw, ImageFont
 from loguru import logger
+import base64
+import io
 
 DRIVER_PATH = ensure_whisplay_driver_on_path()
 
@@ -81,6 +83,7 @@ class WhisplayDisplayAdapter(DisplayHAL):
         self.lvgl_buffer_lines = max(1, int(lvgl_buffer_lines))
         self.ui_backend = None
         self._force_shadow_buffer_sync = False
+        self.web_server = None
 
         # Create PIL drawing buffer
         self._create_buffer()
@@ -100,6 +103,14 @@ class WhisplayDisplayAdapter(DisplayHAL):
                 self.device = None
         else:
             logger.info("Whisplay display adapter running in simulation mode")
+            try:
+                from yoyopy.ui.web_server import get_server
+
+                self.web_server = get_server()
+                self.web_server.start()
+                logger.info("Whisplay simulation preview available at http://localhost:5000")
+            except Exception as e:
+                logger.warning(f"Failed to start Whisplay simulation preview: {e}")
 
         if self.renderer == "lvgl":
             try:
@@ -137,6 +148,15 @@ class WhisplayDisplayAdapter(DisplayHAL):
         """Create a new PIL drawing buffer."""
         self.buffer = Image.new('RGB', (self.WIDTH, self.HEIGHT), self.COLOR_BLACK)
         self.draw = ImageDraw.Draw(self.buffer)
+
+    def get_buffer_as_png_base64(self) -> str:
+        """Convert the current PIL buffer to base64 PNG for browser simulation."""
+        if self.buffer is None:
+            self._create_buffer()
+
+        buffered = io.BytesIO()
+        self.buffer.save(buffered, format="PNG")
+        return base64.b64encode(buffered.getvalue()).decode("utf-8")
 
     def _convert_to_rgb565(self) -> bytes:
         """
@@ -425,6 +445,11 @@ class WhisplayDisplayAdapter(DisplayHAL):
                 logger.error(f"Failed to update Whisplay display: {e}")
         else:
             logger.debug("Whisplay display update (simulated)")
+            if self.web_server is not None:
+                try:
+                    self.web_server.send_display_update(self.get_buffer_as_png_base64())
+                except Exception as e:
+                    logger.warning(f"Failed to send Whisplay simulation update: {e}")
 
     def save_screenshot(self, path: str) -> bool:
         """Save the current PIL shadow buffer as a PNG screenshot.

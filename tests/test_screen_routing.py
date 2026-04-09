@@ -11,6 +11,7 @@ from yoyopy.app_context import AppContext
 from yoyopy.ui.display import Display
 from yoyopy.ui.input import InputAction, InputManager
 from yoyopy.ui.screens import (
+    AskScreen,
     HubScreen,
     HomeScreen,
     MenuScreen,
@@ -18,7 +19,9 @@ from yoyopy.ui.screens import (
     Screen,
     ScreenManager,
     ScreenRouter,
+    VoiceCommandsScreen,
 )
+from yoyopy.voice import VoiceCaptureResult, VoiceSettings, VoiceTranscript
 
 
 class RoutableStubScreen(Screen):
@@ -99,6 +102,16 @@ def test_screen_router_covers_local_listen_routes() -> None:
     assert router.resolve("listen", "open_playlists") == NavigationRequest.push("playlists")
     assert router.resolve("listen", "open_recent") == NavigationRequest.push("recent_tracks")
     assert router.resolve("listen", "shuffle_started") == NavigationRequest.push("now_playing")
+
+
+def test_screen_router_covers_ask_subroutes() -> None:
+    """The Ask submenu should route into voice commands and AI requests."""
+
+    router = ScreenRouter()
+
+    assert router.resolve("ask", "select", payload="Voice Commands") == NavigationRequest.push("voice_commands")
+    assert router.resolve("ask", "select", payload="AI Requests") == NavigationRequest.push("ai_requests")
+    assert router.resolve("voice_commands", "call_started") == NavigationRequest.push("outgoing_call")
 
 
 def test_screen_manager_routes_menu_labels_through_stack(display: Display) -> None:
@@ -218,3 +231,184 @@ def test_screen_manager_can_schedule_actions_for_main_thread(display: Display) -
 
     scheduled_callbacks.pop()()
     assert screen_manager.current_screen is listen
+
+
+def test_ask_screen_routes_to_selected_subflow() -> None:
+    """Ask should expose Voice Commands and AI Requests as first-level choices."""
+
+    ask = AskScreen(display=object(), context=AppContext())
+
+    assert ask.items()[0].title == "Voice Commands"
+
+    ask.on_select()
+    assert ask.consume_navigation_request() == NavigationRequest.route("select", payload="Voice Commands")
+
+    ask.on_advance()
+    ask.on_select()
+    assert ask.consume_navigation_request() == NavigationRequest.route("select", payload="AI Requests")
+
+
+class _FakeContact:
+    def __init__(self, name: str, sip_address: str, notes: str = "") -> None:
+        self.name = name
+        self.sip_address = sip_address
+        self.notes = notes
+
+    @property
+    def display_name(self) -> str:
+        return self.notes or self.name
+
+
+class _FakeConfigManager:
+    def __init__(self, contacts: list[_FakeContact]) -> None:
+        self._contacts = contacts
+
+    def get_contacts(self) -> list[_FakeContact]:
+        return self._contacts
+
+
+class _FakeVoipManager:
+    def __init__(self) -> None:
+        self.make_calls: list[tuple[str, str]] = []
+
+    def make_call(self, sip_address: str, contact_name: str = "") -> bool:
+        self.make_calls.append((sip_address, contact_name))
+        return True
+
+
+class _FakeVoiceService:
+    def __init__(self, transcript: str) -> None:
+        self.transcript = transcript
+        self.capture_calls = 0
+        self.speak_calls: list[str] = []
+
+    def capture_available(self) -> bool:
+        return True
+
+    def stt_available(self) -> bool:
+        return True
+
+    def tts_available(self) -> bool:
+        return True
+
+    def capture_audio(self, request) -> VoiceCaptureResult:
+        self.capture_calls += 1
+        return VoiceCaptureResult(audio_path=object(), recorded=True)
+
+    def transcribe(self, audio_path) -> VoiceTranscript:
+        return VoiceTranscript(text=self.transcript, confidence=0.92)
+
+    def match_command(self, transcript: str):
+        from yoyopy.voice.commands import match_voice_command
+
+        return match_voice_command(transcript)
+
+    def speak(self, text: str) -> bool:
+        self.speak_calls.append(text)
+        return True
+
+
+def test_voice_commands_screen_applies_local_device_actions() -> None:
+    """Voice commands should update mic and volume state through local hooks."""
+
+    context = AppContext()
+    volume_up_calls: list[int] = []
+    screen = VoiceCommandsScreen(
+        display=object(),
+        context=context,
+        volume_up_action=lambda step: volume_up_calls.append(step) or 55,
+    )
+
+    screen.on_voice_command({"transcript": "volume up"})
+    assert volume_up_calls == [5]
+    assert context.voice.last_spoken_text == "Volume is 55."
+
+    screen.on_voice_command({"transcript": "mute mic"})
+    assert context.voice.mic_muted is True
+    assert context.voice.last_spoken_text == "The microphone is muted."
+
+
+def test_voice_commands_screen_can_place_call_for_named_contact() -> None:
+    """Call commands should resolve child-facing labels and trigger VoIP dialing."""
+
+    context = AppContext()
+    voip_manager = _FakeVoipManager()
+    screen = VoiceCommandsScreen(
+        display=object(),
+        context=context,
+        config_manager=_FakeConfigManager([_FakeContact("Hagar", "sip:mama@example.com", notes="Mama")]),
+        voip_manager=voip_manager,
+    )
+
+    screen.on_voice_command({"transcript": "call mama"})
+
+    assert context.talk_contact_name == "Mama"
+    assert voip_manager.make_calls == [("sip:mama@example.com", "Mama")]
+    assert screen.consume_navigation_request() == NavigationRequest.route("call_started")
+
+
+def test_voice_commands_screen_can_place_call_for_parent_aliases() -> None:
+    """Parent aliases like mom and dad should resolve against kid-facing labels."""
+
+    context = AppContext()
+    voip_manager = _FakeVoipManager()
+    screen = VoiceCommandsScreen(
+        display=object(),
+        context=context,
+        config_manager=_FakeConfigManager(
+            [
+                _FakeContact("Hagar", "sip:mama@example.com", notes="Mama"),
+                _FakeContact("Moustafa", "sip:dad@example.com", notes="Dad"),
+            ]
+        ),
+        voip_manager=voip_manager,
+    )
+
+    screen.on_voice_command({"transcript": "call mom"})
+    assert voip_manager.make_calls == [("sip:mama@example.com", "Mama")]
+    assert screen.consume_navigation_request() == NavigationRequest.route("call_started")
+
+    screen.on_voice_command({"transcript": "call dad"})
+    assert voip_manager.make_calls[-1] == ("sip:dad@example.com", "Dad")
+    assert screen.consume_navigation_request() == NavigationRequest.route("call_started")
+
+
+def test_voice_commands_screen_select_can_capture_and_execute_command() -> None:
+    """Selecting command mode should capture speech and execute the transcript."""
+
+    context = AppContext()
+    service = _FakeVoiceService("mute mic")
+    screen = VoiceCommandsScreen(
+        display=object(),
+        context=context,
+        voice_settings_provider=lambda: VoiceSettings(),
+        voice_service_factory=lambda _settings: service,
+    )
+
+    screen.on_select()
+
+    assert service.capture_calls == 1
+    assert context.voice.mic_muted is True
+    assert context.voice.last_transcript == "mute mic"
+    assert context.voice.tts_available is True
+
+
+def test_voice_commands_screen_select_in_simulation_still_uses_local_capture() -> None:
+    """Simulation mode should mirror the screen only and still use Pi-side capture."""
+
+    class _FakeDisplay:
+        simulate = True
+
+    context = AppContext()
+    service = _FakeVoiceService("call mom")
+    screen = VoiceCommandsScreen(
+        display=_FakeDisplay(),
+        context=context,
+        voice_settings_provider=lambda: VoiceSettings(),
+        voice_service_factory=lambda _settings: service,
+    )
+
+    screen.on_select()
+
+    assert service.capture_calls == 1
+    assert context.voice.last_transcript == "call mom"

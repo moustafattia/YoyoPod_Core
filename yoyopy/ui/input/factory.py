@@ -99,6 +99,36 @@ def get_input_manager(
         else:
             logger.warning("  -> No Whisplay device available for PTT input")
 
+        if simulate:
+            try:
+                from yoyopy.ui.web_server import get_server
+
+                server = get_server()
+
+                def web_input_handler(action: str) -> None:
+                    """Handle browser button input while simulating the Whisplay profile."""
+                    if enable_navigation:
+                        action_map = {
+                            "UP": InputAction.ADVANCE,
+                            "DOWN": InputAction.ADVANCE,
+                            "SELECT": InputAction.SELECT,
+                            "BACK": InputAction.BACK,
+                        }
+                    else:
+                        action_map = {
+                            "SELECT": InputAction.PTT_PRESS,
+                            "BACK": InputAction.PTT_RELEASE,
+                        }
+
+                    mapped_action = action_map.get(action)
+                    if mapped_action is not None:
+                        manager.simulate_action(mapped_action)
+
+                server.set_input_callback(web_input_handler)
+                logger.info("  -> Added web button input (browser UI)")
+            except Exception as exc:
+                logger.warning(f"  -> Failed to connect web input: {exc}")
+
         if input_config.get("enable_voice", False):
             logger.info("  -> Voice input requested but not yet implemented")
 

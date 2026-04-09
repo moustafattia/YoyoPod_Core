@@ -56,3 +56,27 @@ def test_rendering_still_works_after_state_changes(display: Display, context: Ap
     context.next_track()
     context.pause()
     now_playing_screen.render()
+
+
+def test_simulate_mode_preserves_whisplay_display_profile() -> None:
+    """Simulation should default to the Whisplay display profile."""
+    class FakeServer:
+        def start(self) -> None:
+            pass
+
+    import yoyopy.ui.web_server as web_server
+
+    original_get_server = web_server.get_server
+    web_server.get_server = lambda *args, **kwargs: FakeServer()
+    try:
+        display = Display(simulate=True)
+    finally:
+        web_server.get_server = original_get_server
+
+    try:
+        assert display.get_adapter().__class__.__name__ == "WhisplayDisplayAdapter"
+        assert display.WIDTH == 240
+        assert display.HEIGHT == 280
+        assert display.ORIENTATION == "portrait"
+    finally:
+        display.cleanup()

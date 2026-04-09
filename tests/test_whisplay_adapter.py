@@ -162,3 +162,32 @@ def test_readback_screenshot_decodes_rgb565_swapped_pixels(tmp_path) -> None:
     with Image.open(screenshot_path) as screenshot:
         assert screenshot.size == (adapter.WIDTH, adapter.HEIGHT)
         assert screenshot.getpixel((0, 0)) == (255, 0, 0)
+
+
+def test_simulated_whisplay_update_pushes_browser_preview(monkeypatch) -> None:
+    """Simulated Whisplay updates should feed the browser preview server."""
+
+    class FakeServer:
+        def __init__(self) -> None:
+            self.started = False
+            self.images: list[str] = []
+
+        def start(self) -> None:
+            self.started = True
+
+        def send_display_update(self, image: str) -> None:
+            self.images.append(image)
+
+    fake_server = FakeServer()
+
+    import yoyopy.ui.web_server as web_server
+
+    monkeypatch.setattr(web_server, "get_server", lambda *args, **kwargs: fake_server)
+
+    adapter = WhisplayDisplayAdapter(simulate=True, renderer="pil")
+    adapter.clear()
+    adapter.update()
+
+    assert fake_server.started is True
+    assert len(fake_server.images) == 1
+    assert fake_server.images[0]
