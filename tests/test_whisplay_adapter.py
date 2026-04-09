@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from PIL import Image
+
 from yoyopy.ui.display.adapters.whisplay import WhisplayDisplayAdapter
 
 
@@ -130,3 +132,33 @@ def test_shadow_sync_mode_tracks_runtime_fallback_state_changes() -> None:
     adapter.renderer = "lvgl"
     adapter.ui_backend = type("Backend", (), {"available": False})()
     assert adapter.shadow_buffer_sync_enabled is True
+
+
+def test_readback_screenshot_decodes_rgb565_swapped_pixels(tmp_path) -> None:
+    """Readback screenshots should decode the shim's RGB565_SWAPPED contract."""
+
+    adapter = WhisplayDisplayAdapter(simulate=True, renderer="lvgl")
+    pixel_data = b"\xF8\x00" * (adapter.WIDTH * adapter.HEIGHT)
+
+    class Binding:
+        def snapshot(self, width: int, height: int) -> bytes:
+            assert width == adapter.WIDTH
+            assert height == adapter.HEIGHT
+            return pixel_data
+
+    adapter.ui_backend = type(
+        "Backend",
+        (),
+        {
+            "initialized": True,
+            "binding": Binding(),
+        },
+    )()
+
+    screenshot_path = tmp_path / "readback.png"
+
+    assert adapter.save_screenshot_readback(str(screenshot_path)) is True
+
+    with Image.open(screenshot_path) as screenshot:
+        assert screenshot.size == (adapter.WIDTH, adapter.HEIGHT)
+        assert screenshot.getpixel((0, 0)) == (255, 0, 0)

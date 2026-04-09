@@ -1387,6 +1387,16 @@ def run_screenshot(
             print(alive_result.stderr.strip())
         return 1
 
+    clear_result = run_remote_capture(
+        config,
+        f"rm -f {screenshot_path}",
+    )
+    if clear_result.returncode != 0:
+        print("Failed to clear the previous screenshot on the Raspberry Pi.")
+        if clear_result.stderr.strip():
+            print(clear_result.stderr.strip())
+        return clear_result.returncode
+
     signal_name = "USR1" if args.readback else "USR2"
     signal_result = run_remote_capture(
         config,
@@ -1400,7 +1410,13 @@ def run_screenshot(
 
     verify_result = run_remote_capture(
         config,
-        f"sleep 1 && test -f {screenshot_path} && echo READY || echo MISSING",
+        (
+            "for _ in $(seq 1 10); do "
+            f"test -f {screenshot_path} && echo READY && exit 0; "
+            "sleep 1; "
+            "done; "
+            "echo MISSING"
+        ),
     )
     if verify_result.returncode != 0 or verify_result.stdout.strip() != "READY":
         print(

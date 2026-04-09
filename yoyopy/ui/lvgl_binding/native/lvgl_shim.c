@@ -3204,7 +3204,12 @@ int32_t yoyopy_lvgl_snapshot(unsigned char * output_buf, uint32_t buf_size) {
         return -1;
     }
 
-    lv_draw_buf_t * snapshot = lv_snapshot_take(screen, LV_COLOR_FORMAT_RGB565_SWAPPED);
+    /*
+     * LVGL snapshotting supports RGB565, but not RGB565_SWAPPED.
+     * Capture in RGB565, then byte-swap into the existing RGB565_SWAPPED
+     * contract used by the Python binding and screenshot decoder.
+     */
+    lv_draw_buf_t * snapshot = lv_snapshot_take(screen, LV_COLOR_FORMAT_RGB565);
     if(snapshot == NULL) {
         yoyopy_set_error("lv_snapshot_take returned NULL");
         return -1;
@@ -3213,7 +3218,11 @@ int32_t yoyopy_lvgl_snapshot(unsigned char * output_buf, uint32_t buf_size) {
     uint32_t data_size = snapshot->header.w * snapshot->header.h
                          * lv_color_format_get_size(snapshot->header.cf);
     uint32_t copy_size = data_size < buf_size ? data_size : buf_size;
-    memcpy(output_buf, snapshot->data, copy_size);
+    const uint8_t * snapshot_data = (const uint8_t *)snapshot->data;
+    for(uint32_t index = 0; index + 1 < copy_size; index += 2) {
+        output_buf[index] = snapshot_data[index + 1];
+        output_buf[index + 1] = snapshot_data[index];
+    }
 
     lv_draw_buf_destroy(snapshot);
     return (int32_t)copy_size;
