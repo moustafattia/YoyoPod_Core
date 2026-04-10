@@ -129,7 +129,7 @@ Use this when you want a focused hardware-in-the-loop pass for:
 
 ```bash
 yoyoctl remote rtc status
-yoyoctl remote rtc sync-to-rtc
+yoyoctl remote rtc sync-to
 ```
 
 ### PiSugar power helper
