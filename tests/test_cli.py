@@ -108,3 +108,46 @@ def test_pi_gallery_help():
     assert result.exit_code == 0
     assert "--output-dir" in result.output
     assert "--simulate" in result.output
+
+
+def test_remote_status_help():
+    result = runner.invoke(app, ["remote", "status", "--help"])
+    assert result.exit_code == 0
+    assert "--host" in result.output
+
+
+def test_remote_sync_help():
+    result = runner.invoke(app, ["remote", "sync", "--help"])
+    assert result.exit_code == 0
+    assert "--host" in result.output
+    assert "--branch" in result.output
+
+
+def test_remote_smoke_help():
+    result = runner.invoke(app, ["remote", "smoke", "--help"])
+    assert result.exit_code == 0
+
+
+def test_remote_preflight_help():
+    result = runner.invoke(app, ["remote", "preflight", "--help"])
+    assert result.exit_code == 0
+
+
+def test_remote_lvgl_soak_help():
+    result = runner.invoke(app, ["remote", "lvgl-soak", "--help"])
+    assert result.exit_code == 0
+
+
+def test_remote_power_help():
+    result = runner.invoke(app, ["remote", "power", "--help"])
+    assert result.exit_code == 0
+
+
+def test_remote_config_help():
+    result = runner.invoke(app, ["remote", "config", "--help"])
+    assert result.exit_code == 0
+
+
+def test_remote_service_help():
+    result = runner.invoke(app, ["remote", "service", "--help"])
+    assert result.exit_code == 0
