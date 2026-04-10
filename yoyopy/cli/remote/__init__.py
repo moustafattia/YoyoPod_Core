@@ -6,7 +6,7 @@ import typer
 
 from yoyopy.cli.remote.infra import config, power, service
 from yoyopy.cli.remote.lvgl import lvgl_soak
-from yoyopy.cli.remote.ops import preflight, smoke, status, sync
+from yoyopy.cli.remote.ops import logs, preflight, restart, rsync, screenshot, smoke, status, sync
 
 remote_app = typer.Typer(
     name="remote",
@@ -18,6 +18,10 @@ remote_app.command()(status)
 remote_app.command()(sync)
 remote_app.command()(smoke)
 remote_app.command()(preflight)
+remote_app.command()(restart)
+remote_app.command()(logs)
+remote_app.command()(screenshot)
+remote_app.command()(rsync)
 remote_app.command(name="lvgl-soak")(lvgl_soak)
 remote_app.command()(power)
 remote_app.command()(config)

@@ -377,14 +377,14 @@ def build_native_shim_refresh_command(deploy_config: PiDeployConfig) -> str:
         "    (\n"
         "        'LVGL',\n"
         "        Path('yoyopy/ui/lvgl_binding/native/build/libyoyopy_lvgl_shim.so'),\n"
-        "        [Path('scripts/lvgl_build.py'), Path('yoyopy/ui/lvgl_binding/native')],\n"
-        "        [sys.executable, 'scripts/lvgl_build.py'],\n"
+        "        [Path('yoyopy/ui/lvgl_binding/native')],\n"
+        "        ['yoyoctl', 'build', 'lvgl'],\n"
         "    ),\n"
         "    (\n"
         "        'Liblinphone',\n"
         "        Path('yoyopy/voip/liblinphone_binding/native/build/libyoyopy_liblinphone_shim.so'),\n"
-        "        [Path('scripts/liblinphone_build.py'), Path('yoyopy/voip/liblinphone_binding/native')],\n"
-        "        [sys.executable, 'scripts/liblinphone_build.py'],\n"
+        "        [Path('yoyopy/voip/liblinphone_binding/native')],\n"
+        "        ['yoyoctl', 'build', 'liblinphone'],\n"
         "    ),\n"
         "]\n"
         "\n"
@@ -793,7 +793,7 @@ def build_smoke_command(
     voip_timeout: float = 10.0,
 ) -> str:
     """Create the remote smoke-validation command."""
-    parts = ["uv run python scripts/pi_smoke.py"]
+    parts = ["yoyoctl pi smoke"]
     if with_power:
         parts.append("--with-power")
     if with_rtc:
@@ -824,12 +824,11 @@ def build_local_preflight_commands() -> list[tuple[str, list[str]]]:
                 "compileall",
                 "yoyopy",
                 "tests",
-                "scripts/pi_smoke.py",
-                "scripts/pi_remote.py",
-                "scripts/pisugar_rtc.py",
-                "scripts/pisugar_power.py",
-                "scripts/whisplay_tune.py",
-                "scripts/lvgl_soak.py",
+                "yoyopy/cli/pi/smoke.py",
+                "yoyopy/cli/pi/voip.py",
+                "yoyopy/power/backend.py",
+                "yoyopy/power/manager.py",
+                "yoyopy/ui/lvgl_binding/__init__.py",
             ],
         ),
         (
@@ -959,6 +958,84 @@ def preflight(
         raise typer.Exit(code=rc)
 
 
+def restart(
+    host: Annotated[str, typer.Option("--host", help="SSH host or alias for the Raspberry Pi.")] = "",
+    user: Annotated[str, typer.Option("--user", help="SSH user for the Raspberry Pi (optional).")] = "",
+    project_dir: Annotated[str, typer.Option("--project-dir", help="Project directory on the Raspberry Pi.")] = "",
+    branch: Annotated[str, typer.Option("--branch", help="Git branch to sync on the Raspberry Pi.")] = "",
+    verbose: Annotated[bool, typer.Option("--verbose", help="Enable debug logging.")] = False,
+) -> None:
+    """Restart the yoyopod app on the Pi."""
+    config = _resolve_remote_config(host, user, project_dir, branch)
+    validate_config(config)
+    deploy_config = load_pi_deploy_config()
+    rc = run_remote(config, build_restart_command(deploy_config))
+    if rc != 0:
+        raise typer.Exit(code=rc)
+
+
+def logs(
+    host: Annotated[str, typer.Option("--host", help="SSH host or alias for the Raspberry Pi.")] = "",
+    user: Annotated[str, typer.Option("--user", help="SSH user for the Raspberry Pi (optional).")] = "",
+    project_dir: Annotated[str, typer.Option("--project-dir", help="Project directory on the Raspberry Pi.")] = "",
+    branch: Annotated[str, typer.Option("--branch", help="Git branch to sync on the Raspberry Pi.")] = "",
+    lines: Annotated[int, typer.Option("--lines", help="Number of log lines to tail.")] = 50,
+    follow: Annotated[bool, typer.Option("--follow", "-f", help="Follow log output.")] = False,
+    errors: Annotated[bool, typer.Option("--errors", help="Tail the error log instead of the main log.")] = False,
+    filter: Annotated[Optional[str], typer.Option("--filter", help="Grep filter to apply to log output.")] = None,
+    verbose: Annotated[bool, typer.Option("--verbose", help="Enable debug logging.")] = False,
+) -> None:
+    """Tail yoyopod logs on the Pi."""
+    config = _resolve_remote_config(host, user, project_dir, branch)
+    validate_config(config)
+    deploy_config = load_pi_deploy_config()
+    args = argparse.Namespace(
+        errors=errors,
+        follow=follow,
+        filter=filter,
+        lines=lines,
+    )
+    rc = run_remote(config, build_logs_command(args, deploy_config), tty=follow)
+    if rc != 0:
+        raise typer.Exit(code=rc)
+
+
+def screenshot(
+    host: Annotated[str, typer.Option("--host", help="SSH host or alias for the Raspberry Pi.")] = "",
+    user: Annotated[str, typer.Option("--user", help="SSH user for the Raspberry Pi (optional).")] = "",
+    project_dir: Annotated[str, typer.Option("--project-dir", help="Project directory on the Raspberry Pi.")] = "",
+    branch: Annotated[str, typer.Option("--branch", help="Git branch to sync on the Raspberry Pi.")] = "",
+    output: Annotated[str, typer.Option("--output", help="Local output file path.")] = "screenshot.png",
+    readback: Annotated[bool, typer.Option("--readback", help="Use LVGL readback (SIGUSR1) instead of shadow path (SIGUSR2).")] = False,
+    verbose: Annotated[bool, typer.Option("--verbose", help="Enable debug logging.")] = False,
+) -> None:
+    """Capture a screenshot from the Pi display."""
+    config = _resolve_remote_config(host, user, project_dir, branch)
+    validate_config(config)
+    deploy_config = load_pi_deploy_config()
+    args = argparse.Namespace(readback=readback, output=output)
+    rc = run_screenshot(config, deploy_config, args)
+    if rc != 0:
+        raise typer.Exit(code=rc)
+
+
+def rsync(
+    host: Annotated[str, typer.Option("--host", help="SSH host or alias for the Raspberry Pi.")] = "",
+    user: Annotated[str, typer.Option("--user", help="SSH user for the Raspberry Pi (optional).")] = "",
+    project_dir: Annotated[str, typer.Option("--project-dir", help="Project directory on the Raspberry Pi.")] = "",
+    branch: Annotated[str, typer.Option("--branch", help="Git branch to sync on the Raspberry Pi.")] = "",
+    skip_restart: Annotated[bool, typer.Option("--skip-restart", help="Skip restart after sync.")] = False,
+    verbose: Annotated[bool, typer.Option("--verbose", help="Enable debug logging.")] = False,
+) -> None:
+    """Rsync the local working tree to the Pi (no git commit needed)."""
+    config = _resolve_remote_config(host, user, project_dir, branch)
+    validate_config(config)
+    deploy_config = load_pi_deploy_config()
+    rc = run_rsync_deploy(config, deploy_config, skip_restart=skip_restart)
+    if rc != 0:
+        raise typer.Exit(code=rc)
+
+
 # ---------------------------------------------------------------------------
 # Compat builder functions (argparse.Namespace-based, used by tests and legacy
 # callers; these mirror the old scripts/pi_remote.py builder API)
@@ -985,7 +1062,7 @@ def build_logs_command(
 
 def build_whisplay_command(args: argparse.Namespace) -> str:
     """Create the remote Whisplay tuning command."""
-    parts = ["uv run python scripts/whisplay_tune.py"]
+    parts = ["yoyoctl pi tune"]
     if args.verbose:
         parts.append("--verbose")
     if args.no_display:
@@ -1003,7 +1080,7 @@ def build_whisplay_command(args: argparse.Namespace) -> str:
 
 def build_rtc_command(args: argparse.Namespace) -> str:
     """Create the remote PiSugar RTC command."""
-    parts = ["uv run python scripts/pisugar_rtc.py"]
+    parts = ["yoyoctl pi power rtc"]
     if args.verbose:
         parts.append("--verbose")
     parts.append(args.rtc_action)

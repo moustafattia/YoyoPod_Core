@@ -160,3 +160,23 @@ def test_remote_config_help():
 def test_remote_service_help():
     result = runner.invoke(app, ["remote", "service", "--help"])
     assert result.exit_code == 0
+
+
+def test_remote_restart_help():
+    result = runner.invoke(app, ["remote", "restart", "--help"])
+    assert result.exit_code == 0
+
+
+def test_remote_logs_help():
+    result = runner.invoke(app, ["remote", "logs", "--help"])
+    assert result.exit_code == 0
+
+
+def test_remote_screenshot_help():
+    result = runner.invoke(app, ["remote", "screenshot", "--help"])
+    assert result.exit_code == 0
+
+
+def test_remote_rsync_help():
+    result = runner.invoke(app, ["remote", "rsync", "--help"])
+    assert result.exit_code == 0

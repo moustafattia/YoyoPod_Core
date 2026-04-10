@@ -28,7 +28,7 @@ def check() -> None:
 
     binding = LiblinphoneBinding.try_load()
     if binding is None:
-        logger.error("Liblinphone shim is unavailable. Build it first with scripts/liblinphone_build.py.")
+        logger.error("Liblinphone shim is unavailable. Build it first with yoyoctl build liblinphone.")
         raise typer.Exit(code=1)
 
     config_manager = ConfigManager(config_dir="config")
@@ -86,7 +86,7 @@ def debug() -> None:
 
     binding = LiblinphoneBinding.try_load()
     if binding is None:
-        logger.error("Liblinphone shim is unavailable. Build it first with scripts/liblinphone_build.py.")
+        logger.error("Liblinphone shim is unavailable. Build it first with yoyoctl build liblinphone.")
         raise typer.Exit(code=1)
 
     config_manager = ConfigManager(config_dir="config")
