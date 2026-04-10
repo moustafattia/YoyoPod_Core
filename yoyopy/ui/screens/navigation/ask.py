@@ -109,11 +109,11 @@ class AskScreen(Screen):
         self._capture_in_flight = False
 
         if self._quick_command:
-            # Skip idle and jump straight into listening
+            # Skip idle and jump straight into PTT capture
             self._state = "idle"
             self._headline = "Ask"
             self._body = "Ask me anything..."
-            self._start_listening_cycle(async_capture=True)
+            self._start_ptt_capture()
         else:
             self._state = "idle"
             self._headline = "Ask"
@@ -124,6 +124,7 @@ class AskScreen(Screen):
         """Invalidate any in-flight result before leaving the screen."""
 
         self._cancel_listening_cycle()
+        self._cancel_auto_return()
         self._quick_command = False
         super().exit()
 
@@ -300,6 +301,7 @@ class AskScreen(Screen):
         """Cancel any in-flight capture and pop the screen."""
 
         self._cancel_listening_cycle()
+        self._cancel_auto_return()
         self.request_route("back")
 
     def on_voice_command(self, data=None) -> None:
@@ -551,6 +553,7 @@ class AskScreen(Screen):
             else:
                 self._set_response("No Speech", "I did not catch a command.")
             self._refresh_after_state_change()
+            self._schedule_auto_return()
 
         scheduler = (
             getattr(self.screen_manager, "action_scheduler", None)
@@ -576,6 +579,125 @@ class AskScreen(Screen):
             self._active_capture_cancel.set()
             self._active_capture_cancel = None
         self._capture_in_flight = False
+
+    # ------------------------------------------------------------------
+    # PTT capture cycle
+    # ------------------------------------------------------------------
+
+    def _start_ptt_capture(self) -> None:
+        """Begin open-ended recording that stops on PTT_RELEASE."""
+
+        if self.context is not None and not self.context.voice.commands_enabled:
+            self._set_response("Voice Off", "Turn voice commands on in Setup first.")
+            self._refresh_after_state_change()
+            return
+        if self.context is not None and self.context.voice.mic_muted:
+            self._set_response("Mic Muted", "Unmute the microphone first.")
+            self._refresh_after_state_change()
+            return
+
+        voice_service = self._voice_service()
+        if not voice_service.capture_available() or not voice_service.stt_available():
+            self._set_response("Mic Unavailable", "Voice capture is not ready on this device.")
+            self._refresh_after_state_change()
+            return
+
+        self._capture_in_flight = True
+        self._ptt_active = True
+        self._set_state("listening", "Listening", "Speak now...")
+        self._refresh_after_state_change()
+        self._listen_generation += 1
+        generation = self._listen_generation
+        cancel_event = threading.Event()
+        self._active_capture_cancel = cancel_event
+
+        self._play_attention_tone()
+
+        threading.Thread(
+            target=self._run_ptt_listening_cycle,
+            args=(voice_service, generation, cancel_event),
+            daemon=True,
+            name="AskPTTCapture",
+        ).start()
+
+    def _run_ptt_listening_cycle(
+        self,
+        voice_service: VoiceService,
+        generation: int,
+        cancel_event: threading.Event,
+    ) -> None:
+        """Record until cancel_event is set (by PTT_RELEASE), then transcribe."""
+
+        request = VoiceCaptureRequest(
+            mode="voice_commands",
+            timeout_seconds=30.0,
+            cancel_event=cancel_event,
+        )
+        capture_result = voice_service.capture_audio(request)
+
+        if generation != self._listen_generation:
+            if capture_result.audio_path is not None:
+                capture_result.audio_path.unlink(missing_ok=True)
+            return
+
+        # If PTT was released (not cancelled by back/exit), process the audio
+        if not self._ptt_active and capture_result.audio_path is not None:
+            try:
+                transcript = voice_service.transcribe(capture_result.audio_path)
+            except Exception as exc:
+                logger.warning("PTT transcription failed: {}", exc)
+                self._dispatch_listen_result("", capture_failed=True, generation=generation)
+                return
+            finally:
+                capture_result.audio_path.unlink(missing_ok=True)
+
+            self._dispatch_listen_result(
+                transcript.text.strip(), capture_failed=False, generation=generation,
+            )
+        elif capture_result.audio_path is not None:
+            capture_result.audio_path.unlink(missing_ok=True)
+
+    def on_ptt_release(self, data=None) -> None:
+        """Stop PTT recording when the button is released after a hold."""
+
+        if self._ptt_active and self._active_capture_cancel is not None:
+            self._ptt_active = False
+            self._active_capture_cancel.set()
+
+    # ------------------------------------------------------------------
+    # Auto-return helpers
+    # ------------------------------------------------------------------
+
+    def _schedule_auto_return(self) -> None:
+        """Pop back after 2 seconds in quick-command mode."""
+
+        if not self._quick_command:
+            return
+        self._cancel_auto_return()
+        self._auto_return_timer = threading.Timer(2.0, self._auto_pop)
+        self._auto_return_timer.daemon = True
+        self._auto_return_timer.start()
+
+    def _auto_pop(self) -> None:
+        """Return to the previous screen via the action scheduler."""
+
+        self._auto_return_timer = None
+        scheduler = (
+            getattr(self.screen_manager, "action_scheduler", None)
+            if self.screen_manager is not None
+            else None
+        )
+        if scheduler is not None:
+            scheduler(lambda: self.request_route("back"))
+        else:
+            self.request_route("back")
+
+    def _cancel_auto_return(self) -> None:
+        """Cancel any pending auto-return timer."""
+
+        if self._auto_return_timer is not None:
+            self._auto_return_timer.cancel()
+            self._auto_return_timer = None
 
     # ------------------------------------------------------------------
     # Command handlers

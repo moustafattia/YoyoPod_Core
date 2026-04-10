@@ -560,3 +560,77 @@ def test_ask_screen_ignores_stale_results_after_back() -> None:
 
     assert voip_manager.make_calls == []
     assert context.voice.last_transcript == ""
+
+
+def test_ask_screen_quick_command_skips_idle() -> None:
+    """Quick-command mode should skip idle and go straight to listening."""
+    context = AppContext()
+    service = _FakeVoiceService("volume up")
+    ask = AskScreen(
+        display=object(),
+        context=context,
+        voice_settings_provider=lambda: VoiceSettings(),
+        voice_service_factory=lambda _s: service,
+    )
+    ask.set_quick_command(True)
+    ask.enter()
+    assert ask._state == "listening"
+    assert ask._ptt_active is True
+    assert ask._quick_command is True
+
+
+def test_ask_screen_ptt_release_stops_capture() -> None:
+    """PTT_RELEASE should stop the capture."""
+    context = AppContext()
+    service = _FakeVoiceService("volume up")
+    ask = AskScreen(
+        display=object(),
+        context=context,
+        volume_up_action=lambda step: 55,
+        voice_settings_provider=lambda: VoiceSettings(),
+        voice_service_factory=lambda _s: service,
+    )
+    ask.set_quick_command(True)
+    ask.enter()
+    ask.on_ptt_release({"after_hold": True})
+    assert ask._ptt_active is False
+
+
+def test_ask_screen_auto_return_only_in_quick_command() -> None:
+    """Auto-return should only schedule in quick-command mode."""
+    ask = AskScreen(display=object(), context=AppContext())
+    ask._quick_command = False
+    ask._schedule_auto_return()
+    assert ask._auto_return_timer is None
+
+    ask._quick_command = True
+    ask._schedule_auto_return()
+    assert ask._auto_return_timer is not None
+    ask._cancel_auto_return()
+
+
+def test_ask_screen_exit_clears_quick_command() -> None:
+    """Exiting the screen should reset the quick-command flag."""
+    ask = AskScreen(display=object(), context=AppContext())
+    ask._quick_command = True
+    ask.exit()
+    assert ask._quick_command is False
+
+
+def test_hub_back_triggers_hold_ask_route(display: Display) -> None:
+    """Holding on the Hub should push Ask via the hold_ask route."""
+    context = AppContext()
+    input_manager = InputManager()
+    screen_manager = ScreenManager(display, input_manager)
+
+    hub = HubScreen(display, context)
+    ask = AskScreen(display=display, context=context)
+
+    screen_manager.register_screen("hub", hub)
+    screen_manager.register_screen("ask", ask)
+    screen_manager.replace_screen("hub")
+
+    input_manager.simulate_action(InputAction.BACK)
+
+    assert screen_manager.current_screen is ask
+    assert ask._quick_command is True
