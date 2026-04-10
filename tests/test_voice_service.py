@@ -440,3 +440,25 @@ def test_vosk_backend_requires_module_and_model(tmp_path, monkeypatch) -> None:
         backend.is_available(VoiceSettings(vosk_model_path=str(tmp_path / "missing-model")))
         is False
     )
+
+
+def test_vosk_backend_keeps_model_cache_per_instance() -> None:
+    """One backend instance should not leak cached models into another."""
+
+    first = VoskSpeechToTextBackend()
+    second = VoskSpeechToTextBackend()
+
+    first._model_cache["/tmp/model-a"] = object()
+
+    assert second._model_cache == {}
+
+
+def test_vosk_backend_can_clear_cached_models() -> None:
+    """The backend should offer an explicit cache reset hook."""
+
+    backend = VoskSpeechToTextBackend()
+    backend._model_cache["/tmp/model-a"] = object()
+
+    backend.clear_cache()
+
+    assert backend._model_cache == {}

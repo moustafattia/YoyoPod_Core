@@ -5,7 +5,7 @@ from __future__ import annotations
 import math
 import threading
 import wave
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 from typing import TYPE_CHECKING, Callable, Optional
@@ -528,9 +528,11 @@ class VoiceCommandsScreen(Screen):
 
         if self.voice_settings_provider is not None:
             return self.voice_settings_provider()
+        defaults = self._default_voice_settings()
         if self.context is not None:
             voice = self.context.voice
-            return VoiceSettings(
+            return replace(
+                defaults,
                 commands_enabled=voice.commands_enabled,
                 ai_requests_enabled=voice.ai_requests_enabled,
                 screen_read_enabled=voice.screen_read_enabled,
@@ -538,13 +540,50 @@ class VoiceCommandsScreen(Screen):
                 tts_enabled=voice.tts_enabled,
                 mic_muted=voice.mic_muted,
                 output_volume=voice.output_volume,
-                capture_device_id=(
-                    self.config_manager.get_capture_device_id()
-                    if self.config_manager is not None
-                    else None
-                ),
             )
-        return VoiceSettings()
+        return defaults
+
+    def _default_voice_settings(self) -> VoiceSettings:
+        """Return configured voice defaults when a screen-level provider is absent."""
+
+        capture_device_id = None
+        if self.config_manager is not None:
+            capture_device_id = self.config_manager.get_capture_device_id()
+
+        defaults = VoiceSettings(capture_device_id=capture_device_id)
+        if self.config_manager is None:
+            return defaults
+
+        get_app_settings = getattr(self.config_manager, "get_app_settings", None)
+        if not callable(get_app_settings):
+            return defaults
+
+        app_settings = get_app_settings()
+        voice_cfg = getattr(app_settings, "voice", None)
+        if voice_cfg is None:
+            return defaults
+
+        get_default_output_volume = getattr(self.config_manager, "get_default_output_volume", None)
+        output_volume = defaults.output_volume
+        if callable(get_default_output_volume):
+            output_volume = int(get_default_output_volume())
+
+        return VoiceSettings(
+            commands_enabled=voice_cfg.commands_enabled,
+            ai_requests_enabled=voice_cfg.ai_requests_enabled,
+            screen_read_enabled=voice_cfg.screen_read_enabled,
+            stt_enabled=voice_cfg.stt_enabled,
+            tts_enabled=voice_cfg.tts_enabled,
+            output_volume=output_volume,
+            stt_backend=voice_cfg.stt_backend,
+            tts_backend=voice_cfg.tts_backend,
+            vosk_model_path=voice_cfg.vosk_model_path,
+            capture_device_id=capture_device_id,
+            sample_rate_hz=voice_cfg.sample_rate_hz,
+            record_seconds=voice_cfg.record_seconds,
+            tts_rate_wpm=voice_cfg.tts_rate_wpm,
+            tts_voice=voice_cfg.tts_voice,
+        )
 
     def _handle_volume_change(self, delta: int) -> None:
         """Apply a local volume adjustment and announce the result."""

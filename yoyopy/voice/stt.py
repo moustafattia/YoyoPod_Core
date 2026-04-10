@@ -36,7 +36,8 @@ class NullSpeechToTextBackend:
 class VoskSpeechToTextBackend:
     """Offline Vosk-based STT backend."""
 
-    _model_cache: dict[str, object] = {}
+    def __init__(self) -> None:
+        self._model_cache: dict[str, object] = {}
 
     def is_available(self, settings: VoiceSettings) -> bool:
         if not settings.stt_enabled or settings.stt_backend != "vosk":
@@ -78,6 +79,11 @@ class VoskSpeechToTextBackend:
         if model_path not in self._model_cache:
             self._model_cache[model_path] = Model(model_path)
         return self._model_cache[model_path]
+
+    def clear_cache(self) -> None:
+        """Drop any cached models held by this backend instance."""
+
+        self._model_cache.clear()
 
     @staticmethod
     def _resolve_model_path(settings: VoiceSettings) -> Path:

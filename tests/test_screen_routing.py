@@ -5,6 +5,7 @@ from __future__ import annotations
 
 from pathlib import Path
 from tempfile import NamedTemporaryFile
+from types import SimpleNamespace
 from typing import Callable
 
 import pytest
@@ -284,6 +285,27 @@ class _FakeConfigManager:
     def get_capture_device_id(self) -> str | None:
         return None
 
+    def get_app_settings(self):
+        return SimpleNamespace(
+            voice=SimpleNamespace(
+                commands_enabled=False,
+                ai_requests_enabled=False,
+                screen_read_enabled=True,
+                stt_enabled=True,
+                tts_enabled=False,
+                stt_backend="dummy-stt",
+                tts_backend="dummy-tts",
+                vosk_model_path="models/custom-model",
+                sample_rate_hz=22050,
+                record_seconds=6,
+                tts_rate_wpm=180,
+                tts_voice="en-us",
+            )
+        )
+
+    def get_default_output_volume(self) -> int:
+        return 61
+
 
 class _FakeVoipManager:
     def __init__(self) -> None:
@@ -477,6 +499,36 @@ def test_voice_commands_screen_select_in_simulation_still_uses_local_capture() -
     assert context.voice.last_transcript == "call mom"
     assert service.last_audio_path is not None
     assert not service.last_audio_path.exists()
+
+
+def test_voice_commands_screen_fallback_settings_keep_configured_voice_defaults() -> None:
+    """Missing providers should still inherit configured backend/model voice settings."""
+
+    context = AppContext()
+    context.configure_voice(commands_enabled=True, ai_requests_enabled=True, screen_read_enabled=True)
+    context.set_mic_muted(True)
+    context.set_volume(77)
+    screen = VoiceCommandsScreen(
+        display=object(),
+        context=context,
+        config_manager=_FakeConfigManager([]),
+    )
+
+    settings = screen._voice_settings()
+
+    assert settings.commands_enabled is True
+    assert settings.ai_requests_enabled is True
+    assert settings.screen_read_enabled is True
+    assert settings.stt_backend == "dummy-stt"
+    assert settings.tts_backend == "dummy-tts"
+    assert settings.vosk_model_path == "models/custom-model"
+    assert settings.capture_device_id is None
+    assert settings.sample_rate_hz == 22050
+    assert settings.record_seconds == 6
+    assert settings.tts_rate_wpm == 180
+    assert settings.tts_voice == "en-us"
+    assert settings.output_volume == 77
+    assert settings.mic_muted is True
 
 
 def test_voice_commands_screen_ignores_stale_results_after_back() -> None:
