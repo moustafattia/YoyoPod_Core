@@ -20,9 +20,9 @@ This covers the pure-Python and simulation-mode regression suite.
 Run this on the target Raspberry Pi after pulling the latest branch:
 
 ```bash
-uv run python scripts/pi_smoke.py
-uv run python scripts/pi_smoke.py --with-power --with-rtc
-uv run python scripts/pi_smoke.py --with-lvgl-soak
+yoyoctl pi smoke
+yoyoctl pi smoke --with-power --with-rtc
+yoyoctl pi lvgl soak
 ```
 
 What it checks:
@@ -42,8 +42,8 @@ Expected result:
 Add music-backend and SIP checks when the services are expected to be available:
 
 ```bash
-uv run python scripts/pi_smoke.py --with-music --with-voip
-uv run python scripts/pi_smoke.py --with-power --with-rtc --with-music --with-voip
+yoyoctl pi smoke --with-music --with-voip
+yoyoctl pi smoke --with-power --with-rtc --with-music --with-voip
 ```
 
 What it checks:
@@ -76,7 +76,7 @@ Verify:
 ### VoIP registration drill
 
 ```bash
-uv run python scripts/check_voip_registration.py
+yoyoctl pi voip check
 ```
 
 Use this when you want a registration-only pass with detailed logs.
@@ -84,7 +84,7 @@ Use this when you want a registration-only pass with detailed logs.
 ### Incoming call debug drill
 
 ```bash
-uv run python scripts/debug_incoming_call.py
+yoyoctl pi voip debug
 ```
 
 Use this when SIP registration works but incoming-call parsing or callback delivery looks wrong.
@@ -92,8 +92,8 @@ Use this when SIP registration works but incoming-call parsing or callback deliv
 ### Whisplay display-only debug
 
 ```bash
-uv run python scripts/lvgl_build.py
-uv run python scripts/lvgl_probe.py --scene carousel --duration-seconds 10
+yoyoctl build lvgl
+yoyoctl pi lvgl probe --scene carousel --duration-seconds 10
 ```
 
 Use this only on a Pi with the Whisplay hardware attached. It validates the display/LVGL path without starting the full app and is not part of CI.
@@ -101,8 +101,8 @@ Use this only on a Pi with the Whisplay hardware attached. It validates the disp
 ### Whisplay gesture tuning
 
 ```bash
-uv run python scripts/whisplay_tune.py
-uv run python scripts/whisplay_tune.py --double-tap-ms 240 --long-hold-ms 900
+yoyoctl pi tune
+yoyoctl pi tune --double-tap-ms 240 --long-hold-ms 900
 ```
 
 Use this when button feel needs tuning on the real device. It listens for the semantic Whisplay gestures, prints every detected `advance` / `select` / `back` event with timing detail, and can apply temporary timing overrides without editing `config/yoyopod_config.yaml`.
@@ -118,8 +118,8 @@ Useful flags:
 ### LVGL Whisplay soak
 
 ```bash
-uv run python scripts/lvgl_soak.py
-uv run python scripts/lvgl_soak.py --cycles 3 --hold-seconds 0.3
+yoyoctl pi lvgl soak
+yoyoctl pi lvgl soak --cycles 3 --hold-seconds 0.3
 ```
 
 Use this when Whisplay rendering feels fast but you still want a hardware pass for:
@@ -131,8 +131,8 @@ Use this when Whisplay rendering feels fast but you still want a hardware pass f
 ### PiSugar RTC drill
 
 ```bash
-uv run python scripts/pisugar_rtc.py status
-uv run python scripts/pisugar_rtc.py sync-to-rtc
+yoyoctl pi rtc status
+yoyoctl pi rtc sync-to-rtc
 ```
 
 Use this when you want a focused RTC read/sync pass without running the full app.
@@ -140,7 +140,7 @@ Use this when you want a focused RTC read/sync pass without running the full app
 ### PiSugar power drill
 
 ```bash
-uv run python scripts/pisugar_power.py
+yoyoctl pi power
 ```
 
 Use this when you want a focused battery, charging, RTC, shutdown-threshold, and watchdog readout without the full smoke flow.
@@ -149,9 +149,9 @@ Use this when you want a focused battery, charging, RTC, shutdown-threshold, and
 
 1. `uv sync --extra dev`
 2. `uv run pytest -q`
-3. `uv run python scripts/pi_smoke.py`
-4. `uv run python scripts/pi_smoke.py --with-music --with-voip`
-5. `uv run python scripts/pi_smoke.py --with-lvgl-soak`
+3. `yoyoctl pi smoke`
+4. `yoyoctl pi smoke --with-music --with-voip`
+5. `yoyoctl pi lvgl soak`
 6. `uv run python yoyopod.py`
 
 ## Failure Triage

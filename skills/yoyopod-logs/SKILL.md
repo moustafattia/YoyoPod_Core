@@ -4,24 +4,24 @@ description: Tail application logs from Raspberry Pi
 disable-model-invocation: true
 allowed-tools:
   - Read
-  - Bash(uv run python scripts/pi_remote.py:*)
+  - Bash(yoyoctl remote:*)
 argument-hint: "[line_count] [--errors] [--filter <subsystem>] [--follow]"
 ---
 
 ## Config
 
-Use `deploy/pi-deploy.yaml` as the shared deploy contract and `deploy/pi-deploy.local.yaml` for machine-specific overrides such as host, SSH user, project dir, and branch. `scripts/pi_remote.py` merges them directly, and `uv run python scripts/pi_remote.py config edit` is the preferred way to create or update the local override.
+Use `deploy/pi-deploy.yaml` as the shared deploy contract and `deploy/pi-deploy.local.yaml` for machine-specific overrides such as host, SSH user, project dir, and branch. `yoyoctl remote` merges them directly, and `yoyoctl remote config edit` is the preferred way to create or update the local override.
 
-If the file does not exist yet, run `uv run python scripts/pi_remote.py config edit` first. That command creates `deploy/pi-deploy.local.yaml` automatically before opening it.
+If the file does not exist yet, run `yoyoctl remote config edit` first. That command creates `deploy/pi-deploy.local.yaml` automatically before opening it.
 
 ## Argument Parsing
 
 Parse the arguments string provided after `/yoyopod-logs`:
 
 - **Line count:** If a bare number is present (for example `/yoyopod-logs 100`), map it to `--lines <count>`. Default: 100.
-- **--errors flag:** Pass through to `scripts/pi_remote.py logs --errors`.
-- **--filter value:** Pass through to `scripts/pi_remote.py logs --filter <value>`.
-- **--follow flag:** Pass through to `scripts/pi_remote.py logs --follow`.
+- **--errors flag:** Pass through to `yoyoctl remote logs --errors`.
+- **--filter value:** Pass through to `yoyoctl remote logs --filter <value>`.
+- **--follow flag:** Pass through to `yoyoctl remote logs --follow`.
 
 Multiple flags can be combined.
 
@@ -29,7 +29,7 @@ Multiple flags can be combined.
 
 1. **Build the helper command.** Use:
    ```bash
-   uv run python scripts/pi_remote.py logs ...
+   yoyoctl remote logs ...
    ```
    Add `--lines`, `--errors`, `--filter`, and `--follow` based on the parsed arguments.
 

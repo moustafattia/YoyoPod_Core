@@ -4,20 +4,20 @@ description: Health check for Raspberry Pi - connectivity, processes, memory, re
 disable-model-invocation: true
 allowed-tools:
   - Read
-  - Bash(uv run python scripts/pi_remote.py:*)
+  - Bash(yoyoctl remote:*)
 ---
 
 ## Config
 
-Use `deploy/pi-deploy.yaml` as the shared deploy contract and `deploy/pi-deploy.local.yaml` for machine-specific overrides such as host, SSH user, project dir, and branch. `scripts/pi_remote.py` merges them directly, and `uv run python scripts/pi_remote.py config edit` is the preferred way to create or update the local override.
+Use `deploy/pi-deploy.yaml` as the shared deploy contract and `deploy/pi-deploy.local.yaml` for machine-specific overrides such as host, SSH user, project dir, and branch. `yoyoctl remote` merges them directly, and `yoyoctl remote config edit` is the preferred way to create or update the local override.
 
-If the file does not exist yet, run `uv run python scripts/pi_remote.py config edit` first. That command creates `deploy/pi-deploy.local.yaml` automatically before opening it.
+If the file does not exist yet, run `yoyoctl remote config edit` first. That command creates `deploy/pi-deploy.local.yaml` automatically before opening it.
 
 ## Steps
 
 1. **Run the helper command.**
    ```bash
-   uv run python scripts/pi_remote.py status
+   yoyoctl remote status
    ```
 
 2. **Present the result.** Prefer a compact summary with:

@@ -21,7 +21,7 @@ ssh rpi-zero "killall -9 python"
 
 ## rpi-deploy Plugin
 
-The `rpi-deploy` Claude Code plugin automates the deploy cycle with slash commands. In this repo, prefer `scripts/pi_remote.py` as the executable implementation for these workflows and keep the skills as thin wrappers around it.
+The `rpi-deploy` Claude Code plugin automates the deploy cycle with slash commands. In this repo, prefer `yoyoctl remote` as the executable implementation for these workflows and keep the skills as thin wrappers around it.
 
 | Command | Purpose |
 |---|---|
@@ -35,8 +35,8 @@ The `rpi-deploy` Claude Code plugin automates the deploy cycle with slash comman
 Config: `deploy/pi-deploy.yaml` plus optional `deploy/pi-deploy.local.yaml` for machine-specific host/user overrides. Preferred edit flow:
 
 ```bash
-uv run python scripts/pi_remote.py config show
-uv run python scripts/pi_remote.py config edit
+yoyoctl remote config show
+yoyoctl remote config edit
 ```
 
 Plugin repo: https://github.com/moustafattia/rpi-deploy

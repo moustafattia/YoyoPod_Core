@@ -31,7 +31,7 @@ Workflow instructions for deploying and debugging on Raspberry Pi are in `skills
 | yoyopod-status | `skills/yoyopod-status/SKILL.md` | Health check dashboard |
 | yoyopod-screenshot | `skills/yoyopod-screenshot/SKILL.md` | Capture display (shadow buffer or LVGL readback) |
 
-When asked to deploy, sync, restart, check status, view logs, or take a screenshot on the Pi, read the matching file from `skills/` and follow its Steps section. The shared config contract lives in `deploy/pi-deploy.yaml`, machine-specific overrides belong in `deploy/pi-deploy.local.yaml`, and `uv run python scripts/pi_remote.py config edit` is the preferred way to create or update the local override. All skills should prefer `scripts/pi_remote.py` over duplicating SSH workflow steps.
+When asked to deploy, sync, restart, check status, view logs, or take a screenshot on the Pi, read the matching file from `skills/` and follow its Steps section. The shared config contract lives in `deploy/pi-deploy.yaml`, machine-specific overrides belong in `deploy/pi-deploy.local.yaml`, and `yoyoctl remote config edit` is the preferred way to create or update the local override. All skills should prefer `yoyoctl remote` over duplicating SSH workflow steps.
 
 ---
 
@@ -57,7 +57,7 @@ When asked to deploy, sync, restart, check status, view logs, or take a screensh
 - Production local music now runs through the app-managed mpv backend under `yoyopy/audio/music/`.
 - Production VoIP now runs through Liblinphone under `yoyopy/voip/liblinphone_binding/` and `yoyopy/voip/backend.py`.
 - CI validates the Python test suite with `uv sync --extra dev` and `uv run pytest -q`.
-- Raspberry Pi validation has a defined path through `scripts/pi_smoke.py` and `scripts/pi_remote.py`.
+- Raspberry Pi validation has a defined path through `yoyoctl pi smoke` and `yoyoctl remote`.
 
 This file should reflect the repo as it exists on `main`. Older milestone notes are useful for history, but they are not the source of truth anymore.
 
@@ -177,8 +177,7 @@ Key design points:
 - `yoyopy/power/watchdog.py` - PiSugar software watchdog controller over `i2cget`/`i2cset`
 - `yoyopy/power/manager.py` - app-facing power facade
 - `yoyopy/power/policies.py` - low-battery safety policy
-- `scripts/pisugar_power.py` - battery, charging, shutdown, and watchdog helper
-- `scripts/pisugar_rtc.py` - RTC status/sync/alarm helper
+- `yoyopy/cli/pi/power.py` - battery, charging, shutdown, watchdog, and RTC helpers (`yoyoctl pi power`, `yoyoctl pi rtc`)
 - `deploy/systemd/yoyopod@.service` - production boot-time service unit
 
 ### UI
@@ -197,6 +196,14 @@ Key design points:
 - `yoyopy/ui/screens/voip/talk_contact.py` - selected-contact action screen with `Call` and `Voice Note`
 - `yoyopy/ui/screens/voip/call_history.py` - Talk recents and missed-call screen
 - `yoyopy/ui/screens/voip/voice_note.py` - voice-note record/review/send flow for the Talk experience
+
+### CLI (dev-only)
+
+- `yoyopy/cli/__init__.py` - root yoyoctl app and group wiring
+- `yoyopy/cli/common.py` - shared logging and config helpers
+- `yoyopy/cli/build.py` - native extension build commands
+- `yoyopy/cli/pi/` - on-Pi hardware and diagnostic commands
+- `yoyopy/cli/remote/` - SSH-based remote Pi operations
 
 ### Configuration
 
@@ -248,7 +255,7 @@ uv sync --extra dev
 ### Validate Locally
 
 ```bash
-python -m compileall yoyopy tests demos scripts
+python -m compileall yoyopy tests demos
 uv run pytest -q
 ```
 
@@ -274,21 +281,21 @@ python demos/demo_runtime_state.py --simulate
 Preferred remote helper:
 
 ```bash
-uv run python scripts/pi_remote.py status --host rpi-zero
-uv run python scripts/pi_remote.py preflight --host rpi-zero --with-music --with-voip --with-lvgl-soak
-uv run python scripts/pi_remote.py sync --host rpi-zero --branch main
-uv run python scripts/pi_remote.py smoke --host rpi-zero --with-music --with-voip --with-lvgl-soak
-uv run python scripts/pi_remote.py lvgl-soak --host rpi-zero --cycles 2
-uv run python scripts/pi_remote.py power --host rpi-zero
-uv run python scripts/pi_remote.py service install --host rpi-zero
+yoyoctl remote status --host rpi-zero
+yoyoctl remote preflight --host rpi-zero --with-music --with-voip --with-lvgl-soak
+yoyoctl remote sync --host rpi-zero --branch main
+yoyoctl remote smoke --host rpi-zero --with-music --with-voip --with-lvgl-soak
+yoyoctl remote lvgl-soak --host rpi-zero --cycles 2
+yoyoctl remote power --host rpi-zero
+yoyoctl remote service install --host rpi-zero
 ```
 
 Direct smoke helper on the Pi:
 
 ```bash
-uv run python scripts/pi_smoke.py
-uv run python scripts/pi_smoke.py --with-music --with-voip
-uv run python scripts/pi_smoke.py --with-lvgl-soak
+yoyoctl pi smoke
+yoyoctl pi smoke --with-music --with-voip
+yoyoctl pi lvgl soak
 ```
 
 If the Pi seems to keep old Python state after a pull, restart the running app process before retesting.
@@ -297,11 +304,11 @@ If the Pi seems to keep old Python state after a pull, restart the running app p
 
 ## Debug Entry Points
 
-Manual diagnostics live in `scripts/`, not `tests/`:
+Manual diagnostics are available via `yoyoctl pi voip`:
 
 ```bash
-uv run python scripts/check_voip_registration.py
-uv run python scripts/debug_incoming_call.py
+yoyoctl pi voip check
+yoyoctl pi voip debug
 ```
 
 Helpful remote checks:
@@ -334,6 +341,7 @@ High-signal tests:
 - `tests/test_voip_backend.py`
 - `tests/test_config_models.py`
 - `tests/test_pi_remote.py`
+- `tests/test_cli.py`
 
 CI-safe tests are in `tests/`. Hardware diagnostics were intentionally moved out of the test suite.
 
@@ -350,8 +358,20 @@ These old names are no longer correct:
 - `state_machine.py` -> removed; use `yoyopy/fsm.py` and `yoyopy/coordinators/runtime.py`
 - `demo_yoyopod_phase1.py` -> removed
 - `tests/test_phase1_state_machine.py` -> replaced by `tests/test_fsm_runtime.py`
-- `tests/test_voip_registration.py` -> moved to `scripts/check_voip_registration.py`
-- `tests/test_incoming_call_debug.py` -> moved to `scripts/debug_incoming_call.py`
+- `tests/test_voip_registration.py` -> use `yoyoctl pi voip check`
+- `tests/test_incoming_call_debug.py` -> use `yoyoctl pi voip debug`
+- `scripts/pi_remote.py` -> use `yoyoctl remote`
+- `scripts/pi_smoke.py` -> use `yoyoctl pi smoke`
+- `scripts/check_voip_registration.py` -> use `yoyoctl pi voip check`
+- `scripts/debug_incoming_call.py` -> use `yoyoctl pi voip debug`
+- `scripts/pisugar_power.py` -> use `yoyoctl pi power`
+- `scripts/pisugar_rtc.py` -> use `yoyoctl pi rtc`
+- `scripts/lvgl_build.py` -> use `yoyoctl build lvgl`
+- `scripts/liblinphone_build.py` -> use `yoyoctl build liblinphone`
+- `scripts/lvgl_soak.py` -> use `yoyoctl pi lvgl soak`
+- `scripts/lvgl_probe.py` -> use `yoyoctl pi lvgl probe`
+- `scripts/whisplay_tune.py` -> use `yoyoctl pi tune`
+- `scripts/whisplay_gallery.py` -> use `yoyoctl pi gallery`
 
 If an old doc mentions combined VoIP/music states as the implementation model, treat it as historical context only.
 
