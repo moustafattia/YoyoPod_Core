@@ -28,3 +28,17 @@ def test_remote_help():
 def test_build_help():
     result = runner.invoke(app, ["build", "--help"])
     assert result.exit_code == 0
+
+
+def test_build_lvgl_help():
+    result = runner.invoke(app, ["build", "lvgl", "--help"])
+    assert result.exit_code == 0
+    assert "--source-dir" in result.output
+    assert "--build-dir" in result.output
+    assert "--skip-fetch" in result.output
+
+
+def test_build_liblinphone_help():
+    result = runner.invoke(app, ["build", "liblinphone", "--help"])
+    assert result.exit_code == 0
+    assert "--build-dir" in result.output

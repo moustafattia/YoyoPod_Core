@@ -19,7 +19,7 @@ remote_app = typer.Typer(name="remote", help="Commands that SSH to the Raspberry
 app.add_typer(remote_app)
 
 # -- build group (native extension builds) ----------------------------------
-build_app = typer.Typer(name="build", help="Build native C extensions.", no_args_is_help=True)
+from yoyopy.cli.build import build_app  # noqa: E402
 app.add_typer(build_app)
 
 
