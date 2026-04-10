@@ -1,24 +1,22 @@
-#!/usr/bin/env python3
-"""Interactive Whisplay gesture-tuning helper for Raspberry Pi hardware."""
+"""yoyopy/cli/pi/tune.py — Interactive Whisplay gesture-tuning command."""
 
 from __future__ import annotations
 
-import argparse
-import sys
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Annotated, Any, Optional
 
-from loguru import logger
+import typer
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
-if str(REPO_ROOT) not in sys.path:
-    sys.path.insert(0, str(REPO_ROOT))
+from yoyopy.cli.common import configure_logging, resolve_config_dir
 
-from yoyopy.config import YoyoPodConfig, config_to_dict, load_config_model_from_yaml
-from yoyopy.ui.display import Display
-from yoyopy.ui.input import InputAction, InteractionProfile, get_input_manager
+tune_app = typer.Typer(
+    name="tune",
+    help="Interactive Whisplay gesture-tuning helper.",
+    invoke_without_command=True,
+    no_args_is_help=False,
+)
 
 
 @dataclass
@@ -31,18 +29,10 @@ class GestureEvent:
     duration_ms: int | None = None
 
 
-def configure_logging(verbose: bool) -> None:
-    """Configure readable CLI logging."""
-    logger.remove()
-    logger.add(
-        sys.stderr,
-        format="<green>{time:HH:mm:ss}</green> | <level>{level: <8}</level> | <level>{message}</level>",
-        level="DEBUG" if verbose else "INFO",
-    )
-
-
-def load_app_config(config_dir: Path) -> dict[str, Any]:
+def _load_app_config(config_dir: Path) -> dict[str, Any]:
     """Load the current app config as a plain dict."""
+    from yoyopy.config import YoyoPodConfig, config_to_dict, load_config_model_from_yaml
+
     config_file = config_dir / "yoyopod_config.yaml"
     return config_to_dict(load_config_model_from_yaml(YoyoPodConfig, config_file))
 
@@ -69,56 +59,8 @@ def apply_timing_overrides(
     return merged
 
 
-def build_parser() -> argparse.ArgumentParser:
-    """Create the command-line parser."""
-    parser = argparse.ArgumentParser(
-        description=(
-            "Run an interactive Whisplay gesture monitor with optional timing "
-            "overrides, so button tuning can be validated on-device."
-        )
-    )
-    parser.add_argument(
-        "--config-dir",
-        default="config",
-        help="Configuration directory to use (default: config)",
-    )
-    parser.add_argument(
-        "--debounce-ms",
-        type=int,
-        help="Override Whisplay debounce timing in milliseconds for this run",
-    )
-    parser.add_argument(
-        "--double-tap-ms",
-        type=int,
-        help="Override double-tap timing in milliseconds for this run",
-    )
-    parser.add_argument(
-        "--long-hold-ms",
-        type=int,
-        help="Override long-hold timing in milliseconds for this run",
-    )
-    parser.add_argument(
-        "--duration-seconds",
-        type=float,
-        default=30.0,
-        help="How long to monitor gestures before exiting (default: 30)",
-    )
-    parser.add_argument(
-        "--hardware",
-        default="whisplay",
-        help="Display hardware to open (default: whisplay)",
-    )
-    parser.add_argument(
-        "--no-display",
-        action="store_true",
-        help="Skip drawing tuning hints on the display and log to the terminal only",
-    )
-    parser.add_argument(
-        "--verbose",
-        action="store_true",
-        help="Enable DEBUG logging",
-    )
-    return parser
+# Private alias for internal use
+_apply_timing_overrides = apply_timing_overrides
 
 
 def summarize_timings(app_config: dict[str, Any]) -> str:
@@ -134,8 +76,14 @@ def summarize_timings(app_config: dict[str, Any]) -> str:
     )
 
 
-def record_event(events: list[GestureEvent], start_time: float, action: InputAction, data: Any) -> None:
+# Private alias for internal use
+_summarize_timings = summarize_timings
+
+
+def _record_event(events: list[GestureEvent], start_time: float, action: object, data: Any) -> None:
     """Store one semantic gesture and log it for the operator."""
+    from loguru import logger
+
     payload = data if isinstance(data, dict) else {}
     duration_ms = None
     duration = payload.get("duration")
@@ -143,7 +91,7 @@ def record_event(events: list[GestureEvent], start_time: float, action: InputAct
         duration_ms = int(float(duration) * 1000)
 
     event = GestureEvent(
-        action=action.value,
+        action=action.value,  # type: ignore[union-attr]
         method=str(payload.get("method", "unknown")),
         at_seconds=time.monotonic() - start_time,
         duration_ms=duration_ms,
@@ -167,71 +115,84 @@ def record_event(events: list[GestureEvent], start_time: float, action: InputAct
         )
 
 
-def render_status_screen(
-    display: Display,
+def _render_status_screen(
+    display: object,
     timing_summary: str,
     events: list[GestureEvent],
     ends_at: float,
 ) -> None:
     """Render the current tuning status on the Whisplay display."""
+    from yoyopy.ui.display import Display
+
+    d: Display = display  # type: ignore[assignment]
     now = time.time()
     countdown = max(0, int(ends_at - now))
     last_event = events[-1] if events else None
 
-    display.clear(display.COLOR_BLACK)
-    display.text("Whisplay Tune", 18, 20, color=display.COLOR_WHITE, font_size=18)
-    display.text(timing_summary, 18, 48, color=display.COLOR_GRAY, font_size=11)
-    display.text("Tap next", 18, 86, color=display.COLOR_CYAN, font_size=16)
-    display.text("Double select", 18, 112, color=display.COLOR_WHITE, font_size=16)
-    display.text("Hold back", 18, 138, color=display.COLOR_YELLOW, font_size=16)
-    display.text(f"Left: {countdown}s", 18, 176, color=display.COLOR_GRAY, font_size=12)
+    d.clear(d.COLOR_BLACK)
+    d.text("Whisplay Tune", 18, 20, color=d.COLOR_WHITE, font_size=18)
+    d.text(timing_summary, 18, 48, color=d.COLOR_GRAY, font_size=11)
+    d.text("Tap next", 18, 86, color=d.COLOR_CYAN, font_size=16)
+    d.text("Double select", 18, 112, color=d.COLOR_WHITE, font_size=16)
+    d.text("Hold back", 18, 138, color=d.COLOR_YELLOW, font_size=16)
+    d.text(f"Left: {countdown}s", 18, 176, color=d.COLOR_GRAY, font_size=12)
 
     if last_event is None:
-        display.text("Waiting for input", 18, 206, color=display.COLOR_GRAY, font_size=13)
+        d.text("Waiting for input", 18, 206, color=d.COLOR_GRAY, font_size=13)
     else:
-        display.text(
+        d.text(
             f"Last: {last_event.action.upper()}",
             18,
             206,
-            color=display.COLOR_GREEN,
+            color=d.COLOR_GREEN,
             font_size=13,
         )
         detail = last_event.method
         if last_event.duration_ms is not None:
             detail = f"{detail} {last_event.duration_ms}ms"
-        display.text(detail, 18, 228, color=display.COLOR_GRAY, font_size=11)
+        d.text(detail, 18, 228, color=d.COLOR_GRAY, font_size=11)
 
-    display.update()
+    d.update()
 
 
-def main() -> int:
-    """Run the interactive tuning helper."""
-    parser = build_parser()
-    args = parser.parse_args()
-    configure_logging(args.verbose)
+@tune_app.callback(invoke_without_command=True)
+def tune(
+    config_dir: Annotated[str, typer.Option("--config-dir", help="Configuration directory to use.")] = "config",
+    debounce_ms: Annotated[Optional[int], typer.Option("--debounce-ms", help="Override Whisplay debounce timing in milliseconds.")] = None,
+    double_tap_ms: Annotated[Optional[int], typer.Option("--double-tap-ms", help="Override double-tap timing in milliseconds.")] = None,
+    long_hold_ms: Annotated[Optional[int], typer.Option("--long-hold-ms", help="Override long-hold timing in milliseconds.")] = None,
+    duration_seconds: Annotated[float, typer.Option("--duration-seconds", help="How long to monitor gestures before exiting.")] = 30.0,
+    hardware: Annotated[str, typer.Option("--hardware", help="Display hardware to open.")] = "whisplay",
+    no_display: Annotated[bool, typer.Option("--no-display", help="Skip drawing tuning hints on the display.")] = False,
+    verbose: Annotated[bool, typer.Option("--verbose", help="Enable DEBUG logging.")] = False,
+) -> None:
+    """Run an interactive Whisplay gesture monitor with optional timing overrides."""
+    from loguru import logger
 
-    config_dir = Path(args.config_dir)
-    if not config_dir.is_absolute():
-        config_dir = REPO_ROOT / config_dir
+    from yoyopy.ui.display import Display
+    from yoyopy.ui.input import InputAction, InteractionProfile, get_input_manager
 
-    app_config = load_app_config(config_dir)
-    app_config = apply_timing_overrides(
+    configure_logging(verbose)
+    config_path = resolve_config_dir(config_dir)
+
+    app_config = _load_app_config(config_path)
+    app_config = _apply_timing_overrides(
         app_config,
-        debounce_ms=args.debounce_ms,
-        double_tap_ms=args.double_tap_ms,
-        long_hold_ms=args.long_hold_ms,
+        debounce_ms=debounce_ms,
+        double_tap_ms=double_tap_ms,
+        long_hold_ms=long_hold_ms,
     )
-    timing_summary = summarize_timings(app_config)
+    timing_summary = _summarize_timings(app_config)
     logger.info("Whisplay tuning session using {}", timing_summary)
 
     display = None
     input_manager = None
     events: list[GestureEvent] = []
     start_time = time.monotonic()
-    ends_at = time.time() + args.duration_seconds
+    ends_at = time.time() + duration_seconds
 
     try:
-        display = Display(hardware=args.hardware, simulate=False)
+        display = Display(hardware=hardware, simulate=False)
 
         input_manager = get_input_manager(
             display.get_adapter(),
@@ -240,27 +201,27 @@ def main() -> int:
         )
         if input_manager is None:
             logger.error("No input adapter available for the detected hardware")
-            return 1
+            raise typer.Exit(code=1)
 
         if input_manager.interaction_profile != InteractionProfile.ONE_BUTTON:
             logger.error(
                 "Detected interaction profile {} instead of one_button",
                 input_manager.interaction_profile.value,
             )
-            return 1
+            raise typer.Exit(code=1)
 
         for action in (InputAction.ADVANCE, InputAction.SELECT, InputAction.BACK):
             input_manager.on_action(
                 action,
-                lambda data=None, action=action: record_event(events, start_time, action, data),
+                lambda data=None, action=action: _record_event(events, start_time, action, data),
             )
 
         input_manager.start()
-        logger.info("Monitoring Whisplay gestures for %.1fs", args.duration_seconds)
+        logger.info("Monitoring Whisplay gestures for %.1fs", duration_seconds)
 
         while time.time() < ends_at:
-            if display is not None and not args.no_display:
-                render_status_screen(display, timing_summary, events, ends_at)
+            if display is not None and not no_display:
+                _render_status_screen(display, timing_summary, events, ends_at)
             time.sleep(0.1)
 
         logger.info("Whisplay tuning session complete")
@@ -270,10 +231,9 @@ def main() -> int:
             sum(1 for event in events if event.action == InputAction.SELECT.value),
             sum(1 for event in events if event.action == InputAction.BACK.value),
         )
-        return 0
     except KeyboardInterrupt:
         logger.info("Interrupted by user")
-        return 130
+        raise typer.Exit(code=130)
     finally:
         if input_manager is not None:
             try:
@@ -285,7 +245,3 @@ def main() -> int:
                 display.cleanup()
             except Exception as exc:
                 logger.warning("Display cleanup failed: {}", exc)
-
-
-if __name__ == "__main__":
-    raise SystemExit(main())

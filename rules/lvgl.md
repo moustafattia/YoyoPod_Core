@@ -46,15 +46,15 @@ Minimal config enabling only what YoyoPod uses:
 ## Building
 
 ```bash
-python scripts/lvgl_build.py   # clones LVGL 9.5.0, compiles shim
+yoyoctl build lvgl   # clones LVGL 9.5.0, compiles shim
 ```
 
 Must rebuild on Pi after changing `lv_conf.h` or `lvgl_shim.c`.
 
 ## Screenshot Support
 
-- `scripts/pi_remote.py screenshot` defaults to the shadow-first path via `SIGUSR2`.
-- `scripts/pi_remote.py screenshot --readback` requests LVGL readback via `SIGUSR1`.
+- `yoyoctl remote screenshot` defaults to the shadow-first path via `SIGUSR2`.
+- `yoyoctl remote screenshot --readback` requests LVGL readback via `SIGUSR1`.
 - The remote helper now clears the previous remote PNG before capture and waits for a fresh file.
 - To confirm which path actually succeeded, check the app log:
   - `Saved screenshot via LVGL readback` means native LVGL snapshotting succeeded.

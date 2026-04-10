@@ -24,8 +24,8 @@ Example:
 
 ```bash
 sudo apt install mpv liblinphone-dev pkg-config cmake alsa-utils i2c-tools
-uv run python scripts/liblinphone_build.py
-uv run python scripts/lvgl_build.py
+yoyoctl build liblinphone
+yoyoctl build lvgl
 ```
 
 ## Configuration
@@ -94,10 +94,10 @@ uv run pytest -q
 Pi smoke:
 
 ```bash
-uv run python scripts/pi_smoke.py
-uv run python scripts/pi_smoke.py --with-music --with-voip
-uv run python scripts/pi_smoke.py --with-power --with-rtc
-uv run python scripts/pi_smoke.py --with-lvgl-soak
+yoyoctl pi smoke
+yoyoctl pi smoke --with-music --with-voip
+yoyoctl pi smoke --with-power --with-rtc
+yoyoctl pi lvgl soak
 ```
 
 ## Raspberry Pi Workflow
@@ -105,13 +105,13 @@ uv run python scripts/pi_smoke.py --with-lvgl-soak
 Preferred remote helper:
 
 ```bash
-uv run python scripts/pi_remote.py config show
-uv run python scripts/pi_remote.py status
-uv run python scripts/pi_remote.py preflight --branch main --with-music --with-voip --with-lvgl-soak
-uv run python scripts/pi_remote.py sync --branch main
-uv run python scripts/pi_remote.py smoke --with-music --with-voip
-uv run python scripts/pi_remote.py service status
-uv run python scripts/pi_remote.py logs --lines 200
+yoyoctl remote config show
+yoyoctl remote status
+yoyoctl remote preflight --branch main --with-music --with-voip --with-lvgl-soak
+yoyoctl remote sync --branch main
+yoyoctl remote smoke --with-music --with-voip
+yoyoctl remote service status
+yoyoctl remote logs --lines 200
 ```
 
 The detailed deploy and validation flows live in:
@@ -135,10 +135,10 @@ Pi deploy defaults live in:
 Useful remote log commands:
 
 ```bash
-uv run python scripts/pi_remote.py logs --lines 200
-uv run python scripts/pi_remote.py logs --errors
-uv run python scripts/pi_remote.py logs --filter voip
-uv run python scripts/pi_remote.py logs --follow --filter ERROR
+yoyoctl remote logs --lines 200
+yoyoctl remote logs --errors
+yoyoctl remote logs --filter voip
+yoyoctl remote logs --follow --filter ERROR
 ```
 
 ## Package Layout

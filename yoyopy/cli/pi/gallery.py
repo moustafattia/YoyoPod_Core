@@ -1,60 +1,32 @@
-#!/usr/bin/env python3
-"""Capture a deterministic gallery of Whisplay LVGL screens."""
+"""yoyopy/cli/pi/gallery.py — Capture a deterministic gallery of Whisplay LVGL screens."""
 
 from __future__ import annotations
 
-import argparse
-import sys
 import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Callable
+from typing import Annotated, Callable, Optional
 
-from loguru import logger
+import typer
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
-if str(REPO_ROOT) not in sys.path:
-    sys.path.insert(0, str(REPO_ROOT))
+from yoyopy.cli.common import configure_logging
 
-from yoyopy.app_context import AppContext, Playlist, Track as ContextTrack
-from yoyopy.audio import MockMusicBackend, Track as PlaybackTrack
-from yoyopy.audio.history import RecentTrackEntry
-from yoyopy.power import BatteryState, PowerDeviceInfo, PowerSnapshot, RTCState, ShutdownState
-from yoyopy.ui.display import Display
-from yoyopy.ui.input import InteractionProfile
-from yoyopy.ui.screens import (
-    AskScreen,
-    CallHistoryScreen,
-    CallScreen,
-    ContactListScreen,
-    InCallScreen,
-    IncomingCallScreen,
-    ListenScreen,
-    NowPlayingScreen,
-    OutgoingCallScreen,
-    PlaylistScreen,
-    PowerScreen,
-    RecentTracksScreen,
-    TalkContactScreen,
-    VoiceNoteScreen,
+gallery_app = typer.Typer(
+    name="gallery",
+    help="Capture a deterministic gallery of Whisplay LVGL screens.",
+    invoke_without_command=True,
+    no_args_is_help=False,
 )
-from yoyopy.voip.history import CallHistoryEntry
 
 
-def configure_logging(verbose: bool) -> None:
-    """Configure concise human-readable logging."""
-
-    logger.remove()
-    logger.add(
-        sys.stderr,
-        format="<green>{time:HH:mm:ss}</green> | <level>{level: <8}</level> | <level>{message}</level>",
-        level="DEBUG" if verbose else "INFO",
-    )
+# ---------------------------------------------------------------------------
+# Fake/stub helpers (used to build deterministic screen states)
+# ---------------------------------------------------------------------------
 
 
 @dataclass(frozen=True, slots=True)
-class DemoContact:
+class _DemoContact:
     """Minimal contact shape used by the Whisplay gallery."""
 
     name: str
@@ -68,7 +40,7 @@ class DemoContact:
 
 
 @dataclass(frozen=True, slots=True)
-class DemoPlaylistSummary:
+class _DemoPlaylistSummary:
     """Minimal playlist list item for the gallery."""
 
     name: str
@@ -77,14 +49,14 @@ class DemoPlaylistSummary:
 
 
 @dataclass(frozen=True, slots=True)
-class DemoVoiceNote:
+class _DemoVoiceNote:
     """Minimal latest-voice-note summary."""
 
     local_file_path: str
 
 
 @dataclass(slots=True)
-class DemoVoiceNoteDraft:
+class _DemoVoiceNoteDraft:
     """Minimal active draft consumed by VoiceNoteScreen."""
 
     recipient_address: str
@@ -96,33 +68,33 @@ class DemoVoiceNoteDraft:
     message_id: str = ""
 
 
-class FakeConfigManager:
+class _FakeConfigManager:
     """Small contact/config double for Talk screens."""
 
-    def __init__(self, contacts: list[DemoContact]) -> None:
+    def __init__(self, contacts: list[_DemoContact]) -> None:
         self._contacts = list(contacts)
 
-    def get_contacts(self) -> list[DemoContact]:
+    def get_contacts(self) -> list[_DemoContact]:
         return list(self._contacts)
 
 
-class FakeMusicService:
+class _FakeMusicService:
     """Minimal local-music service used for deterministic captures."""
 
     def __init__(
         self,
         *,
-        playlists: list[DemoPlaylistSummary],
-        recents: list[RecentTrackEntry],
+        playlists: list[_DemoPlaylistSummary],
+        recents: list[object],
     ) -> None:
         self.is_available = True
         self._playlists = list(playlists)
         self._recents = list(recents)
 
-    def list_playlists(self, *, fetch_track_counts: bool = False) -> list[DemoPlaylistSummary]:
+    def list_playlists(self, *, fetch_track_counts: bool = False) -> list[_DemoPlaylistSummary]:
         return list(self._playlists)
 
-    def list_recent_tracks(self) -> list[RecentTrackEntry]:
+    def list_recent_tracks(self) -> list[object]:
         return list(self._recents)
 
     def load_playlist(self, _uri: str) -> bool:
@@ -132,44 +104,44 @@ class FakeMusicService:
         return True
 
 
-class FakeCallHistoryStore:
+class _FakeCallHistoryStore:
     """Minimal call-history store for the recents screen."""
 
-    def __init__(self, entries: list[CallHistoryEntry]) -> None:
+    def __init__(self, entries: list[object]) -> None:
         self._entries = list(entries)
 
-    def list_recent(self) -> list[CallHistoryEntry]:
+    def list_recent(self) -> list[object]:
         return list(self._entries)
 
     def mark_all_seen(self) -> None:
         for entry in self._entries:
-            entry.seen = True
+            entry.seen = True  # type: ignore[union-attr]
 
     def missed_count(self) -> int:
-        return sum(1 for entry in self._entries if entry.is_unseen_missed)
+        return sum(1 for entry in self._entries if entry.is_unseen_missed)  # type: ignore[union-attr]
 
     def recent_preview(self) -> list[str]:
-        return [entry.title for entry in self._entries[:3]]
+        return [entry.title for entry in self._entries[:3]]  # type: ignore[union-attr]
 
 
-class FakePowerManager:
+class _FakePowerManager:
     """Minimal power manager exposing one stable snapshot."""
 
-    def __init__(self, snapshot: PowerSnapshot) -> None:
+    def __init__(self, snapshot: object) -> None:
         self._snapshot = snapshot
 
-    def get_snapshot(self) -> PowerSnapshot:
+    def get_snapshot(self) -> object:
         return self._snapshot
 
 
-class FakeVoipManager:
+class _FakeVoipManager:
     """Minimal VoIP facade used by Talk and call-state captures."""
 
     def __init__(
         self,
         *,
-        active_voice_note: DemoVoiceNoteDraft | None = None,
-        latest_notes: dict[str, DemoVoiceNote] | None = None,
+        active_voice_note: _DemoVoiceNoteDraft | None = None,
+        latest_notes: dict[str, _DemoVoiceNote] | None = None,
         caller_info: dict[str, str] | None = None,
         duration_seconds: int = 0,
         muted: bool = False,
@@ -190,7 +162,7 @@ class FakeVoipManager:
     def get_status(self) -> dict[str, object]:
         return dict(self._status)
 
-    def latest_voice_note_for_contact(self, sip_address: str) -> DemoVoiceNote | None:
+    def latest_voice_note_for_contact(self, sip_address: str) -> _DemoVoiceNote | None:
         return self._latest_notes.get(sip_address)
 
     def play_latest_voice_note(self, _sip_address: str) -> bool:
@@ -232,7 +204,7 @@ class FakeVoipManager:
         return True
 
     def start_voice_note_recording(self, recipient_address: str, recipient_name: str = "") -> bool:
-        self.active_voice_note = DemoVoiceNoteDraft(
+        self.active_voice_note = _DemoVoiceNoteDraft(
             recipient_address=recipient_address,
             recipient_name=recipient_name,
             file_path="data/voice_notes/demo.wav",
@@ -242,7 +214,7 @@ class FakeVoipManager:
         )
         return True
 
-    def stop_voice_note_recording(self) -> DemoVoiceNoteDraft | None:
+    def stop_voice_note_recording(self) -> _DemoVoiceNoteDraft | None:
         if self.active_voice_note is None:
             return None
         self.active_voice_note.duration_ms = 4200
@@ -265,12 +237,17 @@ class FakeVoipManager:
         self.active_voice_note.message_id = "demo-note"
         return True
 
-    def get_active_voice_note(self) -> DemoVoiceNoteDraft | None:
+    def get_active_voice_note(self) -> _DemoVoiceNoteDraft | None:
         return self.active_voice_note
 
 
+# ---------------------------------------------------------------------------
+# CaptureSpec
+# ---------------------------------------------------------------------------
+
+
 @dataclass(frozen=True, slots=True)
-class CaptureSpec:
+class _CaptureSpec:
     """One deterministic screen capture target."""
 
     name: str
@@ -278,10 +255,17 @@ class CaptureSpec:
     prepare: Callable[[object], None] | None = None
 
 
-def _pump_display(display: Display, duration_seconds: float) -> None:
-    """Let LVGL flush and settle before capturing."""
+# ---------------------------------------------------------------------------
+# Display / capture helpers
+# ---------------------------------------------------------------------------
 
-    backend = display.get_ui_backend()
+
+def _pump_display(display: object, duration_seconds: float) -> None:
+    """Let LVGL flush and settle before capturing."""
+    from yoyopy.ui.display import Display
+
+    d: Display = display  # type: ignore[assignment]
+    backend = d.get_ui_backend()
     if backend is None or not getattr(backend, "initialized", False):
         return
 
@@ -296,23 +280,25 @@ def _pump_display(display: Display, duration_seconds: float) -> None:
 
 
 def _capture_screen(
-    display: Display,
-    spec: CaptureSpec,
+    display: object,
+    spec: _CaptureSpec,
     output_dir: Path,
     *,
     settle_seconds: float,
 ) -> None:
     """Render one screen state and save an LVGL readback."""
+    from yoyopy.ui.display import Display
 
+    d: Display = display  # type: ignore[assignment]
     screen = spec.build_screen()
-    screen.enter()
+    screen.enter()  # type: ignore[union-attr]
     try:
         if spec.prepare is not None:
             spec.prepare(screen)
-        screen.render()
+        screen.render()  # type: ignore[union-attr]
         _pump_display(display, settle_seconds)
 
-        adapter = display.get_adapter()
+        adapter = d.get_adapter()
         save_readback = getattr(adapter, "save_screenshot_readback", None)
         save_shadow = getattr(adapter, "save_screenshot", None)
         if not callable(save_readback):
@@ -322,22 +308,31 @@ def _capture_screen(
 
         output_path = output_dir / f"{spec.name}.png"
         if save_readback(str(output_path)):
+            from loguru import logger
             logger.info("Captured {} via LVGL readback", output_path.name)
             return
         if save_shadow(str(output_path)):
+            from loguru import logger
             logger.warning("Captured {} via shadow-buffer fallback", output_path.name)
             return
         raise RuntimeError(f"failed to save screenshot to {output_path}")
     finally:
-        screen.exit()
-        backend = display.get_ui_backend()
+        screen.exit()  # type: ignore[union-attr]
+        backend = d.get_ui_backend()
         if backend is not None and getattr(backend, "initialized", False):
             backend.clear()
             _pump_display(display, 0.05)
 
 
-def _build_context() -> AppContext:
+# ---------------------------------------------------------------------------
+# Data builders
+# ---------------------------------------------------------------------------
+
+
+def _build_context() -> object:
     """Create one stable one-button app context."""
+    from yoyopy.app_context import AppContext, Playlist, Track as ContextTrack
+    from yoyopy.ui.input import InteractionProfile
 
     context = AppContext(interaction_profile=InteractionProfile.ONE_BUTTON)
     context.update_voip_status(configured=True, ready=True)
@@ -383,25 +378,25 @@ def _build_context() -> AppContext:
     return context
 
 
-def _build_contacts() -> list[DemoContact]:
+def _build_contacts() -> list[_DemoContact]:
     """Return a stable Talk contact list."""
-
     return [
-        DemoContact("Hagar", "sip:hagar@example.com", favorite=True),
-        DemoContact("Mama", "sip:mama@example.com", favorite=True),
-        DemoContact("Papa", "sip:papa@example.com"),
-        DemoContact("Auntie", "sip:auntie@example.com"),
+        _DemoContact("Hagar", "sip:hagar@example.com", favorite=True),
+        _DemoContact("Mama", "sip:mama@example.com", favorite=True),
+        _DemoContact("Papa", "sip:papa@example.com"),
+        _DemoContact("Auntie", "sip:auntie@example.com"),
     ]
 
 
-def _build_music_service() -> FakeMusicService:
+def _build_music_service() -> _FakeMusicService:
     """Return deterministic local playlist and recents data."""
+    from yoyopy.audio.history import RecentTrackEntry
 
-    return FakeMusicService(
+    return _FakeMusicService(
         playlists=[
-            DemoPlaylistSummary("Morning Boost", "playlist:morning", 18),
-            DemoPlaylistSummary("Arabic Favorites", "playlist:arabic", 26),
-            DemoPlaylistSummary("Wind Down", "playlist:winddown", 14),
+            _DemoPlaylistSummary("Morning Boost", "playlist:morning", 18),
+            _DemoPlaylistSummary("Arabic Favorites", "playlist:arabic", 26),
+            _DemoPlaylistSummary("Wind Down", "playlist:winddown", 14),
         ],
         recents=[
             RecentTrackEntry(uri="track:golden-hour", title="Golden Hour", artist="Kacey Musgraves", album="Golden Hour"),
@@ -411,8 +406,9 @@ def _build_music_service() -> FakeMusicService:
     )
 
 
-def _build_call_history_store() -> FakeCallHistoryStore:
+def _build_call_history_store() -> _FakeCallHistoryStore:
     """Return deterministic Talk recents."""
+    from yoyopy.voip.history import CallHistoryEntry
 
     entries = [
         CallHistoryEntry.create(
@@ -436,11 +432,12 @@ def _build_call_history_store() -> FakeCallHistoryStore:
             duration_seconds=64,
         ),
     ]
-    return FakeCallHistoryStore(entries)
+    return _FakeCallHistoryStore(entries)
 
 
-def _build_power_snapshot() -> PowerSnapshot:
+def _build_power_snapshot() -> object:
     """Return one realistic power snapshot for the Setup pages."""
+    from yoyopy.power import BatteryState, PowerDeviceInfo, PowerSnapshot, RTCState, ShutdownState
 
     checked_at = datetime.now(timezone.utc)
     return PowerSnapshot(
@@ -470,7 +467,6 @@ def _build_power_snapshot() -> PowerSnapshot:
 
 def _build_power_status() -> dict[str, object]:
     """Return one realistic runtime/care status payload."""
-
     return {
         "app_uptime_seconds": 3672,
         "screen_awake": True,
@@ -487,24 +483,26 @@ def _build_power_status() -> dict[str, object]:
     }
 
 
-def _build_talk_contact_screen(display: Display) -> TalkContactScreen:
+def _build_talk_contact_screen(display: object) -> object:
     """Build the main Talk contact-action screen."""
+    from yoyopy.ui.screens import TalkContactScreen
 
     context = _build_context()
-    context.set_talk_contact(name="Mama", sip_address="sip:mama@example.com")
+    context.set_talk_contact(name="Mama", sip_address="sip:mama@example.com")  # type: ignore[union-attr]
     return TalkContactScreen(
         display,
         context,
-        voip_manager=FakeVoipManager(),
+        voip_manager=_FakeVoipManager(),
     )
 
 
-def _build_voice_note_recording_screen(display: Display) -> VoiceNoteScreen:
+def _build_voice_note_recording_screen(display: object) -> object:
     """Build the voice-note recording state."""
+    from yoyopy.ui.screens import VoiceNoteScreen
 
     context = _build_context()
-    context.set_voice_note_recipient(name="Mama", sip_address="sip:mama@example.com")
-    draft = DemoVoiceNoteDraft(
+    context.set_voice_note_recipient(name="Mama", sip_address="sip:mama@example.com")  # type: ignore[union-attr]
+    draft = _DemoVoiceNoteDraft(
         recipient_address="sip:mama@example.com",
         recipient_name="Mama",
         file_path="data/voice_notes/mama.wav",
@@ -515,16 +513,17 @@ def _build_voice_note_recording_screen(display: Display) -> VoiceNoteScreen:
     return VoiceNoteScreen(
         display,
         context,
-        voip_manager=FakeVoipManager(active_voice_note=draft),
+        voip_manager=_FakeVoipManager(active_voice_note=draft),
     )
 
 
-def _build_voice_note_review_screen(display: Display) -> VoiceNoteScreen:
+def _build_voice_note_review_screen(display: object) -> object:
     """Build the voice-note review state."""
+    from yoyopy.ui.screens import VoiceNoteScreen
 
     context = _build_context()
-    context.set_voice_note_recipient(name="Mama", sip_address="sip:mama@example.com")
-    draft = DemoVoiceNoteDraft(
+    context.set_voice_note_recipient(name="Mama", sip_address="sip:mama@example.com")  # type: ignore[union-attr]
+    draft = _DemoVoiceNoteDraft(
         recipient_address="sip:mama@example.com",
         recipient_name="Mama",
         file_path="data/voice_notes/mama.wav",
@@ -535,16 +534,17 @@ def _build_voice_note_review_screen(display: Display) -> VoiceNoteScreen:
     return VoiceNoteScreen(
         display,
         context,
-        voip_manager=FakeVoipManager(active_voice_note=draft),
+        voip_manager=_FakeVoipManager(active_voice_note=draft),
     )
 
 
-def _build_voice_note_sent_screen(display: Display) -> VoiceNoteScreen:
+def _build_voice_note_sent_screen(display: object) -> object:
     """Build the voice-note sent state."""
+    from yoyopy.ui.screens import VoiceNoteScreen
 
     context = _build_context()
-    context.set_voice_note_recipient(name="Mama", sip_address="sip:mama@example.com")
-    draft = DemoVoiceNoteDraft(
+    context.set_voice_note_recipient(name="Mama", sip_address="sip:mama@example.com")  # type: ignore[union-attr]
+    draft = _DemoVoiceNoteDraft(
         recipient_address="sip:mama@example.com",
         recipient_name="Mama",
         file_path="data/voice_notes/mama.wav",
@@ -556,12 +556,14 @@ def _build_voice_note_sent_screen(display: Display) -> VoiceNoteScreen:
     return VoiceNoteScreen(
         display,
         context,
-        voip_manager=FakeVoipManager(active_voice_note=draft),
+        voip_manager=_FakeVoipManager(active_voice_note=draft),
     )
 
 
-def _build_now_playing_backend(*, playback_state: str) -> MockMusicBackend:
+def _build_now_playing_backend(*, playback_state: str) -> object:
     """Return a deterministic backend state for now-playing captures."""
+    from yoyopy.audio import MockMusicBackend
+    from yoyopy.audio.music.models import Track as PlaybackTrack
 
     backend = MockMusicBackend()
     if playback_state != "offline":
@@ -582,37 +584,52 @@ def _build_now_playing_backend(*, playback_state: str) -> MockMusicBackend:
 
 def _advance_ask_to_response(screen: object) -> None:
     """Drive AskScreen into its response state for a second capture."""
+    screen.on_select()  # type: ignore[union-attr]
+    screen.on_select()  # type: ignore[union-attr]
+    screen.on_select()  # type: ignore[union-attr]
 
-    screen.on_select()
-    screen.on_select()
-    screen.on_select()
 
-
-def build_capture_specs(display: Display) -> list[CaptureSpec]:
+def _build_capture_specs(display: object) -> list[_CaptureSpec]:
     """Build the deterministic gallery sequence."""
+    from yoyopy.ui.screens import (
+        AskScreen,
+        CallHistoryScreen,
+        CallScreen,
+        ContactListScreen,
+        InCallScreen,
+        IncomingCallScreen,
+        ListenScreen,
+        NowPlayingScreen,
+        OutgoingCallScreen,
+        PlaylistScreen,
+        PowerScreen,
+        RecentTracksScreen,
+        TalkContactScreen,
+        VoiceNoteScreen,
+    )
 
     contacts = _build_contacts()
-    config_manager = FakeConfigManager(contacts)
+    config_manager = _FakeConfigManager(contacts)
     music_service = _build_music_service()
     call_history_store = _build_call_history_store()
     power_snapshot = _build_power_snapshot()
 
     return [
-        CaptureSpec(
+        _CaptureSpec(
             "01_listen",
             lambda: ListenScreen(display, _build_context(), music_service=None),
         ),
-        CaptureSpec(
+        _CaptureSpec(
             "02_playlists",
             lambda: PlaylistScreen(display, _build_context(), music_service=music_service),
             prepare=lambda screen: setattr(screen, "selected_index", 1),
         ),
-        CaptureSpec(
+        _CaptureSpec(
             "03_recent",
             lambda: RecentTracksScreen(display, _build_context(), music_service=music_service),
             prepare=lambda screen: setattr(screen, "selected_index", 1),
         ),
-        CaptureSpec(
+        _CaptureSpec(
             "04_now_playing",
             lambda: NowPlayingScreen(
                 display,
@@ -620,7 +637,7 @@ def build_capture_specs(display: Display) -> list[CaptureSpec]:
                 music_backend=_build_now_playing_backend(playback_state="playing"),
             ),
         ),
-        CaptureSpec(
+        _CaptureSpec(
             "04b_now_playing_paused",
             lambda: NowPlayingScreen(
                 display,
@@ -628,7 +645,7 @@ def build_capture_specs(display: Display) -> list[CaptureSpec]:
                 music_backend=_build_now_playing_backend(playback_state="paused"),
             ),
         ),
-        CaptureSpec(
+        _CaptureSpec(
             "04c_now_playing_offline",
             lambda: NowPlayingScreen(
                 display,
@@ -636,106 +653,106 @@ def build_capture_specs(display: Display) -> list[CaptureSpec]:
                 music_backend=_build_now_playing_backend(playback_state="offline"),
             ),
         ),
-        CaptureSpec(
+        _CaptureSpec(
             "05_talk",
             lambda: CallScreen(
                 display,
                 _build_context(),
-                voip_manager=FakeVoipManager(),
+                voip_manager=_FakeVoipManager(),
                 config_manager=config_manager,
                 call_history_store=call_history_store,
             ),
         ),
-        CaptureSpec(
+        _CaptureSpec(
             "06_talk_contact",
             lambda: _build_talk_contact_screen(display),
         ),
-        CaptureSpec(
+        _CaptureSpec(
             "07_contacts",
             lambda: ContactListScreen(
                 display,
                 _build_context(),
-                voip_manager=FakeVoipManager(),
+                voip_manager=_FakeVoipManager(),
                 config_manager=config_manager,
             ),
             prepare=lambda screen: setattr(screen, "selected_index", 1),
         ),
-        CaptureSpec(
+        _CaptureSpec(
             "08_call_history",
             lambda: CallHistoryScreen(
                 display,
                 _build_context(),
-                voip_manager=FakeVoipManager(),
+                voip_manager=_FakeVoipManager(),
                 call_history_store=call_history_store,
             ),
             prepare=lambda screen: setattr(screen, "selected_index", 1),
         ),
-        CaptureSpec(
+        _CaptureSpec(
             "09_voice_note_recording",
             lambda: _build_voice_note_recording_screen(display),
         ),
-        CaptureSpec(
+        _CaptureSpec(
             "09b_voice_note_review",
             lambda: _build_voice_note_review_screen(display),
         ),
-        CaptureSpec(
+        _CaptureSpec(
             "09c_voice_note_sent",
             lambda: _build_voice_note_sent_screen(display),
         ),
-        CaptureSpec(
+        _CaptureSpec(
             "10_ask_idle",
             lambda: AskScreen(display, _build_context()),
         ),
-        CaptureSpec(
+        _CaptureSpec(
             "11_ask_response",
             lambda: AskScreen(display, _build_context()),
             prepare=lambda screen: _advance_ask_to_response(screen),
         ),
-        CaptureSpec(
+        _CaptureSpec(
             "12_power",
             lambda: PowerScreen(
                 display,
                 _build_context(),
-                power_manager=FakePowerManager(power_snapshot),
+                power_manager=_FakePowerManager(power_snapshot),
                 status_provider=_build_power_status,
             ),
         ),
-        CaptureSpec(
+        _CaptureSpec(
             "13_time",
             lambda: PowerScreen(
                 display,
                 _build_context(),
-                power_manager=FakePowerManager(power_snapshot),
+                power_manager=_FakePowerManager(power_snapshot),
                 status_provider=_build_power_status,
             ),
             prepare=lambda screen: setattr(screen, "page_index", 1),
         ),
-        CaptureSpec(
+        _CaptureSpec(
             "14_care",
             lambda: PowerScreen(
                 display,
                 _build_context(),
-                power_manager=FakePowerManager(power_snapshot),
+                power_manager=_FakePowerManager(power_snapshot),
                 status_provider=_build_power_status,
             ),
             prepare=lambda screen: setattr(screen, "page_index", 2),
         ),
-        CaptureSpec(
+        _CaptureSpec(
             "15_incoming_call",
             lambda: IncomingCallScreen(
                 display,
                 _build_context(),
-                voip_manager=FakeVoipManager(),
+                voip_manager=_FakeVoipManager(),
                 caller_address="sip:mama@example.com",
                 caller_name="Mama",
             ),
         ),
-        CaptureSpec(
+        _CaptureSpec(
             "16_outgoing_call",
             lambda: OutgoingCallScreen(
                 display,
                 _build_context(),
-                voip_manager=FakeVoipManager(
+                voip_manager=_FakeVoipManager(
                     caller_info={
                         "display_name": "Papa",
                         "address": "sip:papa@example.com",
@@ -743,24 +760,24 @@ def build_capture_specs(display: Display) -> list[CaptureSpec]:
                 ),
             ),
         ),
-        CaptureSpec(
+        _CaptureSpec(
             "17_in_call",
             lambda: InCallScreen(
                 display,
                 _build_context(),
-                voip_manager=FakeVoipManager(
+                voip_manager=_FakeVoipManager(
                     caller_info={"display_name": "Mama"},
                     duration_seconds=187,
                     muted=False,
                 ),
             ),
         ),
-        CaptureSpec(
+        _CaptureSpec(
             "17b_in_call_muted",
             lambda: InCallScreen(
                 display,
                 _build_context(),
-                voip_manager=FakeVoipManager(
+                voip_manager=_FakeVoipManager(
                     caller_info={"display_name": "Mama"},
                     duration_seconds=187,
                     muted=True,
@@ -770,72 +787,55 @@ def build_capture_specs(display: Display) -> list[CaptureSpec]:
     ]
 
 
-def build_parser() -> argparse.ArgumentParser:
-    """Create the command-line parser."""
-
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument(
-        "--output-dir",
-        default="temp/pi_gallery",
-        help="Directory where PNG captures should be written",
-    )
-    parser.add_argument(
-        "--simulate",
-        action="store_true",
-        help="Use the Whisplay adapter in simulation mode instead of driving hardware",
-    )
-    parser.add_argument(
-        "--settle-seconds",
-        type=float,
-        default=0.18,
-        help="How long to let LVGL settle before each capture",
-    )
-    parser.add_argument(
-        "--verbose",
-        action="store_true",
-        help="Enable DEBUG logging",
-    )
-    return parser
+# ---------------------------------------------------------------------------
+# Command
+# ---------------------------------------------------------------------------
 
 
-def main() -> int:
-    """CLI entry point."""
+@gallery_app.callback(invoke_without_command=True)
+def gallery(
+    output_dir: Annotated[str, typer.Option("--output-dir", help="Directory where PNG captures should be written.")] = "temp/pi_gallery",
+    simulate: Annotated[bool, typer.Option("--simulate", help="Use the Whisplay adapter in simulation mode instead of driving hardware.")] = False,
+    settle_seconds: Annotated[float, typer.Option("--settle-seconds", help="How long to let LVGL settle before each capture.")] = 0.18,
+    verbose: Annotated[bool, typer.Option("--verbose", help="Enable DEBUG logging.")] = False,
+) -> None:
+    """Capture a deterministic gallery of Whisplay LVGL screens."""
+    from loguru import logger
 
-    parser = build_parser()
-    args = parser.parse_args()
-    configure_logging(args.verbose)
+    from yoyopy.ui.display import Display
 
-    output_dir = Path(args.output_dir).expanduser().resolve()
-    output_dir.mkdir(parents=True, exist_ok=True)
+    configure_logging(verbose)
+
+    output_path = Path(output_dir).expanduser().resolve()
+    output_path.mkdir(parents=True, exist_ok=True)
 
     display = Display(
         hardware="whisplay",
-        simulate=args.simulate,
+        simulate=simulate,
         whisplay_renderer="lvgl",
     )
     backend = display.get_ui_backend()
     if backend is None or not getattr(backend, "available", False):
-        raise SystemExit(
-            "LVGL backend unavailable. Build it first with `uv run python scripts/lvgl_build.py`."
+        logger.error(
+            "LVGL backend unavailable. Build it first with `uv run yoyoctl build lvgl`."
         )
+        raise typer.Exit(code=1)
     if not backend.initialize():
-        raise SystemExit("Failed to initialize the Whisplay LVGL backend")
+        logger.error("Failed to initialize the Whisplay LVGL backend")
+        raise typer.Exit(code=1)
     display.refresh_backend_kind()
 
     try:
-        for spec in build_capture_specs(display):
+        specs = _build_capture_specs(display)
+        for spec in specs:
             _capture_screen(
                 display,
                 spec,
-                output_dir,
-                settle_seconds=args.settle_seconds,
+                output_path,
+                settle_seconds=settle_seconds,
             )
     finally:
         display.cleanup()
 
-    logger.info("Saved {} screenshots to {}", len(list(output_dir.glob('*.png'))), output_dir)
-    return 0
-
-
-if __name__ == "__main__":
-    raise SystemExit(main())
+    saved_count = len(list(output_path.glob("*.png")))
+    logger.info("Saved {} screenshots to {}", saved_count, output_path)

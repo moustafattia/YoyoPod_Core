@@ -14,7 +14,7 @@ The repo now has a clear hardware smoke path, but developers still need a quick 
 - install and inspect the production systemd unit
 - tail the structured file logs with subsystem/error filtering
 
-Use `scripts/pi_remote.py` for that loop.
+Use `yoyoctl remote` for that loop.
 
 ## Setup
 
@@ -27,7 +27,7 @@ The repo-tracked deploy contract lives in `deploy/pi-deploy.yaml`.
 - create or update that file with:
 
 ```bash
-uv run python scripts/pi_remote.py config edit
+yoyoctl remote config edit
 ```
 
 Examples:
@@ -58,7 +58,7 @@ $env:YOYOPOD_PI_BRANCH="main"
 ### Check remote status
 
 ```bash
-uv run python scripts/pi_remote.py status
+yoyoctl remote status
 ```
 
 Shows:
@@ -73,7 +73,7 @@ Shows:
 ### Sync branch to the Raspberry Pi
 
 ```bash
-uv run python scripts/pi_remote.py sync --branch main
+yoyoctl remote sync --branch main
 ```
 
 By default this will:
@@ -86,37 +86,37 @@ By default this will:
 Skip dependency refresh if you only need the Git update:
 
 ```bash
-uv run python scripts/pi_remote.py sync --branch main --skip-uv-sync
+yoyoctl remote sync --branch main --skip-uv-sync
 ```
 
 ### Run smoke validation remotely
 
 ```bash
-uv run python scripts/pi_remote.py smoke
-uv run python scripts/pi_remote.py smoke --with-power --with-rtc
-uv run python scripts/pi_remote.py smoke --with-music --with-voip --with-rtc
-uv run python scripts/pi_remote.py smoke --with-lvgl-soak
+yoyoctl remote smoke
+yoyoctl remote smoke --with-power --with-rtc
+yoyoctl remote smoke --with-music --with-voip --with-rtc
+yoyoctl remote smoke --with-lvgl-soak
 ```
 
 Useful variations:
 
 ```bash
-uv run python scripts/pi_remote.py smoke --with-music --music-timeout 10
-uv run python scripts/pi_remote.py smoke --with-voip --voip-timeout 15 --verbose
+yoyoctl remote smoke --with-music --music-timeout 10
+yoyoctl remote smoke --with-voip --voip-timeout 15 --verbose
 ```
 
 ### Run Whisplay gesture tuning remotely
 
 ```bash
-uv run python scripts/pi_remote.py whisplay
-uv run python scripts/pi_remote.py whisplay --duration-seconds 45 --double-tap-ms 240 --long-hold-ms 900
+yoyoctl remote whisplay
+yoyoctl remote whisplay --duration-seconds 45 --double-tap-ms 240 --long-hold-ms 900
 ```
 
 ### Run the LVGL Whisplay soak remotely
 
 ```bash
-uv run python scripts/pi_remote.py lvgl-soak
-uv run python scripts/pi_remote.py lvgl-soak --cycles 3 --hold-seconds 0.3
+yoyoctl remote lvgl-soak
+yoyoctl remote lvgl-soak --cycles 3 --hold-seconds 0.3
 ```
 
 Use this when you want a focused hardware-in-the-loop pass for:
@@ -128,14 +128,14 @@ Use this when you want a focused hardware-in-the-loop pass for:
 ### PiSugar RTC helpers
 
 ```bash
-uv run python scripts/pi_remote.py rtc status
-uv run python scripts/pi_remote.py rtc sync-to-rtc
+yoyoctl remote rtc status
+yoyoctl remote rtc sync-to
 ```
 
 ### PiSugar power helper
 
 ```bash
-uv run python scripts/pi_remote.py power
+yoyoctl remote power
 ```
 
 Use this when you want a focused battery, charging, and watchdog snapshot without the full smoke pass.
@@ -143,10 +143,10 @@ Use this when you want a focused battery, charging, and watchdog snapshot withou
 ### Production systemd service
 
 ```bash
-uv run python scripts/pi_remote.py service status
-uv run python scripts/pi_remote.py service install
-uv run python scripts/pi_remote.py service restart
-uv run python scripts/pi_remote.py service logs --lines 150
+yoyoctl remote service status
+yoyoctl remote service install
+yoyoctl remote service restart
+yoyoctl remote service logs --lines 150
 ```
 
 This installs `deploy/systemd/yoyopod@.service` onto the Pi as `yoyopod@<remote-user>.service`, enables it at boot, and keeps the app paired with the PiSugar watchdog recovery loop. `service install`, `start`, and `restart` now wait for the file-log startup marker and verify that it matches the PID file before returning success.
@@ -154,10 +154,10 @@ This installs `deploy/systemd/yoyopod@.service` onto the Pi as `yoyopod@<remote-
 ### Structured file logs
 
 ```bash
-uv run python scripts/pi_remote.py logs --lines 200
-uv run python scripts/pi_remote.py logs --errors
-uv run python scripts/pi_remote.py logs --filter voip
-uv run python scripts/pi_remote.py logs --follow --filter ERROR
+yoyoctl remote logs --lines 200
+yoyoctl remote logs --errors
+yoyoctl remote logs --filter voip
+yoyoctl remote logs --follow --filter ERROR
 ```
 
 This tails the file sinks declared in `deploy/pi-deploy.yaml`, which is the stable Pi contract for:
@@ -176,7 +176,7 @@ Liblinphone note:
 ### Run the full preflight in one command
 
 ```bash
-uv run python scripts/pi_remote.py preflight --branch main --with-music --with-voip --with-lvgl-soak
+yoyoctl remote preflight --branch main --with-music --with-voip --with-lvgl-soak
 ```
 
 What it does:
@@ -189,22 +189,15 @@ What it does:
 Useful variations:
 
 ```bash
-uv run python scripts/pi_remote.py preflight --branch main --skip-local
-uv run python scripts/pi_remote.py preflight --branch main --skip-sync --with-voip
-uv run python scripts/pi_remote.py preflight --branch main --skip-uv-sync --with-music --with-voip
+yoyoctl remote preflight --branch main --skip-local
+yoyoctl remote preflight --branch main --skip-sync --with-voip
+yoyoctl remote preflight --branch main --skip-uv-sync --with-music --with-voip
 ```
 
-### Launch the production app remotely
+### Restart the production app remotely
 
 ```bash
-uv run python scripts/pi_remote.py run
-```
-
-Pass extra args through when needed:
-
-```bash
-uv run python scripts/pi_remote.py run --simulate
-uv run python scripts/pi_remote.py run --app-arg=--your-extra-flag
+yoyoctl remote restart
 ```
 
 ## Suggested Daily Loop
@@ -212,21 +205,21 @@ uv run python scripts/pi_remote.py run --app-arg=--your-extra-flag
 1. Run local checks: `uv run pytest -q`
 2. Push your branch
 3. Run the combined preflight:
-   `uv run python scripts/pi_remote.py preflight --branch <branch> --with-music --with-voip --with-lvgl-soak`
+   `yoyoctl remote preflight --branch <branch> --with-music --with-voip --with-lvgl-soak`
 4. Launch the app:
-   `uv run python scripts/pi_remote.py run`
+   `yoyoctl remote restart`
 
 If you are validating the production boot path rather than an interactive SSH run, use:
 
-5. `uv run python scripts/pi_remote.py service restart`
-6. `uv run python scripts/pi_remote.py service status`
+5. `yoyoctl remote service restart`
+6. `yoyoctl remote service status`
 
 ## Release / Pre-Merge Checklist
 
 - Local branch is green with `uv run pytest -q`
 - Branch is pushed and reviewed
-- `uv run python scripts/pi_remote.py preflight --branch <branch> --with-music --with-voip --with-lvgl-soak` passes
-- `uv run python scripts/pi_remote.py run` starts cleanly
+- `yoyoctl remote preflight --branch <branch> --with-music --with-voip --with-lvgl-soak` passes
+- `yoyoctl remote restart` starts cleanly
 - Manual sanity:
   - display renders correctly
   - input works on target hardware

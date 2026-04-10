@@ -1,30 +1,23 @@
-#!/usr/bin/env python3
-"""Raspberry Pi smoke validation helper for YoyoPod."""
+"""yoyopy/cli/pi/smoke.py — Pi hardware smoke validation command."""
 
 from __future__ import annotations
 
-import argparse
 import platform
-import sys
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Annotated, Any, Optional
 
-from loguru import logger
+import typer
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
-if str(REPO_ROOT) not in sys.path:
-    sys.path.insert(0, str(REPO_ROOT))
+from yoyopy.cli.common import configure_logging, resolve_config_dir
 
-from yoyopy.audio.music import MpvBackend, MusicConfig
-from yoyopy.config import ConfigManager, YoyoPodConfig, config_to_dict, load_config_model_from_yaml
-from yoyopy.power import PowerManager
-from yoyopy.ui.display import Display, detect_hardware
-from yoyopy.ui.input import get_input_manager
-from yoyopy.voip import VoIPConfig, VoIPManager
-from yoyopy.voip.liblinphone_binding import LiblinphoneBinding
-from scripts.lvgl_soak import run_lvgl_soak
+smoke_app = typer.Typer(
+    name="smoke",
+    help="Run Raspberry Pi hardware smoke validation.",
+    invoke_without_command=True,
+    no_args_is_help=False,
+)
 
 
 @dataclass
@@ -36,25 +29,19 @@ class CheckResult:
     details: str
 
 
-def configure_logging(verbose: bool) -> None:
-    """Configure human-readable logging."""
-    logger.remove()
-    logger.add(
-        sys.stderr,
-        format="<green>{time:HH:mm:ss}</green> | <level>{level: <8}</level> | <level>{message}</level>",
-        level="DEBUG" if verbose else "INFO",
-    )
-
-
-def load_app_config(config_dir: Path) -> dict[str, Any]:
+def _load_app_config(config_dir: Path) -> dict[str, Any]:
     """Load the app-level configuration file if present."""
+    from loguru import logger
+
+    from yoyopy.config import YoyoPodConfig, config_to_dict, load_config_model_from_yaml
+
     config_file = config_dir / "yoyopod_config.yaml"
     if not config_file.exists():
         logger.warning(f"App config not found: {config_file}")
     return config_to_dict(load_config_model_from_yaml(YoyoPodConfig, config_file))
 
 
-def environment_check() -> CheckResult:
+def _environment_check() -> CheckResult:
     """Capture the current execution environment."""
     system = platform.system()
     machine = platform.machine()
@@ -72,11 +59,13 @@ def environment_check() -> CheckResult:
     )
 
 
-def display_check(
+def _display_check(
     app_config: dict[str, Any],
     hold_seconds: float,
-) -> tuple[CheckResult, Display | None]:
+) -> tuple[CheckResult, object]:
     """Validate display initialization on target hardware."""
+    from yoyopy.ui.display import Display, detect_hardware
+
     requested_hardware = str(app_config.get("display", {}).get("hardware", "auto")).lower()
     resolved_hardware = detect_hardware() if requested_hardware == "auto" else requested_hardware
 
@@ -141,13 +130,15 @@ def display_check(
         return CheckResult(name="display", status="fail", details=str(exc)), None
 
 
-def input_check(display: Display, app_config: dict[str, Any]) -> CheckResult:
+def _input_check(display: object, app_config: dict[str, Any]) -> CheckResult:
     """Validate that the matching input adapter can be constructed."""
+    from yoyopy.ui.input import get_input_manager
+
     input_manager = None
 
     try:
         input_manager = get_input_manager(
-            display.get_adapter(),
+            display.get_adapter(),  # type: ignore[union-attr]
             config=app_config,
             simulate=False,
         )
@@ -182,8 +173,11 @@ def input_check(display: Display, app_config: dict[str, Any]) -> CheckResult:
                 pass
 
 
-def power_check(config_dir: Path) -> CheckResult:
+def _power_check(config_dir: Path) -> CheckResult:
     """Validate PiSugar reachability and report a live battery snapshot."""
+    from yoyopy.config import ConfigManager
+    from yoyopy.power import PowerManager
+
     config_manager = ConfigManager(config_dir=str(config_dir))
     manager = PowerManager.from_config_manager(config_manager)
 
@@ -210,8 +204,11 @@ def power_check(config_dir: Path) -> CheckResult:
     return CheckResult(name="power", status="pass", details=details)
 
 
-def rtc_check(config_dir: Path) -> CheckResult:
+def _rtc_check(config_dir: Path) -> CheckResult:
     """Validate PiSugar RTC reachability and report the current RTC state."""
+    from yoyopy.config import ConfigManager
+    from yoyopy.power import PowerManager
+
     config_manager = ConfigManager(config_dir=str(config_dir))
     manager = PowerManager.from_config_manager(config_manager)
 
@@ -245,8 +242,10 @@ def rtc_check(config_dir: Path) -> CheckResult:
     return CheckResult(name="rtc", status="pass", details=details)
 
 
-def music_check(app_config: dict[str, Any], timeout_seconds: int) -> CheckResult:
+def _music_check(app_config: dict[str, Any], timeout_seconds: int) -> CheckResult:
     """Validate music-backend startup and basic state queries."""
+    from yoyopy.audio.music import MpvBackend, MusicConfig
+
     audio_config = app_config.get("audio", {})
     config = MusicConfig(
         music_dir=Path(str(audio_config.get("music_dir", "/home/pi/Music"))),
@@ -295,8 +294,12 @@ def music_check(app_config: dict[str, Any], timeout_seconds: int) -> CheckResult
         backend.stop()
 
 
-def voip_check(config_dir: Path, registration_timeout: float) -> CheckResult:
+def _voip_check(config_dir: Path, registration_timeout: float) -> CheckResult:
     """Validate Liblinphone startup and SIP registration."""
+    from yoyopy.config import ConfigManager
+    from yoyopy.voip import VoIPConfig, VoIPManager
+    from yoyopy.voip.liblinphone_binding import LiblinphoneBinding
+
     config_manager = ConfigManager(config_dir=str(config_dir))
     voip_config = VoIPConfig.from_config_manager(config_manager)
     binding = LiblinphoneBinding.try_load()
@@ -304,7 +307,7 @@ def voip_check(config_dir: Path, registration_timeout: float) -> CheckResult:
         return CheckResult(
             name="voip",
             status="fail",
-            details="Liblinphone shim is unavailable; run scripts/liblinphone_build.py on the Pi",
+            details="Liblinphone shim is unavailable; run yoyoctl build liblinphone on the Pi",
         )
 
     if not voip_config.sip_identity:
@@ -360,88 +363,77 @@ def voip_check(config_dir: Path, registration_timeout: float) -> CheckResult:
         manager.stop()
 
 
-def lvgl_soak_check(config_dir: Path) -> CheckResult:
+def _lvgl_soak_check(config_dir: Path) -> CheckResult:
     """Run a small LVGL transition and sleep/wake soak on the active app path."""
+    import time as _time
 
-    ok, details = run_lvgl_soak(
-        config_dir=str(config_dir),
-        simulate=False,
-        cycles=1,
-        hold_seconds=0.15,
-        exercise_sleep=True,
-    )
-    return CheckResult(
-        name="lvgl_soak",
-        status="pass" if ok else "fail",
-        details=details,
-    )
+    from yoyopy.app import YoyoPodApp
+    from yoyopy.events import UserActivityEvent
 
+    def _pump_app(app: YoyoPodApp, duration_seconds: float) -> None:
+        deadline = _time.monotonic() + max(0.0, duration_seconds)
+        while _time.monotonic() < deadline:
+            app._process_pending_main_thread_actions()
+            now = _time.monotonic()
+            app._attempt_manager_recovery()
+            app._poll_power_status(now=now)
+            app._pump_lvgl_backend(now)
+            app._feed_watchdog_if_due(now)
+            app._update_screen_power(now)
+            _time.sleep(0.05)
 
-def build_parser() -> argparse.ArgumentParser:
-    """Create the command-line parser."""
-    parser = argparse.ArgumentParser(
-        description=(
-            "Run Raspberry Pi smoke validation for YoyoPod hardware, "
-            "with optional music-backend and SIP registration checks."
+    def _exercise_sleep_wake(app: YoyoPodApp) -> tuple[bool, str]:
+        timeout_seconds = max(1.0, float(app._screen_timeout_seconds or 0.0))
+        app._last_user_activity_at = _time.monotonic() - timeout_seconds - 1.0
+        _pump_app(app, 0.35)
+        if app.context is None or app.context.screen_awake:
+            return False, "screen did not enter sleep during soak"
+        app.event_bus.publish(UserActivityEvent(action_name="lvgl_soak"))
+        _pump_app(app, 0.35)
+        if app.context is None or not app.context.screen_awake:
+            return False, "screen did not wake after simulated activity"
+        return True, "sleep/wake ok"
+
+    app = YoyoPodApp(config_dir=str(config_dir), simulate=False)
+    if not app.setup():
+        return CheckResult(name="lvgl_soak", status="fail", details="app setup failed")
+
+    try:
+        if app.display is None or app.screen_manager is None:
+            return CheckResult(name="lvgl_soak", status="fail", details="display or screen manager not initialized")
+
+        if app.display.backend_kind != "lvgl":
+            return CheckResult(name="lvgl_soak", status="fail", details=f"backend is {app.display.backend_kind}, expected lvgl")
+
+        screens = [
+            "hub", "listen", "playlists", "now_playing",
+            "call", "talk_contact", "call_history", "contacts",
+            "voice_note", "ask", "power",
+        ]
+
+        transitions = 0
+        for _cycle in range(1):
+            for screen_name in screens:
+                if screen_name not in app.screen_manager.screens:
+                    continue
+                app.screen_manager.replace_screen(screen_name)
+                _pump_app(app, 0.15)
+                transitions += 1
+
+        sleep_ok, sleep_details = _exercise_sleep_wake(app)
+        if not sleep_ok:
+            return CheckResult(name="lvgl_soak", status="fail", details=sleep_details)
+
+        return CheckResult(
+            name="lvgl_soak",
+            status="pass",
+            details=f"backend=lvgl, transitions={transitions}, {sleep_details}",
         )
-    )
-    parser.add_argument(
-        "--config-dir",
-        default="config",
-        help="Configuration directory to use (default: config)",
-    )
-    parser.add_argument(
-        "--with-music",
-        action="store_true",
-        help="Also validate music-backend startup from yoyopod_config.yaml",
-    )
-    parser.add_argument(
-        "--with-power",
-        action="store_true",
-        help="Also validate PiSugar power telemetry from yoyopod_config.yaml",
-    )
-    parser.add_argument(
-        "--with-rtc",
-        action="store_true",
-        help="Also validate PiSugar RTC state and alarm visibility",
-    )
-    parser.add_argument(
-        "--with-voip",
-        action="store_true",
-        help="Also validate Liblinphone startup and SIP registration",
-    )
-    parser.add_argument(
-        "--with-lvgl-soak",
-        action="store_true",
-        help="Also run a short LVGL transition and sleep/wake soak",
-    )
-    parser.add_argument(
-        "--music-timeout",
-        type=int,
-        default=5,
-        help="Startup timeout in seconds for music checks (default: 5)",
-    )
-    parser.add_argument(
-        "--voip-timeout",
-        type=float,
-        default=10.0,
-        help="Registration timeout in seconds for VoIP checks (default: 10)",
-    )
-    parser.add_argument(
-        "--display-hold-seconds",
-        type=float,
-        default=0.5,
-        help="How long to keep the display confirmation text visible (default: 0.5)",
-    )
-    parser.add_argument(
-        "--verbose",
-        action="store_true",
-        help="Enable DEBUG logging",
-    )
-    return parser
+    finally:
+        app.stop()
 
 
-def print_summary(results: list[CheckResult]) -> None:
+def _print_summary(results: list[CheckResult]) -> None:
     """Print a compact summary table."""
     print("")
     print("YoyoPod Raspberry Pi smoke summary")
@@ -450,44 +442,53 @@ def print_summary(results: list[CheckResult]) -> None:
         print(f"[{result.status.upper():4}] {result.name}: {result.details}")
 
 
-def main() -> int:
-    """Run the requested smoke checks."""
-    parser = build_parser()
-    args = parser.parse_args()
-    configure_logging(args.verbose)
+@smoke_app.callback(invoke_without_command=True)
+def smoke(
+    config_dir: Annotated[str, typer.Option("--config-dir", help="Configuration directory to use.")] = "config",
+    with_music: Annotated[bool, typer.Option("--with-music", help="Also validate music-backend startup.")] = False,
+    with_power: Annotated[bool, typer.Option("--with-power", help="Also validate PiSugar power telemetry.")] = False,
+    with_rtc: Annotated[bool, typer.Option("--with-rtc", help="Also validate PiSugar RTC state and alarm.")] = False,
+    with_voip: Annotated[bool, typer.Option("--with-voip", help="Also validate Liblinphone startup and SIP registration.")] = False,
+    with_lvgl_soak: Annotated[bool, typer.Option("--with-lvgl-soak", help="Also run a short LVGL transition and sleep/wake soak.")] = False,
+    music_timeout: Annotated[int, typer.Option("--music-timeout", help="Startup timeout in seconds for music checks.")] = 5,
+    voip_timeout: Annotated[float, typer.Option("--voip-timeout", help="Registration timeout in seconds for VoIP checks.")] = 10.0,
+    display_hold_seconds: Annotated[float, typer.Option("--display-hold-seconds", help="How long to keep the display confirmation text visible.")] = 0.5,
+    verbose: Annotated[bool, typer.Option("--verbose", help="Enable DEBUG logging.")] = False,
+) -> None:
+    """Run Raspberry Pi hardware smoke validation for YoyoPod."""
+    from loguru import logger
 
-    config_dir = Path(args.config_dir)
-    if not config_dir.is_absolute():
-        config_dir = REPO_ROOT / config_dir
+    configure_logging(verbose)
+    config_path = resolve_config_dir(config_dir)
 
     logger.info("Starting Raspberry Pi smoke validation")
-    logger.info(f"Using config directory: {config_dir}")
+    logger.info(f"Using config directory: {config_path}")
 
-    app_config = load_app_config(config_dir)
-    results: list[CheckResult] = [environment_check()]
-    display: Display | None = None
+    app_config = _load_app_config(config_path)
+    results: list[CheckResult] = [_environment_check()]
+    display = None
 
     try:
-        display_result, display = display_check(app_config, args.display_hold_seconds)
+        display_result, display = _display_check(app_config, display_hold_seconds)
         results.append(display_result)
 
         if display_result.status == "pass" and display is not None:
-            results.append(input_check(display, app_config))
+            results.append(_input_check(display, app_config))
 
-        if args.with_power:
-            results.append(power_check(config_dir))
+        if with_power:
+            results.append(_power_check(config_path))
 
-        if args.with_rtc:
-            results.append(rtc_check(config_dir))
+        if with_rtc:
+            results.append(_rtc_check(config_path))
 
-        if args.with_music:
-            results.append(music_check(app_config, args.music_timeout))
+        if with_music:
+            results.append(_music_check(app_config, music_timeout))
 
-        if args.with_voip:
-            results.append(voip_check(config_dir, args.voip_timeout))
+        if with_voip:
+            results.append(_voip_check(config_path, voip_timeout))
 
-        if args.with_lvgl_soak:
-            results.append(lvgl_soak_check(config_dir))
+        if with_lvgl_soak:
+            results.append(_lvgl_soak_check(config_path))
     finally:
         if display is not None:
             try:
@@ -495,9 +496,6 @@ def main() -> int:
             except Exception as exc:
                 logger.warning(f"Display cleanup failed: {exc}")
 
-    print_summary(results)
-    return 1 if any(result.status == "fail" for result in results) else 0
-
-
-if __name__ == "__main__":
-    raise SystemExit(main())
+    _print_summary(results)
+    if any(result.status == "fail" for result in results):
+        raise typer.Exit(code=1)

@@ -7,14 +7,14 @@ allowed-tools:
   - Bash(git status:*)
   - Bash(git branch --show-current:*)
   - Bash(git push:*)
-  - Bash(uv run python scripts/pi_remote.py:*)
+  - Bash(yoyoctl remote:*)
 ---
 
 ## Config
 
-Use `deploy/pi-deploy.yaml` as the shared deploy contract and `deploy/pi-deploy.local.yaml` for machine-specific overrides such as host, SSH user, project dir, and branch. `scripts/pi_remote.py` merges them directly, and `uv run python scripts/pi_remote.py config edit` is the preferred way to create or update the local override.
+Use `deploy/pi-deploy.yaml` as the shared deploy contract and `deploy/pi-deploy.local.yaml` for machine-specific overrides such as host, SSH user, project dir, and branch. `yoyoctl remote` merges them directly, and `yoyoctl remote config edit` is the preferred way to create or update the local override.
 
-If the file does not exist yet, run `uv run python scripts/pi_remote.py config edit` first. That command creates `deploy/pi-deploy.local.yaml` automatically before opening it.
+If the file does not exist yet, run `yoyoctl remote config edit` first. That command creates `deploy/pi-deploy.local.yaml` automatically before opening it.
 
 ## Steps
 
@@ -26,17 +26,17 @@ If the file does not exist yet, run `uv run python scripts/pi_remote.py config e
 
 4. **Sync the committed branch onto the Pi.** Run:
    ```bash
-   uv run python scripts/pi_remote.py sync --branch <branch>
+   yoyoctl remote sync --branch <branch>
    ```
 
 5. **Restart and verify the app.** Run:
    ```bash
-   uv run python scripts/pi_remote.py restart
+   yoyoctl remote restart
    ```
 
-6. **Handle failures.** If either script command fails, run:
+6. **Handle failures.** If either command fails, run:
    ```bash
-   uv run python scripts/pi_remote.py logs --lines 20
+   yoyoctl remote logs --lines 20
    ```
    Include the relevant error output in your response.
 

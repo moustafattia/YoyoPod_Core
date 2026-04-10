@@ -1,26 +1,21 @@
 """Tests for Raspberry Pi remote workflow helpers."""
 
-from scripts.pi_remote import (
+from yoyopy.cli.remote.ops import (
     PiDeployConfig,
     RemoteConfig,
     build_archive_sync_extract_command,
-    build_config_editor_command,
     build_local_preflight_commands,
-    build_local_override_template,
     build_logs_command,
-    build_lvgl_soak_command,
     build_native_shim_refresh_command,
     build_parser,
-    build_power_command,
     build_restart_command,
-    build_rtc_command,
     build_rsync_command,
-    build_sync_file_manifest,
-    build_service_command,
+    build_rtc_command,
     build_smoke_command,
     build_startup_verification_command,
     build_status_command,
     build_sync_command,
+    build_sync_file_manifest,
     build_whisplay_command,
     load_pi_deploy_config,
     quote_remote_project_dir,
@@ -29,6 +24,13 @@ from scripts.pi_remote import (
     should_use_direct_rsync,
     sync_path_is_excluded,
 )
+from yoyopy.cli.remote.infra import (
+    build_config_editor_command,
+    build_local_override_template,
+    build_power_command,
+    build_service_command,
+)
+from yoyopy.cli.remote.lvgl import build_lvgl_soak_command
 from argparse import Namespace
 from pathlib import Path
 from types import SimpleNamespace
@@ -182,8 +184,8 @@ def test_build_rsync_command_supports_custom_executable() -> None:
 def test_resolve_local_executable_uses_common_windows_rsync_paths(monkeypatch) -> None:
     """Windows helper should find rsync even when the current PATH has not refreshed yet."""
 
-    monkeypatch.setattr("scripts.pi_remote.sys.platform", "win32")
-    monkeypatch.setattr("scripts.pi_remote.shutil.which", lambda _program: None)
+    monkeypatch.setattr("yoyopy.cli.remote.ops.sys.platform", "win32")
+    monkeypatch.setattr("yoyopy.cli.remote.ops.shutil.which", lambda _program: None)
     monkeypatch.setattr(Path, "exists", lambda self: str(self) == r"C:\msys64\usr\bin\rsync.exe")
 
     assert resolve_local_executable("rsync") == r"C:\msys64\usr\bin\rsync.exe"
@@ -192,7 +194,7 @@ def test_resolve_local_executable_uses_common_windows_rsync_paths(monkeypatch) -
 def test_should_use_direct_rsync_disables_known_windows_msys_builds(monkeypatch) -> None:
     """Windows should prefer the archive fallback for MSYS/Git rsync builds."""
 
-    monkeypatch.setattr("scripts.pi_remote.sys.platform", "win32")
+    monkeypatch.setattr("yoyopy.cli.remote.ops.sys.platform", "win32")
     monkeypatch.delenv("YOYOPOD_PI_FORCE_RSYNC", raising=False)
 
     assert should_use_direct_rsync(r"C:\msys64\usr\bin\rsync.exe") is False
@@ -201,7 +203,7 @@ def test_should_use_direct_rsync_disables_known_windows_msys_builds(monkeypatch)
 def test_should_use_direct_rsync_supports_force_override(monkeypatch) -> None:
     """An explicit env override should allow direct rsync for debugging."""
 
-    monkeypatch.setattr("scripts.pi_remote.sys.platform", "win32")
+    monkeypatch.setattr("yoyopy.cli.remote.ops.sys.platform", "win32")
     monkeypatch.setenv("YOYOPOD_PI_FORCE_RSYNC", "1")
 
     assert should_use_direct_rsync(r"C:\msys64\usr\bin\rsync.exe") is True
@@ -260,8 +262,8 @@ def test_build_native_shim_refresh_command_covers_both_native_builds() -> None:
 
     command = build_native_shim_refresh_command(DEPLOY_CONFIG)
 
-    assert "scripts/lvgl_build.py" in command
-    assert "scripts/liblinphone_build.py" in command
+    assert "'yoyoctl', 'build', 'lvgl'" in command
+    assert "'yoyoctl', 'build', 'liblinphone'" in command
     assert "libyoyopy_lvgl_shim.so" in command
     assert "libyoyopy_liblinphone_shim.so" in command
     assert "[pi-remote] info=rebuilding" in command
@@ -292,7 +294,7 @@ def test_build_archive_sync_extract_command_targets_remote_project_dir() -> None
 
 def test_build_smoke_command_adds_optional_checks() -> None:
     """Smoke command should include optional service-check flags when requested."""
-    args = Namespace(
+    command = build_smoke_command(
         with_power=True,
         with_rtc=True,
         with_music=True,
@@ -303,9 +305,7 @@ def test_build_smoke_command_adds_optional_checks() -> None:
         voip_timeout=15.0,
     )
 
-    command = build_smoke_command(args)
-
-    assert command.startswith("uv run python scripts/pi_smoke.py")
+    assert command.startswith("uv run yoyoctl pi smoke")
     assert "--with-power" in command
     assert "--with-rtc" in command
     assert "--with-music" in command
@@ -322,10 +322,9 @@ def test_build_local_preflight_commands_cover_compile_and_pytest() -> None:
 
     assert commands[0][0] == "compileall"
     assert commands[0][1][1:3] == ["-m", "compileall"]
-    assert "scripts/pisugar_rtc.py" in commands[0][1]
-    assert "scripts/pisugar_power.py" in commands[0][1]
-    assert "scripts/whisplay_tune.py" in commands[0][1]
-    assert "scripts/lvgl_soak.py" in commands[0][1]
+    assert "yoyopy/cli/pi/smoke.py" in commands[0][1]
+    assert "yoyopy/cli/pi/voip.py" in commands[0][1]
+    assert "yoyopy/power/backend.py" in commands[0][1]
     assert commands[1] == ("pytest", ["uv", "run", "pytest", "-q"])
 
 
@@ -342,7 +341,7 @@ def test_build_whisplay_command_adds_timing_overrides() -> None:
 
     command = build_whisplay_command(args)
 
-    assert command.startswith("uv run python scripts/whisplay_tune.py")
+    assert command.startswith("uv run yoyoctl pi tune")
     assert "--verbose" in command
     assert "--no-display" in command
     assert "--duration-seconds 45.0" in command
@@ -370,32 +369,30 @@ def test_build_rtc_command_supports_status_and_set_alarm() -> None:
     status_command = build_rtc_command(status_args)
     set_alarm_command = build_rtc_command(set_alarm_args)
 
-    assert status_command == "uv run python scripts/pisugar_rtc.py status"
-    assert set_alarm_command.startswith("uv run python scripts/pisugar_rtc.py --verbose set-alarm")
+    assert status_command == "uv run yoyoctl pi power rtc status"
+    assert set_alarm_command.startswith("uv run yoyoctl pi power rtc --verbose set-alarm")
     assert "--time 2026-04-06T07:30:00+02:00" in set_alarm_command
     assert "--repeat-mask 31" in set_alarm_command
 
 
 def test_build_power_command_supports_verbose_status() -> None:
     """Power helper command should forward the optional verbose flag."""
-    command = build_power_command(Namespace(verbose=True))
+    command = build_power_command(verbose=True)
 
-    assert command == "uv run python scripts/pisugar_power.py --verbose"
+    assert command == "uv run yoyoctl pi power battery --verbose"
 
 
 def test_build_lvgl_soak_command_supports_cycles_and_sleep_toggle() -> None:
     """LVGL soak helper should forward the relevant duration flags."""
 
     command = build_lvgl_soak_command(
-        Namespace(
-            verbose=True,
-            cycles=3,
-            hold_seconds=0.35,
-            skip_sleep=True,
-        )
+        verbose=True,
+        cycles=3,
+        hold_seconds=0.35,
+        skip_sleep=True,
     )
 
-    assert command.startswith("uv run python scripts/lvgl_soak.py")
+    assert command.startswith("uv run yoyoctl pi lvgl soak")
     assert "--verbose" in command
     assert "--cycles 3" in command
     assert "--hold-seconds 0.35" in command
@@ -418,8 +415,8 @@ def test_build_restart_command_reuses_pid_and_startup_contract() -> None:
 
     command = build_restart_command(DEPLOY_CONFIG)
 
-    assert "scripts/lvgl_build.py" in command
-    assert "scripts/liblinphone_build.py" in command
+    assert "'yoyoctl', 'build', 'lvgl'" in command
+    assert "'yoyoctl', 'build', 'liblinphone'" in command
     assert 'if systemctl cat yoyopod@"$(id -un)".service >/dev/null 2>&1; then sudo systemctl stop yoyopod@"$(id -un)".service >/dev/null 2>&1 || true;' in command
     assert 'sudo systemctl start yoyopod@"$(id -un)".service;' in command
     assert "rm -f /tmp/yoyopod.pid" in command
@@ -467,8 +464,8 @@ def test_run_screenshot_uses_sigusr1_for_readback(monkeypatch, tmp_path) -> None
     def fake_subprocess_run(command, check=False):
         return SimpleNamespace(returncode=0)
 
-    monkeypatch.setattr("scripts.pi_remote.run_remote_capture", fake_run_remote_capture)
-    monkeypatch.setattr("scripts.pi_remote.subprocess.run", fake_subprocess_run)
+    monkeypatch.setattr("yoyopy.cli.remote.ops.run_remote_capture", fake_run_remote_capture)
+    monkeypatch.setattr("yoyopy.cli.remote.ops.subprocess.run", fake_subprocess_run)
 
     args = Namespace(readback=True, output=str(tmp_path / "pi_screenshot.png"))
     exit_code = run_screenshot(
@@ -499,8 +496,8 @@ def test_run_screenshot_uses_sigusr2_for_default_shadow_path(monkeypatch, tmp_pa
     def fake_subprocess_run(command, check=False):
         return SimpleNamespace(returncode=0)
 
-    monkeypatch.setattr("scripts.pi_remote.run_remote_capture", fake_run_remote_capture)
-    monkeypatch.setattr("scripts.pi_remote.subprocess.run", fake_subprocess_run)
+    monkeypatch.setattr("yoyopy.cli.remote.ops.run_remote_capture", fake_run_remote_capture)
+    monkeypatch.setattr("yoyopy.cli.remote.ops.subprocess.run", fake_subprocess_run)
 
     args = Namespace(readback=False, output=str(tmp_path / "pi_screenshot.png"))
     exit_code = run_screenshot(
@@ -518,11 +515,8 @@ def test_run_screenshot_uses_sigusr2_for_default_shadow_path(monkeypatch, tmp_pa
 def test_build_service_command_supports_install_and_logs() -> None:
     """Service helper should build install and log commands for the systemd unit."""
 
-    install_args = Namespace(service_action="install", lines=100)
-    logs_args = Namespace(service_action="logs", lines=25)
-
-    install_command = build_service_command(install_args, DEPLOY_CONFIG)
-    logs_command = build_service_command(logs_args, DEPLOY_CONFIG)
+    install_command = build_service_command("install", deploy_config=DEPLOY_CONFIG)
+    logs_command = build_service_command("logs", lines=25, deploy_config=DEPLOY_CONFIG)
 
     assert "deploy/systemd/yoyopod@.service" in install_command
     assert 'sudo systemctl enable --now yoyopod@"$(id -un)".service' in install_command
