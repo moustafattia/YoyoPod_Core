@@ -1,0 +1,10 @@
+# Radxa Cubie A7Z board overrides.
+#
+# This board is auto-selected on known Cubie A7Z hardware, or can be forced with:
+#   YOYOPOD_CONFIG_BOARD=radxa-cubie-a7z
+
+audio:
+  music_dir: "/home/radxa/Music"
+
+power:
+  watchdog_i2c_bus: 7
