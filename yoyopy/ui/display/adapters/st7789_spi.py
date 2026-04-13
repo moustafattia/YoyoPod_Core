@@ -39,7 +39,7 @@ _COLMOD = 0x3A
 _MADCTL = 0x36
 
 # MADCTL flags for landscape rotation (320x240 from native 240x320)
-_MADCTL_LANDSCAPE = 0x60  # MV=1, MX=1 -> 90deg CW rotation
+_MADCTL_LANDSCAPE = 0xA0  # MV=1, MY=1 -> landscape with buttons on right
 
 # SPI transfer chunk size (avoid kernel buffer limits)
 _SPI_CHUNK_SIZE = 4096
