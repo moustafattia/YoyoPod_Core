@@ -36,6 +36,7 @@ int yoyopy_lvgl_show_probe_scene(int32_t scene_id);
 int yoyopy_lvgl_set_status_bar_state(
     int32_t network_enabled,
     int32_t network_connected,
+    int32_t wifi_connected,
     int32_t signal_strength,
     int32_t gps_has_fix
 );
@@ -322,7 +323,9 @@ class LvglBinding:
     def shutdown(self) -> None:
         self.lib.yoyopy_lvgl_shutdown()
 
-    def register_display(self, width: int, height: int, buffer_pixel_count: int, flush_callback) -> None:
+    def register_display(
+        self, width: int, height: int, buffer_pixel_count: int, flush_callback
+    ) -> None:
         callback = self.ffi.callback(
             "void(int32_t, int32_t, int32_t, int32_t, const unsigned char *, uint32_t, void *)",
             flush_callback,
@@ -361,12 +364,14 @@ class LvglBinding:
         *,
         network_enabled: int,
         network_connected: int,
+        wifi_connected: int,
         signal_strength: int,
         gps_has_fix: int,
     ) -> None:
         result = self.lib.yoyopy_lvgl_set_status_bar_state(
             int(network_enabled),
             int(network_connected),
+            int(wifi_connected),
             max(0, min(4, int(signal_strength))),
             int(gps_has_fix),
         )
@@ -495,8 +500,12 @@ class LvglBinding:
             normalized_colors.append(0)
 
         contact_raw = self.ffi.new("char[]", contact_name.encode("utf-8"))
-        title_raw = self.ffi.new("char[]", title_text.encode("utf-8")) if title_text else self.ffi.NULL
-        status_raw = self.ffi.new("char[]", status_text.encode("utf-8")) if status_text else self.ffi.NULL
+        title_raw = (
+            self.ffi.new("char[]", title_text.encode("utf-8")) if title_text else self.ffi.NULL
+        )
+        status_raw = (
+            self.ffi.new("char[]", status_text.encode("utf-8")) if status_text else self.ffi.NULL
+        )
         footer_raw = self.ffi.new("char[]", footer.encode("utf-8"))
         icon_0_raw = self.ffi.new("char[]", normalized_icons[0].encode("utf-8"))
         icon_1_raw = self.ffi.new("char[]", normalized_icons[1].encode("utf-8"))
@@ -562,9 +571,7 @@ class LvglBinding:
             normalized_icon_keys.append("")
 
         page_text_raw = (
-            self.ffi.new("char[]", page_text.encode("utf-8"))
-            if page_text
-            else self.ffi.NULL
+            self.ffi.new("char[]", page_text.encode("utf-8")) if page_text else self.ffi.NULL
         )
         footer_raw = self.ffi.new("char[]", footer.encode("utf-8"))
         item_0_raw = self.ffi.new("char[]", normalized_items[0].encode("utf-8"))
@@ -655,9 +662,7 @@ class LvglBinding:
 
         title_raw = self.ffi.new("char[]", title_text.encode("utf-8"))
         page_text_raw = (
-            self.ffi.new("char[]", page_text.encode("utf-8"))
-            if page_text
-            else self.ffi.NULL
+            self.ffi.new("char[]", page_text.encode("utf-8")) if page_text else self.ffi.NULL
         )
         status_chip_text_raw = (
             self.ffi.new("char[]", status_chip_text.encode("utf-8"))
@@ -939,7 +944,9 @@ class LvglBinding:
             normalized_items.append("")
 
         title_raw = self.ffi.new("char[]", title_text.encode("utf-8"))
-        page_text_raw = self.ffi.new("char[]", page_text.encode("utf-8")) if page_text else self.ffi.NULL
+        page_text_raw = (
+            self.ffi.new("char[]", page_text.encode("utf-8")) if page_text else self.ffi.NULL
+        )
         icon_raw = self.ffi.new("char[]", icon_key.encode("utf-8"))
         footer_raw = self.ffi.new("char[]", footer.encode("utf-8"))
         item_0_raw = self.ffi.new("char[]", normalized_items[0].encode("utf-8"))

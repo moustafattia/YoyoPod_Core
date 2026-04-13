@@ -9,20 +9,24 @@ if TYPE_CHECKING:
 
 
 def network_status_kwargs(context: "AppContext | None") -> dict[str, int]:
-    """Return normalized cellular/GPS status-bar values for the native LVGL scenes."""
+    """Return normalized network status-bar values for the native LVGL scenes."""
 
     if context is None:
         return {
             "network_enabled": 0,
             "network_connected": 0,
+            "wifi_connected": 0,
             "signal_strength": 0,
             "gps_has_fix": 0,
         }
 
     signal_strength = max(0, min(4, int(getattr(context, "signal_strength", 0))))
+    connection_type = str(getattr(context, "connection_type", "none")).lower()
+    is_connected = bool(getattr(context, "is_connected", False))
     return {
         "network_enabled": 1 if bool(getattr(context, "network_enabled", False)) else 0,
-        "network_connected": 1 if bool(getattr(context, "is_connected", False)) else 0,
+        "network_connected": 1 if is_connected and connection_type == "4g" else 0,
+        "wifi_connected": 1 if is_connected and connection_type == "wifi" else 0,
         "signal_strength": signal_strength,
         "gps_has_fix": 1 if bool(getattr(context, "gps_has_fix", False)) else 0,
     }

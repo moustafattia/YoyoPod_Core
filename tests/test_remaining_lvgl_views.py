@@ -7,7 +7,6 @@ from dataclasses import dataclass
 from yoyopy.app_context import AppContext
 from yoyopy.ui.input import InteractionProfile
 from yoyopy.ui.screens import (
-    AskScreen,
     CallScreen,
     ContactListScreen,
     InCallScreen,
@@ -317,6 +316,7 @@ def test_hub_view_syncs_network_status_bar_state_through_lvgl() -> None:
     assert binding.status_bar_state_payloads[-1] == {
         "network_enabled": 1,
         "network_connected": 0,
+        "wifi_connected": 0,
         "signal_strength": 3,
         "gps_has_fix": 1,
     }

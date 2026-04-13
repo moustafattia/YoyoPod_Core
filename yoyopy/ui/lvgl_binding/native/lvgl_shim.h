@@ -48,6 +48,7 @@ int yoyopy_lvgl_show_probe_scene(int32_t scene_id);
 int yoyopy_lvgl_set_status_bar_state(
     int32_t network_enabled,
     int32_t network_connected,
+    int32_t wifi_connected,
     int32_t signal_strength,
     int32_t gps_has_fix
 );

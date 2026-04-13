@@ -20,6 +20,7 @@ def test_network_status_kwargs_normalize_context_state() -> None:
     context.update_network_status(
         network_enabled=True,
         signal_bars=9,
+        connection_type="4g",
         connected=True,
         gps_has_fix=True,
     )
@@ -27,8 +28,29 @@ def test_network_status_kwargs_normalize_context_state() -> None:
     assert network_status_kwargs(context) == {
         "network_enabled": 1,
         "network_connected": 1,
+        "wifi_connected": 0,
         "signal_strength": 4,
         "gps_has_fix": 1,
+    }
+
+
+def test_network_status_kwargs_marks_wifi_state_separately() -> None:
+    """Wi-Fi connectivity should not light the 4G bars as connected."""
+
+    context = AppContext()
+    context.update_network_status(
+        network_enabled=True,
+        signal_bars=3,
+        connection_type="wifi",
+        connected=True,
+    )
+
+    assert network_status_kwargs(context) == {
+        "network_enabled": 1,
+        "network_connected": 0,
+        "wifi_connected": 1,
+        "signal_strength": 3,
+        "gps_has_fix": 0,
     }
 
 

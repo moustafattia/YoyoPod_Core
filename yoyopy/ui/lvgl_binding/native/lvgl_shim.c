@@ -16,7 +16,10 @@ typedef struct {
 
 typedef struct {
     lv_obj_t * signal_bars[4];
-    lv_obj_t * gps_dot;
+    lv_obj_t * wifi_label;
+    lv_obj_t * gps_ring;
+    lv_obj_t * gps_center;
+    lv_obj_t * gps_tail;
     lv_obj_t * voip_dot;
     lv_obj_t * time_label;
     lv_obj_t * battery_outline;
@@ -28,6 +31,7 @@ typedef struct {
 typedef struct {
     int32_t network_enabled;
     int32_t network_connected;
+    int32_t wifi_connected;
     int32_t signal_strength;
     int32_t gps_has_fix;
 } yoyopy_status_bar_state_t;
@@ -47,7 +51,7 @@ static const uint32_t YOYOPY_THEME_NEUTRAL_RGB = 0x9CA3AF;
 static const uint32_t YOYOPY_MODE_LISTEN_RGB = 0x00FF88;
 static const uint32_t YOYOPY_MODE_TALK_RGB = 0x00D4FF;
 static const int YOYOPY_STATUS_SIGNAL_BAR_HEIGHTS[4] = {4, 7, 10, 13};
-static yoyopy_status_bar_state_t g_status_bar_state = {0, 0, 0, 0};
+static yoyopy_status_bar_state_t g_status_bar_state = {0, 0, 0, 0, 0};
 
 typedef struct {
     int built;
@@ -749,17 +753,17 @@ static lv_color_t yoyopy_color_for_kind(int32_t color_kind, uint32_t accent_rgb)
     return yoyopy_color_u24(accent_rgb);
 }
 
-#define YOYOPY_STATUS_DOT_X 18
-#define YOYOPY_STATUS_DOT_Y 15
-#define YOYOPY_STATUS_TIME_X 38
-#define YOYOPY_STATUS_TIME_Y 9
-#define YOYOPY_STATUS_DOT_X_WITH_NETWORK 54
-#define YOYOPY_STATUS_TIME_X_WITH_NETWORK 68
-#define YOYOPY_STATUS_SIGNAL_X 18
-#define YOYOPY_STATUS_SIGNAL_BASE_Y 19
-#define YOYOPY_STATUS_SIGNAL_GAP 4
-#define YOYOPY_STATUS_GPS_X 42
-#define YOYOPY_STATUS_GPS_Y 16
+#define YOYOPY_STATUS_LEFT_INSET 16
+#define YOYOPY_STATUS_ICON_BOTTOM_Y 20
+#define YOYOPY_STATUS_TIME_Y 8
+#define YOYOPY_STATUS_TIME_WIDTH 64
+#define YOYOPY_STATUS_CLUSTER_GAP 6
+#define YOYOPY_STATUS_SIGNAL_BAR_WIDTH 3
+#define YOYOPY_STATUS_SIGNAL_BAR_GAP 1
+#define YOYOPY_STATUS_WIFI_WIDTH 12
+#define YOYOPY_STATUS_GPS_WIDTH 8
+#define YOYOPY_STATUS_GPS_HEIGHT 12
+#define YOYOPY_STATUS_VOIP_SIZE 6
 #define YOYOPY_STATUS_BATTERY_X 172
 #define YOYOPY_STATUS_BATTERY_Y 11
 #define YOYOPY_STATUS_BATTERY_TIP_X 186
@@ -799,7 +803,8 @@ static void yoyopy_apply_signal_bars(
     yoyopy_status_bar_t * bar,
     int32_t network_enabled,
     int32_t network_connected,
-    int32_t signal_strength
+    int32_t signal_strength,
+    int32_t start_x
 ) {
     lv_color_t active_color = yoyopy_color_u24(
         network_connected ? YOYOPY_THEME_SUCCESS_RGB : YOYOPY_THEME_MUTED_RGB
@@ -818,11 +823,11 @@ static void yoyopy_apply_signal_bars(
         }
 
         int height = YOYOPY_STATUS_SIGNAL_BAR_HEIGHTS[index];
-        lv_obj_set_size(signal_bar, 3, height);
+        lv_obj_set_size(signal_bar, YOYOPY_STATUS_SIGNAL_BAR_WIDTH, height);
         lv_obj_set_pos(
             signal_bar,
-            YOYOPY_STATUS_SIGNAL_X + (index * YOYOPY_STATUS_SIGNAL_GAP),
-            YOYOPY_STATUS_SIGNAL_BASE_Y - height
+            start_x + (index * (YOYOPY_STATUS_SIGNAL_BAR_WIDTH + YOYOPY_STATUS_SIGNAL_BAR_GAP)),
+            YOYOPY_STATUS_ICON_BOTTOM_Y - height + 1
         );
         lv_obj_set_style_bg_color(
             signal_bar,
@@ -833,23 +838,68 @@ static void yoyopy_apply_signal_bars(
     }
 }
 
-static void yoyopy_apply_gps_dot(yoyopy_status_bar_t * bar, int32_t network_enabled, int32_t gps_has_fix) {
-    if(bar->gps_dot == NULL) {
-        return;
+static int32_t yoyopy_status_top_for_height(int32_t height) {
+    return YOYOPY_STATUS_ICON_BOTTOM_Y - height + 1;
+}
+
+static int32_t yoyopy_apply_wifi_icon(
+    yoyopy_status_bar_t * bar,
+    int32_t wifi_connected,
+    int32_t start_x
+) {
+    if(bar->wifi_label == NULL) {
+        return start_x;
+    }
+
+    if(!wifi_connected) {
+        lv_obj_add_flag(bar->wifi_label, LV_OBJ_FLAG_HIDDEN);
+        return start_x;
+    }
+
+    lv_obj_clear_flag(bar->wifi_label, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_update_layout(bar->wifi_label);
+    int32_t label_height = lv_obj_get_height(bar->wifi_label);
+    if(label_height <= 0) {
+        label_height = 10;
+    }
+    lv_obj_set_pos(
+        bar->wifi_label,
+        start_x,
+        yoyopy_status_top_for_height(label_height)
+    );
+    lv_obj_set_style_text_color(bar->wifi_label, yoyopy_color_u24(YOYOPY_THEME_SUCCESS_RGB), 0);
+    return start_x + YOYOPY_STATUS_WIFI_WIDTH + YOYOPY_STATUS_CLUSTER_GAP;
+}
+
+static int32_t yoyopy_apply_gps_icon(
+    yoyopy_status_bar_t * bar,
+    int32_t network_enabled,
+    int32_t gps_has_fix,
+    int32_t start_x
+) {
+    if(bar->gps_ring == NULL || bar->gps_center == NULL || bar->gps_tail == NULL) {
+        return start_x;
     }
 
     if(!network_enabled) {
-        lv_obj_add_flag(bar->gps_dot, LV_OBJ_FLAG_HIDDEN);
-        return;
+        lv_obj_add_flag(bar->gps_ring, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_add_flag(bar->gps_center, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_add_flag(bar->gps_tail, LV_OBJ_FLAG_HIDDEN);
+        return start_x;
     }
 
-    lv_obj_set_pos(bar->gps_dot, YOYOPY_STATUS_GPS_X, YOYOPY_STATUS_GPS_Y);
-    lv_obj_set_style_bg_color(
-        bar->gps_dot,
-        yoyopy_color_u24(gps_has_fix ? YOYOPY_THEME_SUCCESS_RGB : YOYOPY_THEME_MUTED_RGB),
-        0
-    );
-    lv_obj_clear_flag(bar->gps_dot, LV_OBJ_FLAG_HIDDEN);
+    lv_color_t color = yoyopy_color_u24(gps_has_fix ? YOYOPY_THEME_SUCCESS_RGB : YOYOPY_THEME_MUTED_RGB);
+    int32_t icon_top = yoyopy_status_top_for_height(YOYOPY_STATUS_GPS_HEIGHT);
+    lv_obj_set_pos(bar->gps_ring, start_x, icon_top);
+    lv_obj_set_pos(bar->gps_center, start_x + 3, icon_top + 3);
+    lv_obj_set_pos(bar->gps_tail, start_x + 3, icon_top + 7);
+    lv_obj_set_style_border_color(bar->gps_ring, color, 0);
+    lv_obj_set_style_bg_color(bar->gps_center, color, 0);
+    lv_obj_set_style_bg_color(bar->gps_tail, color, 0);
+    lv_obj_clear_flag(bar->gps_ring, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_clear_flag(bar->gps_center, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_clear_flag(bar->gps_tail, LV_OBJ_FLAG_HIDDEN);
+    return start_x + YOYOPY_STATUS_GPS_WIDTH + YOYOPY_STATUS_CLUSTER_GAP;
 }
 
 static void yoyopy_status_bar_build(lv_obj_t * parent, yoyopy_status_bar_t * bar, int show_time) {
@@ -863,24 +913,51 @@ static void yoyopy_status_bar_build(lv_obj_t * parent, yoyopy_status_bar_t * bar
         lv_obj_add_flag(bar->signal_bars[index], LV_OBJ_FLAG_HIDDEN);
     }
 
-    bar->gps_dot = lv_obj_create(parent);
-    lv_obj_remove_style_all(bar->gps_dot);
-    lv_obj_set_size(bar->gps_dot, 6, 6);
-    lv_obj_set_style_radius(bar->gps_dot, LV_RADIUS_CIRCLE, 0);
-    lv_obj_set_style_bg_opa(bar->gps_dot, LV_OPA_COVER, 0);
-    lv_obj_add_flag(bar->gps_dot, LV_OBJ_FLAG_HIDDEN);
+    bar->wifi_label = lv_label_create(parent);
+    lv_label_set_text(bar->wifi_label, LV_SYMBOL_WIFI);
+    lv_obj_set_width(bar->wifi_label, YOYOPY_STATUS_WIFI_WIDTH);
+    lv_label_set_long_mode(bar->wifi_label, LV_LABEL_LONG_MODE_CLIP);
+    lv_obj_set_style_text_font(bar->wifi_label, &lv_font_montserrat_12, 0);
+    lv_obj_set_style_text_align(bar->wifi_label, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_set_style_text_color(bar->wifi_label, yoyopy_color_u24(YOYOPY_THEME_MUTED_RGB), 0);
+    lv_obj_add_flag(bar->wifi_label, LV_OBJ_FLAG_HIDDEN);
+
+    bar->gps_ring = lv_obj_create(parent);
+    lv_obj_remove_style_all(bar->gps_ring);
+    lv_obj_set_size(bar->gps_ring, 8, 8);
+    lv_obj_set_style_radius(bar->gps_ring, LV_RADIUS_CIRCLE, 0);
+    lv_obj_set_style_border_width(bar->gps_ring, 1, 0);
+    lv_obj_set_style_bg_opa(bar->gps_ring, LV_OPA_TRANSP, 0);
+    lv_obj_add_flag(bar->gps_ring, LV_OBJ_FLAG_HIDDEN);
+
+    bar->gps_center = lv_obj_create(parent);
+    lv_obj_remove_style_all(bar->gps_center);
+    lv_obj_set_size(bar->gps_center, 2, 2);
+    lv_obj_set_style_radius(bar->gps_center, LV_RADIUS_CIRCLE, 0);
+    lv_obj_set_style_bg_opa(bar->gps_center, LV_OPA_COVER, 0);
+    lv_obj_add_flag(bar->gps_center, LV_OBJ_FLAG_HIDDEN);
+
+    bar->gps_tail = lv_obj_create(parent);
+    lv_obj_remove_style_all(bar->gps_tail);
+    lv_obj_set_size(bar->gps_tail, 2, 5);
+    lv_obj_set_style_radius(bar->gps_tail, 1, 0);
+    lv_obj_set_style_bg_opa(bar->gps_tail, LV_OPA_COVER, 0);
+    lv_obj_add_flag(bar->gps_tail, LV_OBJ_FLAG_HIDDEN);
 
     bar->voip_dot = lv_obj_create(parent);
     lv_obj_remove_style_all(bar->voip_dot);
-    lv_obj_set_size(bar->voip_dot, 8, 8);
+    lv_obj_set_size(bar->voip_dot, YOYOPY_STATUS_VOIP_SIZE, YOYOPY_STATUS_VOIP_SIZE);
     lv_obj_set_style_radius(bar->voip_dot, LV_RADIUS_CIRCLE, 0);
-    lv_obj_set_pos(bar->voip_dot, YOYOPY_STATUS_DOT_X, YOYOPY_STATUS_DOT_Y);
+    lv_obj_set_style_bg_opa(bar->voip_dot, LV_OPA_COVER, 0);
 
     if(show_time) {
         bar->time_label = lv_label_create(parent);
-        lv_obj_set_pos(bar->time_label, YOYOPY_STATUS_TIME_X, YOYOPY_STATUS_TIME_Y);
+        lv_obj_set_width(bar->time_label, YOYOPY_STATUS_TIME_WIDTH);
+        lv_label_set_long_mode(bar->time_label, LV_LABEL_LONG_MODE_CLIP);
         lv_obj_set_style_text_font(bar->time_label, &lv_font_montserrat_12, 0);
+        lv_obj_set_style_text_align(bar->time_label, LV_TEXT_ALIGN_CENTER, 0);
         lv_obj_set_style_text_color(bar->time_label, yoyopy_color_u24(YOYOPY_THEME_MUTED_RGB), 0);
+        lv_obj_align(bar->time_label, LV_ALIGN_TOP_MID, 0, YOYOPY_STATUS_TIME_Y);
     }
 
     bar->battery_outline = lv_obj_create(parent);
@@ -922,24 +999,32 @@ static void yoyopy_status_bar_sync(
 ) {
     int32_t network_enabled = g_status_bar_state.network_enabled;
     int32_t network_connected = g_status_bar_state.network_connected;
+    int32_t wifi_connected = g_status_bar_state.wifi_connected;
     int32_t signal_strength = g_status_bar_state.signal_strength;
     int32_t gps_has_fix = g_status_bar_state.gps_has_fix;
-    int32_t dot_x = network_enabled ? YOYOPY_STATUS_DOT_X_WITH_NETWORK : YOYOPY_STATUS_DOT_X;
-    int32_t time_x = network_enabled ? YOYOPY_STATUS_TIME_X_WITH_NETWORK : YOYOPY_STATUS_TIME_X;
+    int32_t cursor_x = YOYOPY_STATUS_LEFT_INSET;
 
-    yoyopy_apply_signal_bars(bar, network_enabled, network_connected, signal_strength);
-    yoyopy_apply_gps_dot(bar, network_enabled, gps_has_fix);
+    yoyopy_apply_signal_bars(bar, network_enabled, network_connected, signal_strength, cursor_x);
+    if(network_enabled) {
+        cursor_x +=
+            (4 * YOYOPY_STATUS_SIGNAL_BAR_WIDTH) +
+            (3 * YOYOPY_STATUS_SIGNAL_BAR_GAP) +
+            YOYOPY_STATUS_CLUSTER_GAP;
+    }
+    cursor_x = yoyopy_apply_wifi_icon(bar, wifi_connected, cursor_x);
+    cursor_x = yoyopy_apply_gps_icon(bar, network_enabled, gps_has_fix, cursor_x);
     if(bar->voip_dot != NULL) {
-        lv_obj_set_pos(bar->voip_dot, dot_x, YOYOPY_STATUS_DOT_Y);
+        lv_obj_set_pos(
+            bar->voip_dot,
+            cursor_x,
+            yoyopy_status_top_for_height(YOYOPY_STATUS_VOIP_SIZE)
+        );
     }
     yoyopy_apply_voip_dot(bar->voip_dot, voip_state);
-    if(voip_state == 0) {
-        time_x = network_enabled ? YOYOPY_STATUS_DOT_X_WITH_NETWORK : YOYOPY_STATUS_DOT_X;
-    }
 
     if(bar->time_label != NULL) {
         lv_label_set_text(bar->time_label, yoyopy_time_or_default(time_text));
-        lv_obj_set_pos(bar->time_label, time_x, YOYOPY_STATUS_TIME_Y);
+        lv_obj_align(bar->time_label, LV_ALIGN_TOP_MID, 0, YOYOPY_STATUS_TIME_Y);
         lv_obj_clear_flag(bar->time_label, LV_OBJ_FLAG_HIDDEN);
     }
 
@@ -969,11 +1054,13 @@ static void yoyopy_status_bar_sync(
 int yoyopy_lvgl_set_status_bar_state(
     int32_t network_enabled,
     int32_t network_connected,
+    int32_t wifi_connected,
     int32_t signal_strength,
     int32_t gps_has_fix
 ) {
     g_status_bar_state.network_enabled = network_enabled ? 1 : 0;
     g_status_bar_state.network_connected = network_connected ? 1 : 0;
+    g_status_bar_state.wifi_connected = wifi_connected ? 1 : 0;
     if(signal_strength < 0) {
         signal_strength = 0;
     }
