@@ -482,6 +482,7 @@ class AskScreen(Screen):
             stt_backend=voice_cfg.stt_backend,
             tts_backend=voice_cfg.tts_backend,
             vosk_model_path=voice_cfg.vosk_model_path,
+            speaker_device_id=speaker_device_id,
             capture_device_id=capture_device_id,
             sample_rate_hz=voice_cfg.sample_rate_hz,
             record_seconds=voice_cfg.record_seconds,
