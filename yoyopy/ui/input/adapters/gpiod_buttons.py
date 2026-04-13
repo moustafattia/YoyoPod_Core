@@ -21,13 +21,7 @@ from loguru import logger
 
 from yoyopy.ui.input.hal import InputAction, InputHAL
 
-try:
-    import gpiod
-
-    HAS_GPIOD = True
-except ImportError:
-    gpiod = None  # type: ignore[assignment]
-    HAS_GPIOD = False
+from yoyopy.ui.gpiod_compat import HAS_GPIOD, open_chip, request_input
 
 
 class Button(Enum):
@@ -116,14 +110,9 @@ class GpiodButtonAdapter(InputHAL):
                 continue
 
             try:
-                chip = gpiod.Chip(chip_name)
+                chip = open_chip(chip_name)
                 self._chips.append(chip)
-                line = chip.get_line(line_offset)
-                line.request(
-                    consumer=f"pimoroni-btn-{button.value}",
-                    type=gpiod.LINE_REQ_DIR_IN,
-                    flags=gpiod.LINE_REQ_FLAG_BIAS_DISABLE,
-                )
+                line = request_input(chip, line_offset, f"pimoroni-btn-{button.value}")
                 self._lines[button] = line
                 logger.debug(
                     "Button {} on {}:{}", button.value, chip_name, line_offset

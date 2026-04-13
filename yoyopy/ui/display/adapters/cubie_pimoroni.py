@@ -17,13 +17,7 @@ from PIL import Image, ImageDraw, ImageFont
 from yoyopy.config.models import GpioPin, PimoroniGpioConfig
 from yoyopy.ui.display.hal import DisplayHAL
 
-try:
-    import gpiod
-
-    HAS_GPIOD = True
-except ImportError:
-    gpiod = None  # type: ignore[assignment]
-    HAS_GPIOD = False
+from yoyopy.ui.gpiod_compat import HAS_GPIOD, open_chip, request_output
 
 
 class CubiePimoroniAdapter(DisplayHAL):
@@ -85,14 +79,9 @@ class CubiePimoroniAdapter(DisplayHAL):
             if pin is None:
                 continue
             try:
-                chip = gpiod.Chip(pin.chip)
+                chip = open_chip(pin.chip)
                 self._led_chips.append(chip)
-                line = chip.get_line(pin.line)
-                line.request(
-                    consumer=f"pimoroni-led-{name}",
-                    type=gpiod.LINE_REQ_DIR_OUT,
-                    default_val=0,
-                )
+                line = request_output(chip, pin.line, f"pimoroni-led-{name}", default_val=0)
                 self._led_lines[name] = line
             except Exception as e:
                 logger.warning("Failed to acquire LED {} GPIO: {}", name, e)

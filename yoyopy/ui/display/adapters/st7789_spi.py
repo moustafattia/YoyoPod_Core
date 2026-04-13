@@ -24,13 +24,7 @@ except ImportError:
     spidev = None  # type: ignore[assignment]
     HAS_SPIDEV = False
 
-try:
-    import gpiod
-
-    HAS_GPIOD = True
-except ImportError:
-    gpiod = None  # type: ignore[assignment]
-    HAS_GPIOD = False
+from yoyopy.ui.gpiod_compat import HAS_GPIOD, open_chip, request_output
 
 # ST7789 command constants
 _SWRESET = 0x01
@@ -108,12 +102,10 @@ class ST7789SpiDriver:
     def _request_output_line(
         self, chip_name: str, line_offset: int, consumer: str
     ) -> object:
-        """Request a GPIO line as output via gpiod."""
-        chip = gpiod.Chip(chip_name)
+        """Request a GPIO line as output via gpiod compat layer."""
+        chip = open_chip(chip_name)
         self._gpio_chips.append(chip)
-        line = chip.get_line(line_offset)
-        line.request(consumer=consumer, type=gpiod.LINE_REQ_DIR_OUT, default_val=0)
-        return line
+        return request_output(chip, line_offset, consumer, default_val=0)
 
     def init(self) -> None:
         """Send the ST7789 initialization command sequence."""

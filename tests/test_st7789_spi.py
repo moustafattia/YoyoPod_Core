@@ -19,25 +19,26 @@ def mock_spidev():
 
 @pytest.fixture
 def mock_gpiod():
-    """Provide a mock gpiod module with Chip/Line stubs."""
+    """Provide a mock gpiod compat layer."""
+    chip_instances: dict[str, MagicMock] = {}
+
+    def make_chip(name: str) -> MagicMock:
+        if name not in chip_instances:
+            chip = MagicMock()
+            chip.get_line.return_value = MagicMock()
+            chip_instances[name] = chip
+        return chip_instances[name]
+
+    def make_output(chip, line_offset, consumer, default_val=0):
+        line = chip.get_line(line_offset)
+        return line
+
     with (
-        patch("yoyopy.ui.display.adapters.st7789_spi.gpiod") as mock_mod,
         patch("yoyopy.ui.display.adapters.st7789_spi.HAS_GPIOD", True),
+        patch("yoyopy.ui.display.adapters.st7789_spi.open_chip", side_effect=make_chip),
+        patch("yoyopy.ui.display.adapters.st7789_spi.request_output", side_effect=make_output),
     ):
-        chip_instances: dict[str, MagicMock] = {}
-
-        def make_chip(name: str) -> MagicMock:
-            if name not in chip_instances:
-                chip = MagicMock()
-                chip.get_line.return_value = MagicMock()
-                chip_instances[name] = chip
-            return chip_instances[name]
-
-        mock_mod.Chip.side_effect = make_chip
-        mock_mod.LINE_REQ_DIR_OUT = 3
-        mock_mod.LINE_REQ_DIR_IN = 2
-        mock_mod.LINE_REQ_FLAG_BIAS_DISABLE = 8
-        yield mock_mod, chip_instances
+        yield None, chip_instances
 
 
 def test_driver_opens_spi_device(mock_spidev, mock_gpiod):
