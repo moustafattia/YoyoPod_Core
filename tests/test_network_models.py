@@ -37,6 +37,39 @@ def test_gps_coordinate_fields():
     assert coord.lng == 2.3522
 
 
+from yoyopy.events import (
+    NetworkModemReadyEvent,
+    NetworkRegisteredEvent,
+    NetworkPppUpEvent,
+    NetworkPppDownEvent,
+    NetworkSignalUpdateEvent,
+    NetworkGpsFixEvent,
+)
+from yoyopy.app_context import AppContext
+
+
+def test_network_events_are_frozen():
+    """Network events should be immutable frozen dataclasses."""
+    evt = NetworkPppUpEvent()
+    try:
+        evt.connection_type = "wifi"  # type: ignore
+        assert False, "Expected FrozenInstanceError"
+    except AttributeError:
+        pass
+
+
+def test_app_context_update_network_status():
+    """update_network_status should set signal and connection fields."""
+    ctx = AppContext()
+    assert ctx.connection_type == "none"
+    assert ctx.signal_strength == 4  # default
+
+    ctx.update_network_status(signal_bars=3, connection_type="4g", connected=True)
+    assert ctx.signal_strength == 3
+    assert ctx.connection_type == "4g"
+    assert ctx.is_connected is True
+
+
 from yoyopy.config.models import YoyoPodConfig, build_config_model
 
 
