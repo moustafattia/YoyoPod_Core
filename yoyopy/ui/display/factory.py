@@ -24,7 +24,7 @@ def _get_pimoroni_gpio_config() -> PimoroniGpioConfig | None:
         from yoyopy.config.manager import ConfigManager
 
         mgr = ConfigManager()
-        return mgr.config.display.pimoroni_gpio
+        return mgr.app_settings.display.pimoroni_gpio
     except Exception:
         return None
 
