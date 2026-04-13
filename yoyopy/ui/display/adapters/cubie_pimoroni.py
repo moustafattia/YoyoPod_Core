@@ -283,6 +283,17 @@ class CubiePimoroniAdapter(DisplayHAL):
             return self
         return None
 
+    def get_backend_kind(self) -> str:
+        """Return 'lvgl' when an LVGL backend is attached, otherwise 'pil'."""
+        backend = getattr(self, "ui_backend", None)
+        if backend is not None and getattr(backend, "initialized", False):
+            return "lvgl"
+        return "pil"
+
+    def get_ui_backend(self):
+        """Return the attached LVGL backend, if any."""
+        return getattr(self, "ui_backend", None)
+
     def set_backlight(self, brightness: float) -> None:
         if not self.simulate and self._driver:
             self._driver.set_backlight(brightness > 0)
