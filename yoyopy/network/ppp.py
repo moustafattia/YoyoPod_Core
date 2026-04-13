@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import subprocess
+import time
+from pathlib import Path
 
 from loguru import logger
 
@@ -49,6 +51,20 @@ class PppProcess:
         except Exception as exc:
             logger.error("Failed to spawn pppd: {}", exc)
             return False
+
+    def wait_for_link(self, timeout: float = 30.0) -> bool:
+        """Block until ppp0 interface exists or timeout expires."""
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            if not self.is_alive():
+                logger.error("pppd exited during link negotiation")
+                return False
+            if Path("/sys/class/net/ppp0").exists():
+                logger.info("ppp0 interface is up")
+                return True
+            time.sleep(1.0)
+        logger.error("ppp0 did not come up within {}s", timeout)
+        return False
 
     def is_alive(self) -> bool:
         """Return True when the pppd process is running."""

@@ -116,12 +116,17 @@ class FakePpp:
 
     def __init__(self) -> None:
         self.alive = False
+        self.link_up = True
         self.calls: list[str] = []
 
     def spawn(self) -> bool:
         self.calls.append("spawn")
         self.alive = True
         return True
+
+    def wait_for_link(self, timeout: float = 30.0) -> bool:
+        self.calls.append("wait_for_link")
+        return self.link_up
 
     def is_alive(self) -> bool:
         return self.alive
@@ -172,7 +177,7 @@ def test_backend_init_modem_sequence():
 
 
 def test_backend_start_ppp():
-    """start_ppp should transition to ONLINE phase."""
+    """start_ppp should transition to ONLINE after link comes up."""
     at = FakeAtCommands()
     ppp = FakePpp()
     backend = Sim7600Backend.__new__(Sim7600Backend)
@@ -183,6 +188,7 @@ def test_backend_start_ppp():
 
     class FakeConfig:
         apn = "internet"
+        ppp_timeout = 30
 
     backend._config = FakeConfig()
     backend.start_ppp()

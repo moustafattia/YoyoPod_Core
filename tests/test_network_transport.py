@@ -138,16 +138,18 @@ from yoyopy.network.gps import GpsReader
 
 
 def test_gps_reader_query_with_fix():
-    """GpsReader.query should return coordinates when GPS has a fix."""
+    """GpsReader.query should return decimal degree coordinates from ddmm.mmmm."""
     transport = FakeTransport()
+    # 4852.4300 = 48 degrees 52.43 minutes = 48.87383...
+    # 00221.1300 = 2 degrees 21.13 minutes = 2.35216...
     transport.responses["AT+CGPSINFO"] = (
         "+CGPSINFO: 4852.4300,N,00221.1300,E,130426,120000.0,35.0,0.5,\nOK"
     )
     reader = GpsReader(transport)
     coord = reader.query()
     assert coord is not None
-    assert coord.lat > 0
-    assert coord.lng > 0
+    assert 48.87 < coord.lat < 48.88
+    assert 2.35 < coord.lng < 2.36
 
 
 def test_gps_reader_query_no_fix():

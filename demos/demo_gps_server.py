@@ -59,10 +59,10 @@ def get_location() -> JSONResponse:
             "speed": coord.speed,
             "timestamp": coord.timestamp.isoformat() if coord.timestamp else None,
         })
-    except Exception as exc:
+    except Exception:
         return JSONResponse(
             status_code=500,
-            content={"error": str(exc)},
+            content={"error": "GPS query failed"},
         )
 
 
@@ -81,8 +81,8 @@ def get_health() -> JSONResponse:
             "signal_csq": state.signal.csq if state.signal else None,
             "error": state.error or None,
         })
-    except Exception as exc:
+    except Exception:
         return JSONResponse(
             status_code=500,
-            content={"error": str(exc)},
+            content={"error": "Modem health check failed"},
         )

@@ -12,6 +12,13 @@ from yoyopy.network.models import GpsCoordinate, SignalInfo
 if TYPE_CHECKING:
     from yoyopy.network.transport import SerialTransport
 
+def _ddmm_to_decimal(value: float) -> float:
+    """Convert NMEA ddmm.mmmm format to decimal degrees."""
+    degrees = int(value / 100)
+    minutes = value - (degrees * 100)
+    return degrees + minutes / 60.0
+
+
 # AT+COPS access technology values to human-readable names.
 _ACCESS_TECH = {
     "0": "2G",
@@ -97,10 +104,10 @@ class AtCommandSet:
         if not match:
             return None
 
-        lat = float(match.group(1))
+        lat = _ddmm_to_decimal(float(match.group(1)))
         if match.group(2) == "S":
             lat = -lat
-        lng = float(match.group(3))
+        lng = _ddmm_to_decimal(float(match.group(3)))
         if match.group(4) == "W":
             lng = -lng
         altitude = float(match.group(7))

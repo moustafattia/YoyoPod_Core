@@ -107,6 +107,12 @@ class Sim7600Backend:
             self._state.error = "PPP failed to start"
             return False
 
+        if not self._ppp.wait_for_link(timeout=self._config.ppp_timeout):
+            self._ppp.kill()
+            self._state.phase = ModemPhase.REGISTERED
+            self._state.error = "PPP negotiation timed out"
+            return False
+
         self._state.phase = ModemPhase.ONLINE
         self._state.error = ""
         return True
