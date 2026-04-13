@@ -321,8 +321,8 @@ def render_status_bar(
     dot_y = (bar_height // 2) + (2 if is_portrait else 1)
     cursor_x = side_inset
 
-    # -- Signal bars (only when network is active) --
-    if context is not None and context.connection_type != "none":
+    # -- Signal bars (visible when network module is enabled) --
+    if context is not None and getattr(context, "network_enabled", False):
         signal = context.signal_strength
         connected = context.is_connected
         bar_base_y = dot_y + 3
@@ -336,8 +336,8 @@ def render_status_bar(
             display.rectangle(bx, by, bx + STATUS_SIGNAL_BAR_WIDTH, bar_base_y, fill=bar_color)
         cursor_x += 4 * (STATUS_SIGNAL_BAR_WIDTH + STATUS_SIGNAL_BAR_GAP) + STATUS_SIGNAL_GPS_GAP
 
-    # -- GPS indicator (only when network is active) --
-    if context is not None and context.connection_type != "none":
+    # -- GPS indicator (visible when network module is enabled) --
+    if context is not None and getattr(context, "network_enabled", False):
         gps_fix = getattr(context, "gps_has_fix", False)
         gps_color = SUCCESS if gps_fix else MUTED
         display.circle(cursor_x + STATUS_GPS_RADIUS, dot_y, STATUS_GPS_RADIUS, fill=gps_color)
