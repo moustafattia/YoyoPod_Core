@@ -382,12 +382,15 @@ class YoyoPodApp:
             logger.info(f"    Dimensions: {self.display.WIDTH}x{self.display.HEIGHT}")
             logger.info(f"    Orientation: {self.display.ORIENTATION}")
             self._lvgl_backend = self.display.get_ui_backend()
-            if self._lvgl_backend is not None and self._lvgl_backend.initialize():
-                self.display.refresh_backend_kind()
+            if self._lvgl_backend is not None and self._lvgl_backend.initialized:
                 self._last_lvgl_pump_at = time.monotonic()
-            else:
-                self._lvgl_backend = None
-                self.display.refresh_backend_kind()
+            elif self._lvgl_backend is not None:
+                # Backend exists but not yet initialized (e.g. factory skipped init)
+                if self._lvgl_backend.initialize():
+                    self._last_lvgl_pump_at = time.monotonic()
+                else:
+                    self._lvgl_backend = None
+            self.display.refresh_backend_kind()
             logger.info(f"    Active UI backend: {self.display.backend_kind}")
 
             self.display.clear(self.display.COLOR_BLACK)
@@ -829,15 +832,11 @@ class YoyoPodApp:
 
     def _get_initial_screen_name(self) -> str:
         """Return the root screen for the active interaction profile."""
-        if self._get_interaction_profile() == InteractionProfile.ONE_BUTTON:
-            return "hub"
-        return "menu"
+        return "hub"
 
     def _get_initial_ui_state(self) -> AppRuntimeState:
         """Return the base runtime state for the active interaction profile."""
-        if self._get_interaction_profile() == InteractionProfile.ONE_BUTTON:
-            return AppRuntimeState.HUB
-        return AppRuntimeState.MENU
+        return AppRuntimeState.HUB
 
     def _setup_voip_callbacks(self) -> None:
         """Register VoIP event callbacks."""

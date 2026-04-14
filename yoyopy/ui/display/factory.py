@@ -105,6 +105,36 @@ def _attach_simulation_preview(adapter: DisplayHAL) -> DisplayHAL:
     return adapter
 
 
+def _try_attach_lvgl_backend(adapter: DisplayHAL) -> bool:
+    """Attempt to wire an LvglDisplayBackend to the adapter's flush target.
+
+    Returns True if LVGL was successfully attached, False otherwise.
+    """
+    flush_target = adapter.get_flush_target()
+    if flush_target is None:
+        return False
+
+    try:
+        from yoyopy.ui.lvgl_binding import LvglDisplayBackend
+
+        backend = LvglDisplayBackend(flush_target=flush_target)
+        if backend.initialize():
+            adapter.ui_backend = backend
+            logger.info(
+                "LVGL backend attached to {} ({}x{})",
+                adapter.__class__.__name__,
+                flush_target.WIDTH,
+                flush_target.HEIGHT,
+            )
+            return True
+        else:
+            logger.info("LVGL backend available but failed to initialize")
+            return False
+    except Exception as exc:
+        logger.debug("LVGL backend not available: {}", exc)
+        return False
+
+
 def get_display(
     hardware: str = "auto",
     simulate: bool = False,
@@ -147,7 +177,9 @@ def get_display(
             logger.info("Creating Cubie Pimoroni display adapter (320x240 landscape, spidev + gpiod)")
             from yoyopy.ui.display.adapters.cubie_pimoroni import CubiePimoroniAdapter
 
-            return CubiePimoroniAdapter(simulate=False, gpio_config=gpio_config)
+            adapter = CubiePimoroniAdapter(simulate=False, gpio_config=gpio_config)
+            _try_attach_lvgl_backend(adapter)
+            return adapter
 
         logger.warning("Pimoroni requested but no displayhatmini or GPIO config available")
         logger.info("Falling back to Pimoroni simulation mode")
@@ -159,7 +191,9 @@ def get_display(
         logger.info("Creating simulation display adapter (240x280 portrait, Whisplay profile)")
         from yoyopy.ui.display.adapters.simulation import SimulationDisplayAdapter
 
-        return _attach_simulation_preview(SimulationDisplayAdapter())
+        adapter = _attach_simulation_preview(SimulationDisplayAdapter())
+        _try_attach_lvgl_backend(adapter)
+        return adapter
 
     valid_types = ", ".join(sorted(VALID_DISPLAY_TYPES))
     raise ValueError(f"Unknown display hardware type: '{hardware}'. Valid options: {valid_types}")
