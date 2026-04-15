@@ -40,6 +40,17 @@ def _track_number(value: object) -> int | None:
         return None
 
 
+def _duration_ms(value: object) -> int:
+    """Coerce one mpv duration value in seconds into milliseconds."""
+    if value in (None, "") or isinstance(value, bool):
+        return 0
+
+    try:
+        return max(0, int(float(value) * 1000))
+    except (TypeError, ValueError):
+        return 0
+
+
 @dataclass(frozen=True, slots=True)
 class Track:
     """One music track."""
@@ -61,8 +72,7 @@ class Track:
         metadata_map = _normalized_metadata(metadata)
         path_obj = Path(path)
 
-        raw_duration = metadata_map.get("duration", 0)
-        duration_ms = int(float(raw_duration) * 1000) if raw_duration else 0
+        duration_ms = _duration_ms(metadata_map.get("duration", 0))
 
         runtime_title = metadata_map.get("title")
         title = runtime_title if isinstance(runtime_title, str) else ""

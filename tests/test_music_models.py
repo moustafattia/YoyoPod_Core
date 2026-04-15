@@ -39,6 +39,16 @@ def test_track_from_mpv_metadata_missing_fields() -> None:
     assert track.length == 0
 
 
+def test_track_from_mpv_metadata_ignores_non_numeric_duration() -> None:
+    track = Track.from_mpv_metadata(
+        "/music/noisy.mp3",
+        {"title": "Noisy", "artist": "Alice", "duration": "N/A"},
+    )
+    assert track.name == "Noisy"
+    assert track.artists == ["Alice"]
+    assert track.length == 0
+
+
 def test_track_from_mpv_metadata_strips_file_extension_from_runtime_title() -> None:
     track = Track.from_mpv_metadata(
         "/music/OpenSampler/02-Moonlight-Sonata.ogg",
