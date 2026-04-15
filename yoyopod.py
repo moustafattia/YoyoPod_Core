@@ -19,10 +19,14 @@ if __name__ != "__main__":
     exec(compile(init_path.read_text(encoding="utf-8"), str(init_path), "exec"))
 
 
-def _run() -> int:
-    from yoyopod.main import main
+from importlib import import_module
 
-    return main()
+_main_module = import_module("yoyopod.main")
+main = _main_module if __name__ == "yoyopod" else _main_module.main
+
+
+def _run() -> int:
+    return _main_module.main()
 
 
 if __name__ == "__main__":
