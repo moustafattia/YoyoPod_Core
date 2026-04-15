@@ -244,6 +244,47 @@ def test_mpv_backend_builds_track_from_property_events() -> None:
     assert track.length == 12500
 
 
+def test_mpv_backend_ignores_stale_metadata_after_stop_end_file() -> None:
+    backend = MpvBackend(MusicConfig())
+
+    backend._handle_mpv_event(
+        {
+            "event": "property-change",
+            "name": "path",
+            "data": "/music/alpha.ogg",
+        }
+    )
+    backend._handle_mpv_event(
+        {
+            "event": "property-change",
+            "name": "metadata",
+            "data": {
+                "title": "Alpha",
+                "artist": "Artist",
+            },
+        }
+    )
+
+    assert backend.get_current_track() is not None
+
+    backend._handle_mpv_event({"event": "end-file", "reason": "stop"})
+    assert backend.get_current_track() is None
+
+    backend._handle_mpv_event(
+        {
+            "event": "property-change",
+            "name": "metadata",
+            "data": {
+                "title": "Stale Alpha",
+                "artist": "Artist",
+            },
+        }
+    )
+
+    assert backend.get_playback_state() == "stopped"
+    assert backend.get_current_track() is None
+
+
 def test_mpv_backend_get_current_track_refreshes_snapshot_when_cache_empty() -> None:
     class FakeIpc:
         connected = True
@@ -280,6 +321,55 @@ def test_mpv_backend_get_current_track_refreshes_snapshot_when_cache_empty() -> 
     assert track.name == "Beta"
     assert track.artists == ["Composer"]
     assert track.length == 9000
+
+
+def test_mpv_backend_get_current_track_tolerates_non_numeric_duration_snapshot() -> None:
+    class FakeIpc:
+        connected = True
+
+        def __init__(self) -> None:
+            self.responses = {
+                "path": "/music/beta.ogg",
+                "metadata": {"artist": "Composer"},
+                "duration": "N/A",
+                "media-title": "Beta",
+            }
+
+        def send_command(self, args: list[object]) -> dict[str, object]:
+            return {"error": "success", "data": self.responses[str(args[1])]}
+
+        def disconnect(self) -> None:
+            return None
+
+    class FakeProcess:
+        def is_alive(self) -> bool:
+            return True
+
+        def kill(self) -> None:
+            return None
+
+    backend = MpvBackend(MusicConfig())
+    backend._connected = True
+    backend._ipc = FakeIpc()
+    backend._process = FakeProcess()
+
+    track = backend.get_current_track()
+
+    assert track is not None
+    assert track.name == "Beta"
+    assert track.artists == ["Composer"]
+    assert track.length == 0
+
+
+def test_mpv_backend_get_time_position_returns_zero_for_non_numeric_value() -> None:
+    class FakeIpc:
+        def send_command(self, args: list[object]) -> dict[str, object]:
+            return {"error": "success", "data": "N/A"}
+
+    backend = MpvBackend(MusicConfig())
+    backend._ipc = FakeIpc()
+
+    assert backend.get_time_position() == 0
 
 
 def test_mpv_backend_registers_mpv_event_handler_only_once_across_restarts() -> None:

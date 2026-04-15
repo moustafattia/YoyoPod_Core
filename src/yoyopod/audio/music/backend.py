@@ -12,6 +12,17 @@ from yoyopod.audio.music.models import MusicConfig, Track
 from yoyopod.audio.music.process import MpvProcess
 
 
+def _coerce_time_position_ms(value: object) -> int:
+    """Coerce mpv's time-pos seconds value into milliseconds."""
+    if value in (None, "") or isinstance(value, bool):
+        return 0
+
+    try:
+        return max(0, int(float(value) * 1000))
+    except (TypeError, ValueError):
+        return 0
+
+
 @runtime_checkable
 class MusicBackend(Protocol):
     """Backend contract for music playback. Mirrors VoIPBackend pattern."""
@@ -161,10 +172,7 @@ class MpvBackend:
         return self._playback_state
 
     def get_time_position(self) -> int:
-        pos = self._get_property("time-pos")
-        if pos is not None:
-            return int(float(pos) * 1000)
-        return 0
+        return _coerce_time_position_ms(self._get_property("time-pos"))
 
     def load_tracks(self, uris: list[str]) -> bool:
         if not uris:
@@ -228,6 +236,7 @@ class MpvBackend:
                 pass
             else:
                 self._update_playback_state("stopped")
+                self._clear_track_cache()
                 self._update_track(None)
         elif event_name == "property-change":
             prop_name = event.get("name", "")
