@@ -237,7 +237,7 @@ Useful remote log commands:
 ```bash
 yoyoctl remote logs --lines 200
 yoyoctl remote logs --errors
-yoyoctl remote logs --filter voip
+yoyoctl remote logs --filter comm
 yoyoctl remote logs --follow --filter ERROR
 ```
 
@@ -276,17 +276,22 @@ src/yoyopod/
   config/
     manager.py
     models.py
-  voip/
-    backend.py
-    history.py
-    manager.py
+  communication/
+    calling/
+    integrations/
+    messaging/
+  people/
+    directory.py
     models.py
+  network/
+  power/
   ui/
     display/
     input/
     lvgl_binding/
     screens/
     web_server.py
+  voice/
 scripts/
   quality.py
 sitecustomize.py
