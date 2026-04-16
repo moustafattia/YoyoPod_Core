@@ -27,7 +27,7 @@ Plan docs are useful, but they are not automatically the current implementation 
 - [`../README.md`](../README.md), repo overview and quick start
 - [`CONTRIBUTOR_WORKFLOW.md`](CONTRIBUTOR_WORKFLOW.md), day-to-day contributor path and PR checklist
 - [`DEVELOPMENT_GUIDE.md`](DEVELOPMENT_GUIDE.md), setup, running, validation, package layout
-- [`SYSTEM_ARCHITECTURE.md`](SYSTEM_ARCHITECTURE.md), current runtime architecture
+- [`SYSTEM_ARCHITECTURE.md`](SYSTEM_ARCHITECTURE.md), current runtime architecture and startup/bootstrap flow
 
 ### Setup, bringup, and deployment
 
@@ -43,7 +43,7 @@ Plan docs are useful, but they are not automatically the current implementation 
 
 ### Core runtime architecture
 
-- [`SYSTEM_ARCHITECTURE.md`](SYSTEM_ARCHITECTURE.md), top-level runtime topology
+- [`SYSTEM_ARCHITECTURE.md`](SYSTEM_ARCHITECTURE.md), top-level runtime topology plus startup/bootstrap flow
 - [`DISPLAY_HAL_ARCHITECTURE.md`](DISPLAY_HAL_ARCHITECTURE.md), display abstraction and adapters
 - [`INPUT_HAL_ARCHITECTURE.md`](INPUT_HAL_ARCHITECTURE.md), semantic input model and adapters
 - [`POWER_MODULE.md`](POWER_MODULE.md), power, battery, RTC, watchdog
