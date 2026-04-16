@@ -63,6 +63,9 @@ def _queue_depth(queue_obj: object) -> int | None:
 class RuntimeLoopService:
     """Own the coordinator loop cadence and queued main-thread work."""
 
+    _SLOW_MAIN_THREAD_DRAIN_WARNING_SECONDS = 0.1
+    _SLOW_LVGL_PUMP_WARNING_SECONDS = 0.25
+    _SLOW_VOIP_ITERATE_WARNING_SECONDS = 0.25
     _VOIP_TIMING_SUMMARY_INTERVAL_SECONDS = 10.0
     _MIN_RUNTIME_LOOP_GAP_WARNING_SECONDS = 0.2
     _MIN_RUNTIME_BLOCKING_SPAN_WARNING_SECONDS = 0.2
@@ -151,6 +154,7 @@ class RuntimeLoopService:
 
     def process_pending_main_thread_actions(self, limit: Optional[int] = None) -> int:
         """Drain queued typed events scheduled by worker threads."""
+        started_at = time.monotonic()
         processed = 0
         while not self.app._pending_main_thread_callbacks.empty():
             callback = self.app._pending_main_thread_callbacks.get()
@@ -163,7 +167,14 @@ class RuntimeLoopService:
                 return processed
 
         remaining_limit = None if limit is None else max(0, limit - processed)
-        return processed + self.app.event_bus.drain(remaining_limit)
+        processed += self.app.event_bus.drain(remaining_limit)
+        self._warn_if_slow(
+            "main-thread drain",
+            started_at=started_at,
+            threshold_seconds=self._SLOW_MAIN_THREAD_DRAIN_WARNING_SECONDS,
+            detail=f"callbacks={processed}",
+        )
+        return processed
 
     def queue_main_thread_callback(self, callback: Callable[[], None]) -> None:
         """Schedule a callback to run on the coordinator thread."""
@@ -180,6 +191,7 @@ class RuntimeLoopService:
         if self.app._lvgl_backend is None or not self.app._lvgl_backend.initialized:
             return
 
+        started_at = time.monotonic()
         monotonic_now = time.monotonic() if now is None else now
         if self.app._last_lvgl_pump_at <= 0.0:
             delta_ms = 0
@@ -190,6 +202,12 @@ class RuntimeLoopService:
         if self.app._lvgl_input_bridge is not None:
             self.app._lvgl_input_bridge.process_pending()
         self.app._lvgl_backend.pump(delta_ms)
+        self._warn_if_slow(
+            "lvgl pump",
+            started_at=started_at,
+            threshold_seconds=self._SLOW_LVGL_PUMP_WARNING_SECONDS,
+            detail=f"delta_ms={delta_ms}",
+        )
 
     def iterate_voip_backend_if_due(self, now: float | None = None) -> None:
         """Advance the Liblinphone core on the coordinator thread at its configured cadence."""
@@ -258,6 +276,15 @@ class RuntimeLoopService:
                 self._current_screen_name(),
                 self._runtime_state_name(),
             )
+        self._warn_if_slow(
+            "voip iterate",
+            started_at=started_at,
+            threshold_seconds=self._SLOW_VOIP_ITERATE_WARNING_SECONDS,
+            detail=(
+                f"screen={self._current_screen_name()} "
+                f"state={self._runtime_state_name()}"
+            ),
+        )
 
     def run_iteration(
         self,
@@ -687,3 +714,24 @@ class RuntimeLoopService:
             return str(self.app.coordinator_runtime.get_state_name())
 
         return str(getattr(self.app._ui_state, "value", self.app._ui_state))
+
+    def _warn_if_slow(
+        self,
+        phase: str,
+        *,
+        started_at: float,
+        threshold_seconds: float,
+        detail: str = "",
+    ) -> None:
+        """Emit a targeted warning when one coordinator-loop phase runs unusually long."""
+
+        elapsed_seconds = time.monotonic() - started_at
+        if elapsed_seconds < threshold_seconds:
+            return
+
+        logger.warning(
+            "Slow runtime phase: {} took {:.1f} ms ({})",
+            phase,
+            elapsed_seconds * 1000.0,
+            detail or "no extra detail",
+        )

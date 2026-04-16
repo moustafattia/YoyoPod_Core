@@ -4,6 +4,7 @@ Screen management and navigation for YoyoPod.
 Handles screen transitions, route resolution, and the navigation stack.
 """
 
+import time
 from typing import Callable, Optional, Dict, TYPE_CHECKING
 from loguru import logger
 
@@ -30,6 +31,10 @@ class ScreenManager:
     Maintains a stack of screens for back navigation and
     handles screen lifecycle (enter/exit).
     """
+
+    _SLOW_NAVIGATION_WARNING_SECONDS = 0.2
+    _SLOW_INPUT_ACTION_WARNING_SECONDS = 0.2
+    _SLOW_RENDER_WARNING_SECONDS = 0.2
 
     def __init__(
         self,
@@ -77,6 +82,7 @@ class ScreenManager:
         Args:
             screen_name: Name of the registered screen to display
         """
+        started_at = time.monotonic()
         if screen_name not in self.screens:
             logger.error(f"Screen not found: {screen_name}")
             return
@@ -95,6 +101,12 @@ class ScreenManager:
         self._notify_screen_changed()
 
         logger.info(f"Pushed screen: {screen_name} (stack depth: {len(self.screen_stack)})")
+        self._warn_if_slow(
+            "push_screen",
+            started_at=started_at,
+            threshold_seconds=self._SLOW_NAVIGATION_WARNING_SECONDS,
+            detail=f"target={screen_name} stack_depth={len(self.screen_stack)}",
+        )
 
     def pop_screen(self) -> bool:
         """
@@ -103,6 +115,7 @@ class ScreenManager:
         Returns:
             True if successful, False if stack is empty
         """
+        started_at = time.monotonic()
         if not self.screen_stack:
             logger.warning("Cannot pop: screen stack is empty")
             return False
@@ -120,6 +133,12 @@ class ScreenManager:
         self._notify_screen_changed()
 
         logger.info(f"Popped screen (stack depth: {len(self.screen_stack)})")
+        self._warn_if_slow(
+            "pop_screen",
+            started_at=started_at,
+            threshold_seconds=self._SLOW_NAVIGATION_WARNING_SECONDS,
+            detail=f"target={self.current_screen.route_name if self.current_screen else 'none'} stack_depth={len(self.screen_stack)}",
+        )
         return True
 
     def replace_screen(self, screen_name: str) -> None:
@@ -129,6 +148,7 @@ class ScreenManager:
         Args:
             screen_name: Name of the registered screen to display
         """
+        started_at = time.monotonic()
         if screen_name not in self.screens:
             logger.error(f"Screen not found: {screen_name}")
             return
@@ -146,6 +166,12 @@ class ScreenManager:
         self._notify_screen_changed()
 
         logger.info(f"Replaced screen with: {screen_name}")
+        self._warn_if_slow(
+            "replace_screen",
+            started_at=started_at,
+            threshold_seconds=self._SLOW_NAVIGATION_WARNING_SECONDS,
+            detail=f"target={screen_name}",
+        )
 
     def clear_stack(self) -> None:
         """Clear the screen stack."""
@@ -159,7 +185,14 @@ class ScreenManager:
     def refresh_current_screen(self) -> None:
         """Re-render the current screen."""
         if self.current_screen:
+            started_at = time.monotonic()
             self.current_screen.render()
+            self._warn_if_slow(
+                "refresh_current_screen",
+                started_at=started_at,
+                threshold_seconds=self._SLOW_RENDER_WARNING_SECONDS,
+                detail=f"screen={self.current_screen.route_name or self.current_screen.name}",
+            )
 
     def _notify_screen_changed(self) -> None:
         """Notify listeners when the active screen changes."""
@@ -218,6 +251,7 @@ class ScreenManager:
 
         # Helper function to dispatch an action and then refresh or route
         def dispatch_action(action: "InputAction", data=None) -> None:
+            started_at = time.monotonic()
             previous_screen = self.current_screen
             if previous_screen is None:
                 return
@@ -228,6 +262,15 @@ class ScreenManager:
                 self.apply_navigation_request(navigation_request, source_screen=previous_screen)
             if self.current_screen is previous_screen:
                 self.refresh_current_screen()
+            self._warn_if_slow(
+                "screen action",
+                started_at=started_at,
+                threshold_seconds=self._SLOW_INPUT_ACTION_WARNING_SECONDS,
+                detail=(
+                    f"action={action.value} "
+                    f"screen={previous_screen.route_name or previous_screen.name}"
+                ),
+            )
 
         def wrap_with_refresh(action: "InputAction"):
             """Wrap action handler to automatically refresh display after execution."""
@@ -300,3 +343,24 @@ class ScreenManager:
     def _disconnect_buttons(self) -> None:
         """Legacy method - redirects to _disconnect_inputs()."""
         self._disconnect_inputs()
+
+    def _warn_if_slow(
+        self,
+        operation: str,
+        *,
+        started_at: float,
+        threshold_seconds: float,
+        detail: str = "",
+    ) -> None:
+        """Emit a targeted warning when one navigation/UI step blocks unusually long."""
+
+        elapsed_seconds = time.monotonic() - started_at
+        if elapsed_seconds < threshold_seconds:
+            return
+
+        logger.warning(
+            "Slow screen manager operation: {} took {:.1f} ms ({})",
+            operation,
+            elapsed_seconds * 1000.0,
+            detail or "no extra detail",
+        )
