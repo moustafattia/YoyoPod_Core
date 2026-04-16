@@ -18,6 +18,20 @@ Background or device-facing code does not usually mutate UI state directly. Inst
 
 `RuntimeLoopService.run_iteration()` then drains that work on the coordinator thread and lets the extracted coordinators update FSM state, screens, and shared context.
 
+## Dispatch rules
+
+`EventBus.publish()` is synchronous when called on the coordinator thread and queued when called off-thread.
+
+That means event timing depends on the publisher:
+
+- power events published during coordinator-loop polling dispatch inline
+- screen-change events published from `ScreenManager` dispatch inline
+- VoIP call and registration events dispatch inline because Liblinphone iterate runs on the coordinator thread
+- mpv events queue because mpv callbacks arrive on background IPC threads
+- music recovery completion queues because it is published from a worker thread
+
+This difference is real current behavior, not an implementation detail to ignore while debugging.
+
 ## Ownership map
 
 ### `YoyoPodApp`
@@ -183,8 +197,9 @@ Notable ownership detail: `CallCoordinator` directly decides music pause/resume 
 
 1. `MpvBackend` invokes callbacks registered in `RuntimeBootService.setup_music_callbacks()`.
 2. `PlaybackCoordinator.publish_track_change()` or `publish_playback_state_change()` publishes typed events.
-3. The coordinator-thread drain calls `PlaybackCoordinator.handle_track_change()` or `handle_playback_state_change()`.
-4. `PlaybackCoordinator` updates `MusicFSM`, re-derives app state, records recents, and refreshes the now-playing screen.
+3. Those callbacks arrive from the mpv IPC dispatch thread, so the `EventBus` queues them for the coordinator thread.
+4. The coordinator-thread drain calls `PlaybackCoordinator.handle_track_change()` or `handle_playback_state_change()`.
+5. `PlaybackCoordinator` updates `MusicFSM`, re-derives app state, records recents, and refreshes the now-playing screen.
 
 Ownership: playback truth comes from the music backend; playback interpretation for app state belongs to `PlaybackCoordinator` plus `CoordinatorRuntime`.
 
@@ -203,9 +218,12 @@ Ownership: power telemetry and safety evaluation are centralized in `PowerCoordi
 
 ### Screen change and user activity flow
 
-1. `ScreenManager.on_screen_changed` is wired to `YoyoPodApp._handle_screen_changed()`.
-2. That method publishes `ScreenChangedEvent`.
-3. `ScreenPowerService.handle_screen_changed_event()`:
+1. Input adapters fire semantic actions into `InputManager`.
+2. `ScreenManager` dispatches the action to the active screen.
+3. On LVGL paths, `ScreenManager` uses `action_scheduler` to queue the action onto the coordinator thread before it runs.
+4. If navigation changes the visible route, `ScreenManager.on_screen_changed` calls `YoyoPodApp._handle_screen_changed()`.
+5. That method publishes `ScreenChangedEvent`.
+6. `ScreenPowerService.handle_screen_changed_event()`:
    - syncs base UI state through `YoyoPodApp._sync_screen_changed()` and `CoordinatorRuntime.sync_ui_state_for_screen()`
    - marks user activity so the display stays awake
 
@@ -220,6 +238,16 @@ Ownership: route-change bookkeeping is split. `ScreenManager` knows when the rou
 3. App handlers call `_sync_network_context_from_manager()` or update `AppContext` directly.
 
 Ownership: network state is still app-owned, not coordinator-owned. This is one of the clearest remaining gaps in the extraction.
+
+### Recovery flow
+
+1. `RuntimeLoopService` calls `RecoverySupervisor.attempt_manager_recovery()`.
+2. VoIP recovery runs inline because it is a direct manager restart attempt.
+3. Music recovery starts a background worker so mpv reconnect work does not block the coordinator loop.
+4. That worker publishes `RecoveryAttemptCompletedEvent`.
+5. The event queues onto `EventBus` because it was published off-thread.
+6. The next coordinator drain calls `RecoverySupervisor.handle_recovery_attempt_completed_event()`.
+7. Recovery backoff state is finalized on the coordinator thread.
 
 ## Where state actually lives
 
@@ -288,6 +316,16 @@ This works, but it is not especially obvious. A future cleanup probably wants ei
 ### 5. Power behavior is split across multiple runtime services
 
 `PowerCoordinator` owns telemetry application and safety-policy evaluation, while `ScreenPowerService` owns overlays and `ShutdownLifecycleService` owns actual shutdown execution. The division is workable, but a reader must cross service boundaries to understand the full low-battery path.
+
+### 6. Event timing depends on the source thread
+
+The same `EventBus` is used for both inline and deferred dispatch.
+
+- VoIP and power flows are mostly synchronous once they enter the coordinator loop
+- mpv and recovery flows are deferred until the next event drain
+- screen actions may run directly or through the LVGL action scheduler before the route-change event is published
+
+If ordering looks inconsistent, this is usually the first place to check.
 
 ## Source files to trust
 
