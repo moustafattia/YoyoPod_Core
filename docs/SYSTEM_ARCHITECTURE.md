@@ -19,13 +19,93 @@ YoyoPod runs as a single Python application that coordinates:
 - local voice capture, speech-to-text, and spoken feedback
 - state transitions between playback and call flows
 
-The production entrypoint is `yoyopod.py`, which delegates to `YoyoPodApp` in `src/yoyopod/app.py`.
-`YoyoPodApp` is now a thin composition shell around focused runtime services in
-`src/yoyopod/runtime/`.
+The repo exposes two equivalent application launch surfaces:
+
+- `python yoyopod.py`
+- the installed `yoyopod` console entrypoint from `pyproject.toml`
+
+Both end up in `src/yoyopod/main.py`. That entrypoint configures logging,
+writes the PID file, emits the canonical startup marker, and then constructs
+`YoyoPodApp` from `src/yoyopod/app.py`. `YoyoPodApp` is now a thin composition
+shell around focused runtime services in `src/yoyopod/runtime/`.
 
 This extraction is a first pass, not the end state. `src/yoyopod/runtime/boot.py` is
 still the biggest remaining runtime hotspot and should be the next split target
 if more setup logic accumulates there.
+
+## Startup And Bootstrap Flow
+
+This is the startup sequence that exists on `main` today.
+
+1. Launch enters the `yoyopod.main:main` entrypoint implemented in `src/yoyopod/main.py`.
+   - `yoyopod.py` is only a thin launcher.
+   - The installed `yoyopod` console script in `pyproject.toml` also targets `yoyopod.main:main`.
+2. `main()` configures process-level runtime plumbing before app setup starts.
+   - `load_app_settings()` reads `config/yoyopod_config.yaml` early enough to resolve logging settings.
+   - `configure_logger()` builds the shared `loguru` runtime config and enables console plus file logging.
+   - `write_pid_file()` writes the current PID.
+   - `log_startup()` emits the startup marker consumed by Pi deploy and remote-validation workflows.
+   - `--simulate` is parsed before the app is constructed.
+3. `main()` constructs `YoyoPodApp(config_dir="config", simulate=simulate)`.
+   - The constructor does not start hardware or backend processes yet.
+   - It allocates the typed `EventBus`, runtime services (`RuntimeBootService`, `RuntimeLoopService`, `RecoverySupervisor`, `ScreenPowerService`, `ShutdownLifecycleService`), and the long-lived placeholder fields for managers, screens, and shared context.
+   - It also registers app-level event subscriptions on the `EventBus` so later boot stages can publish typed events back onto the coordinator thread.
+4. `main()` calls `app.setup()`, which delegates to `RuntimeBootService.setup()`.
+5. `RuntimeBootService.setup()` currently executes boot in this order:
+   1. `load_configuration()`
+      - builds `ConfigManager`
+      - loads typed app settings and the compatibility config dict
+      - opens persistent stores for call history and recent tracks
+      - starts the async voice-device catalog refresh
+      - resolves screen timeout, brightness, and auto-resume settings
+   2. `init_core_components()`
+      - creates the `Display` facade using the configured or auto-detected hardware mode
+      - initializes the LVGL backend when the selected adapter supports it
+      - renders the initial `YoyoPod Starting...` splash
+      - creates `AppContext`
+      - seeds voice and VoIP-ready status in shared runtime state
+      - constructs `MusicFSM`, `CallFSM`, and `CallInterruptionPolicy`
+      - creates and starts `InputManager`
+      - wires the LVGL input bridge when LVGL is active
+      - creates `ScreenManager`
+   3. `init_managers()`
+      - starts `VoIPManager` from typed VoIP config
+      - starts `MpvBackend` and wraps it with `LocalMusicService`
+      - attaches `OutputVolumeController` and applies the configured startup volume
+      - creates `PowerManager`
+      - creates `NetworkManager` and starts it only when networking is enabled and the app is not running in simulation mode
+   4. `setup_screens()`
+      - constructs all screen instances
+      - registers them with `ScreenManager`
+      - resolves the root route from the active interaction profile
+      - pushes `hub` for one-button hardware and `menu` for the standard profile
+   5. final runtime wiring
+      - builds `CoordinatorRuntime`, `CallCoordinator`, `PlaybackCoordinator`, `ScreenCoordinator`, and `PowerCoordinator`
+      - sets the initial derived UI state
+      - binds coordinator subscribers to the typed `EventBus`
+      - registers VoIP and music backend callbacks
+      - registers power shutdown hooks
+      - polls initial power state
+6. If setup fails, `main()` logs the likely missing prerequisites, calls `app.stop()`, returns a non-zero exit code, and still runs the shutdown marker plus PID cleanup in the outer `finally`.
+7. If setup succeeds, `main()` installs signal handlers and enters `app.run()`.
+   - `SIGTERM` is translated into the same shutdown path as `Ctrl+C`.
+   - `SIGUSR1` and `SIGUSR2` request screenshots on Unix targets when those signals exist.
+8. `app.run()` delegates to `RuntimeLoopService.run()`, which is the steady-state coordinator loop.
+   - It logs a startup status snapshot.
+   - It starts the watchdog cadence.
+   - Each loop iteration drains queued main-thread callbacks and typed events, pumps LVGL timers and queued input, iterates the Liblinphone backend on the coordinator thread, polls recovery and power services, and refreshes active screens on the configured cadence.
+9. Shutdown runs through `app.stop()` and `ShutdownLifecycleService.stop()`.
+   - network, VoIP, music, and input managers are stopped
+   - queued main-thread work is drained one last time
+   - the display is cleared and cleaned up
+   - `main()` emits the shutdown marker and removes the PID file
+
+## Startup Differences Between Hardware And Simulation
+
+- The boot order is the same in both modes: `main()` still configures logging, constructs `YoyoPodApp`, and calls `RuntimeBootService.setup()`.
+- Simulation mode changes adapter selection and input behavior by asking the display and input factories for simulation backends, and `main()` logs the browser-based workflow banner before setup.
+- `NetworkManager` is created in both modes, but it is only started when networking is enabled and `simulate` is false.
+- The initial root route still depends on the resolved interaction profile, not on a separate dev-only code path.
 
 ## Runtime Topology
 
