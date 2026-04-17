@@ -278,15 +278,12 @@ class RuntimeBootService:
                 logger.info("    No input hardware available")
 
             logger.info("  - ScreenManager")
-            action_scheduler = (
-                self.app.runtime_loop.queue_main_thread_callback
-                if getattr(display, "backend_kind", "pil") == "lvgl"
-                else None
-            )
             self.app.screen_manager = ScreenManager(
                 display,
                 self.app.input_manager,
-                action_scheduler=action_scheduler,
+                # Screen/input callbacks may originate from worker or polling threads.
+                # Route all UI actions through the runtime loop to keep display I/O serialized.
+                action_scheduler=self.app.runtime_loop.queue_main_thread_callback,
             )
             return True
         except Exception:
