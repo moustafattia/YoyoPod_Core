@@ -8,6 +8,8 @@ from typing import ClassVar
 from yoyopod.ui.screens.lvgl_lifecycle import (
     current_retained_view,
     mark_retained_view_built,
+    mark_retained_view_destroyed,
+    should_build_retained_view,
     view_is_ready,
 )
 
@@ -32,6 +34,9 @@ class SharedSceneView:
 
     def build(self) -> None:
         mark_retained_view_built(self)
+
+    def destroy(self) -> None:
+        mark_retained_view_destroyed(self)
 
 
 class MissingInitializedBackend:
@@ -68,3 +73,22 @@ def test_view_is_ready_requires_explicit_backend_initialization() -> None:
 
     assert view_is_ready(view) is False
     assert current_retained_view(view, backend) is None
+
+
+def test_destroyed_retained_view_releases_scene_claim_and_requires_rebuild() -> None:
+    """Explicit cleanup should drop retained-scene ownership until the next build."""
+
+    backend = FakeBackend()
+    view = SharedSceneView(backend)
+
+    mark_retained_view_built(view)
+    assert current_retained_view(view, backend) is view
+
+    view.destroy()
+
+    assert current_retained_view(view, backend) is None
+    assert should_build_retained_view(view) is True
+
+    view.build()
+
+    assert current_retained_view(view, backend) is view
