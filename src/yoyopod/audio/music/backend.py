@@ -62,6 +62,7 @@ class MpvBackend:
     _STARTUP_CONNECT_RETRIES = 30
     _STARTUP_CONNECT_DELAY = 0.1
     _STARTUP_SPAWN_ATTEMPTS = 4
+    _TIME_POSITION_CACHE_MIN_INTERVAL_SECONDS = 0.5
 
     def __init__(self, config: MusicConfig) -> None:
         self.config = config
@@ -75,6 +76,8 @@ class MpvBackend:
         self._cached_metadata: dict[str, object] = {}
         self._cached_duration: object | None = None
         self._cached_media_title: str | None = None
+        self._cached_time_position_ms = 0
+        self._last_time_position_cache_update = 0.0
 
         self._track_change_callbacks: list[Callable[[Track | None], None]] = []
         self._playback_state_callbacks: list[Callable[[str], None]] = []
@@ -118,6 +121,7 @@ class MpvBackend:
             self._ipc.observe_property("idle-active", 4)
             self._ipc.observe_property("duration", 5)
             self._ipc.observe_property("path", 6)
+            self._ipc.observe_property("time-pos", 7)
         except Exception as exc:
             logger.warning("Failed to observe mpv properties: {}", exc)
 
@@ -164,15 +168,15 @@ class MpvBackend:
         return self._set_property("audio-device", device)
 
     def get_current_track(self) -> Track | None:
-        if self._current_track is None and self.is_connected:
-            self._refresh_current_track_snapshot()
+        if self._current_track is None and self._cached_path is not None:
+            self._sync_track_from_cache()
         return self._current_track
 
     def get_playback_state(self) -> str:
         return self._playback_state
 
     def get_time_position(self) -> int:
-        return _coerce_time_position_ms(self._get_property("time-pos"))
+        return self._cached_time_position_ms
 
     def load_tracks(self, uris: list[str]) -> bool:
         if not uris:
@@ -225,6 +229,7 @@ class MpvBackend:
         event_name = event.get("event", "")
 
         if event_name == "file-loaded":
+            self._update_time_position_cache(0, force=True)
             self._sync_track_from_cache()
             self._update_playback_state("playing")
         elif event_name in ("pause", "unpause"):
@@ -255,6 +260,8 @@ class MpvBackend:
                 media_title = event.get("data")
                 self._cached_media_title = str(media_title) if media_title else None
                 self._sync_track_from_cache()
+            elif prop_name == "time-pos":
+                self._update_time_position_cache(event.get("data"))
             elif prop_name == "pause":
                 paused = event.get("data", False)
                 self._update_playback_state("paused" if paused else "playing")
@@ -263,19 +270,6 @@ class MpvBackend:
                     self._update_playback_state("stopped")
                     self._clear_track_cache()
                     self._update_track(None)
-
-    def _refresh_current_track_snapshot(self) -> None:
-        """Query mpv for track properties from a non-reader thread."""
-        path = self._get_property("path")
-        metadata = self._get_property("metadata") or {}
-        duration = self._get_property("duration")
-        media_title = self._get_property("media-title")
-
-        self._cached_path = str(path) if path else None
-        self._cached_metadata = metadata if isinstance(metadata, dict) else {}
-        self._cached_duration = duration
-        self._cached_media_title = str(media_title) if media_title else None
-        self._sync_track_from_cache()
 
     def _sync_track_from_cache(self) -> None:
         """Build the current track from the latest observed mpv properties."""
@@ -292,11 +286,32 @@ class MpvBackend:
         self._update_track(track)
 
     def _clear_track_cache(self) -> None:
-        """Clear cached track properties after stop/end-of-playback."""
+        """Clear cached playback properties after stop/end-of-playback."""
         self._cached_path = None
         self._cached_metadata = {}
         self._cached_duration = None
         self._cached_media_title = None
+        self._update_time_position_cache(0, force=True)
+
+    def _update_time_position_cache(
+        self,
+        value: object,
+        *,
+        force: bool = False,
+    ) -> None:
+        """Throttle time-pos updates while keeping visible progress current."""
+        position_ms = _coerce_time_position_ms(value)
+        now = time.monotonic()
+        if (
+            force
+            or position_ms == 0
+            or position_ms < self._cached_time_position_ms
+            or abs(position_ms - self._cached_time_position_ms) >= 1000
+            or now - self._last_time_position_cache_update
+            >= self._TIME_POSITION_CACHE_MIN_INTERVAL_SECONDS
+        ):
+            self._cached_time_position_ms = position_ms
+            self._last_time_position_cache_update = now
 
     def _update_track(self, track: Track | None) -> None:
         if track != self._current_track:

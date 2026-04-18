@@ -150,10 +150,13 @@ def test_mpv_backend_waits_for_delayed_ipc_ready(monkeypatch) -> None:
 
     assert backend.start() is True
     assert fake_ipc.connect_calls == 13
+    assert ("time-pos", 7) in fake_ipc.observed
     assert backend.is_connected is True
 
 
-def test_mpv_backend_retries_spawn_when_early_launches_never_open_ipc(monkeypatch) -> None:
+def test_mpv_backend_retries_spawn_when_early_launches_never_open_ipc(
+    monkeypatch,
+) -> None:
     class FakeProcess:
         def __init__(self) -> None:
             self.spawn_calls = 0
@@ -285,20 +288,13 @@ def test_mpv_backend_ignores_stale_metadata_after_stop_end_file() -> None:
     assert backend.get_current_track() is None
 
 
-def test_mpv_backend_get_current_track_refreshes_snapshot_when_cache_empty() -> None:
+def test_mpv_backend_get_current_track_uses_observed_cache_without_sync_round_trip(
+) -> None:
     class FakeIpc:
         connected = True
 
-        def __init__(self) -> None:
-            self.responses = {
-                "path": "/music/beta.ogg",
-                "metadata": {"artist": "Composer"},
-                "duration": 9.0,
-                "media-title": "Beta",
-            }
-
         def send_command(self, args: list[object]) -> dict[str, object]:
-            return {"error": "success", "data": self.responses[str(args[1])]}
+            raise AssertionError(f"unexpected synchronous IPC read: {args}")
 
         def disconnect(self) -> None:
             return None
@@ -314,6 +310,35 @@ def test_mpv_backend_get_current_track_refreshes_snapshot_when_cache_empty() -> 
     backend._connected = True
     backend._ipc = FakeIpc()
     backend._process = FakeProcess()
+
+    backend._handle_mpv_event(
+        {
+            "event": "property-change",
+            "name": "path",
+            "data": "/music/beta.ogg",
+        }
+    )
+    backend._handle_mpv_event(
+        {
+            "event": "property-change",
+            "name": "metadata",
+            "data": {"artist": "Composer"},
+        }
+    )
+    backend._handle_mpv_event(
+        {
+            "event": "property-change",
+            "name": "duration",
+            "data": 9.0,
+        }
+    )
+    backend._handle_mpv_event(
+        {
+            "event": "property-change",
+            "name": "media-title",
+            "data": "Beta",
+        }
+    )
 
     track = backend.get_current_track()
 
@@ -323,20 +348,12 @@ def test_mpv_backend_get_current_track_refreshes_snapshot_when_cache_empty() -> 
     assert track.length == 9000
 
 
-def test_mpv_backend_get_current_track_tolerates_non_numeric_duration_snapshot() -> None:
+def test_mpv_backend_get_current_track_returns_none_without_observed_cache() -> None:
     class FakeIpc:
         connected = True
 
-        def __init__(self) -> None:
-            self.responses = {
-                "path": "/music/beta.ogg",
-                "metadata": {"artist": "Composer"},
-                "duration": "N/A",
-                "media-title": "Beta",
-            }
-
         def send_command(self, args: list[object]) -> dict[str, object]:
-            return {"error": "success", "data": self.responses[str(args[1])]}
+            raise AssertionError(f"unexpected synchronous IPC read: {args}")
 
         def disconnect(self) -> None:
             return None
@@ -353,6 +370,61 @@ def test_mpv_backend_get_current_track_tolerates_non_numeric_duration_snapshot()
     backend._ipc = FakeIpc()
     backend._process = FakeProcess()
 
+    assert backend.get_current_track() is None
+
+
+def test_mpv_backend_get_current_track_tolerates_non_numeric_duration_in_observed_cache(
+) -> None:
+    class FakeIpc:
+        connected = True
+
+        def send_command(self, args: list[object]) -> dict[str, object]:
+            raise AssertionError(f"unexpected synchronous IPC read: {args}")
+
+        def disconnect(self) -> None:
+            return None
+
+    class FakeProcess:
+        def is_alive(self) -> bool:
+            return True
+
+        def kill(self) -> None:
+            return None
+
+    backend = MpvBackend(MusicConfig())
+    backend._connected = True
+    backend._ipc = FakeIpc()
+    backend._process = FakeProcess()
+
+    backend._handle_mpv_event(
+        {
+            "event": "property-change",
+            "name": "path",
+            "data": "/music/beta.ogg",
+        }
+    )
+    backend._handle_mpv_event(
+        {
+            "event": "property-change",
+            "name": "metadata",
+            "data": {"artist": "Composer"},
+        }
+    )
+    backend._handle_mpv_event(
+        {
+            "event": "property-change",
+            "name": "duration",
+            "data": "N/A",
+        }
+    )
+    backend._handle_mpv_event(
+        {
+            "event": "property-change",
+            "name": "media-title",
+            "data": "Beta",
+        }
+    )
+
     track = backend.get_current_track()
 
     assert track is not None
@@ -361,13 +433,83 @@ def test_mpv_backend_get_current_track_tolerates_non_numeric_duration_snapshot()
     assert track.length == 0
 
 
-def test_mpv_backend_get_time_position_returns_zero_for_non_numeric_value() -> None:
+def test_mpv_backend_get_time_position_uses_observed_cache(monkeypatch) -> None:
     class FakeIpc:
         def send_command(self, args: list[object]) -> dict[str, object]:
-            return {"error": "success", "data": "N/A"}
+            raise AssertionError(f"unexpected synchronous IPC read: {args}")
 
     backend = MpvBackend(MusicConfig())
     backend._ipc = FakeIpc()
+    monotonic_values = iter([100.0])
+    monkeypatch.setattr(
+        "yoyopod.audio.music.backend.time.monotonic",
+        lambda: next(monotonic_values),
+    )
+
+    backend._handle_mpv_event(
+        {
+            "event": "property-change",
+            "name": "time-pos",
+            "data": 12.5,
+        }
+    )
+
+    assert backend.get_time_position() == 12500
+
+
+def test_mpv_backend_get_time_position_throttles_small_observed_updates(
+    monkeypatch,
+) -> None:
+    monotonic_values = iter([100.0, 100.1, 100.2])
+    monkeypatch.setattr(
+        "yoyopod.audio.music.backend.time.monotonic",
+        lambda: next(monotonic_values),
+    )
+
+    backend = MpvBackend(MusicConfig())
+    backend._handle_mpv_event(
+        {
+            "event": "property-change",
+            "name": "time-pos",
+            "data": 12.0,
+        }
+    )
+    backend._handle_mpv_event(
+        {
+            "event": "property-change",
+            "name": "time-pos",
+            "data": 12.1,
+        }
+    )
+    assert backend.get_time_position() == 12000
+
+    backend._handle_mpv_event(
+        {
+            "event": "property-change",
+            "name": "time-pos",
+            "data": 14.0,
+        }
+    )
+    assert backend.get_time_position() == 14000
+
+
+def test_mpv_backend_get_time_position_returns_zero_for_non_numeric_observed_value(
+    monkeypatch,
+) -> None:
+    monotonic_values = iter([100.0])
+    monkeypatch.setattr(
+        "yoyopod.audio.music.backend.time.monotonic",
+        lambda: next(monotonic_values),
+    )
+
+    backend = MpvBackend(MusicConfig())
+    backend._handle_mpv_event(
+        {
+            "event": "property-change",
+            "name": "time-pos",
+            "data": "N/A",
+        }
+    )
 
     assert backend.get_time_position() == 0
 
