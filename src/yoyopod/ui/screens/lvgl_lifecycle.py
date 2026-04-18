@@ -66,7 +66,7 @@ def current_retained_view(
 def view_is_ready(view: RetainedLvglView) -> bool:
     """Return True when the backend can safely build or sync a native scene."""
 
-    return view.backend.binding is not None and bool(getattr(view.backend, "initialized", True))
+    return view.backend.binding is not None and bool(getattr(view.backend, "initialized", False))
 
 
 def should_build_retained_view(view: RetainedLvglView) -> bool:
