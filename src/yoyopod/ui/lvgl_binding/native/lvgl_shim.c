@@ -3442,6 +3442,11 @@ int yoyopod_lvgl_init(void) {
 void yoyopod_lvgl_shutdown(void) {
     yoyopod_lvgl_clear_screen();
 
+    if(g_blank_screen != NULL) {
+        lv_obj_delete(g_blank_screen);
+        g_blank_screen = NULL;
+    }
+
     if(g_draw_buf != NULL) {
         lv_free(g_draw_buf);
         g_draw_buf = NULL;
@@ -3456,7 +3461,6 @@ void yoyopod_lvgl_shutdown(void) {
     g_indev = NULL;
     g_flush_cb = NULL;
     g_flush_user_data = NULL;
-    g_blank_screen = NULL;
     g_draw_buf_bytes = 0;
     g_key_head = 0;
     g_key_tail = 0;

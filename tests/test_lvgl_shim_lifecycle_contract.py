@@ -67,6 +67,8 @@ def test_shutdown_clears_retained_scenes_before_freeing_draw_buffers() -> None:
 
     assert "yoyopod_lvgl_clear_screen();" in body
     assert body.index("yoyopod_lvgl_clear_screen();") < body.index("lv_free(g_draw_buf);")
+    assert "lv_obj_delete(g_blank_screen);" in body
+    assert body.index("lv_obj_delete(g_blank_screen);") < body.index("g_blank_screen = NULL;")
     assert "g_blank_screen = NULL;" in body
 
 

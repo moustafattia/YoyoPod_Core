@@ -147,6 +147,41 @@ def test_playlist_screen_rebuilds_retained_lvgl_view_after_backend_reset(tmp_pat
     assert binding.playlist_build_calls == 2
 
 
+def test_playlist_view_sync_rebuilds_same_retained_instance_after_backend_reset(
+    tmp_path: Path,
+) -> None:
+    """A built retained playlist view should self-rebuild on sync after backend reset."""
+
+    music_dir = tmp_path / "Music"
+    music_dir.mkdir()
+    _write_playlist(music_dir / "Alpha.m3u", 12)
+
+    binding = FakeLvglBinding()
+    display = FakeLvglDisplay(binding)
+    backend = MockMusicBackend()
+    backend.start()
+    screen = PlaylistScreen(
+        display,
+        AppContext(interaction_profile=InteractionProfile.ONE_BUTTON),
+        music_service=LocalMusicService(backend, music_dir=music_dir),
+    )
+
+    screen.enter()
+
+    retained_view = screen._lvgl_view
+    assert retained_view is not None
+    assert binding.playlist_build_calls == 1
+    sync_count_before_reset = len(binding.playlist_sync_payloads)
+
+    display.get_ui_backend().reset()
+    retained_view.sync()
+
+    assert screen._lvgl_view is retained_view
+    assert binding.playlist_build_calls == 2
+    assert len(binding.playlist_sync_payloads) == sync_count_before_reset + 1
+    assert binding.playlist_sync_payloads[-1]["items"] == ["Alpha"]
+
+
 def test_playlist_screen_syncs_error_state_through_lvgl(tmp_path: Path) -> None:
     """PlaylistScreen should send the music-offline empty state through LVGL."""
 
