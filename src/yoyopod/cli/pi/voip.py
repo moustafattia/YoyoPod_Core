@@ -844,6 +844,7 @@ def reconnect_drill(
                 timeout=drop_detect_timeout,
             )
         else:
+            assert first_drop_wait_seconds is not None
             drop_wait_seconds = first_drop_wait_seconds
 
         if not drop_observed:
