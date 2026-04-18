@@ -34,6 +34,10 @@ class FakeLvglBackend:
     def __init__(self, binding: FakeLvglBinding) -> None:
         self.binding = binding
         self.initialized = True
+        self.scene_generation = 0
+
+    def reset(self) -> None:
+        self.scene_generation += 1
 
 
 class FakeLvglDisplay:
@@ -56,8 +60,8 @@ def _write_playlist(path: Path, track_count: int) -> None:
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
-def test_playlist_screen_builds_syncs_and_destroys_lvgl_view(tmp_path: Path) -> None:
-    """PlaylistScreen should delegate lifecycle and visible-window state to LVGL."""
+def test_playlist_screen_reuses_retained_lvgl_view_across_exit_and_reentry(tmp_path: Path) -> None:
+    """PlaylistScreen should retain its LVGL view across transitions."""
 
     music_dir = tmp_path / "Music"
     music_dir.mkdir()
@@ -106,7 +110,76 @@ def test_playlist_screen_builds_syncs_and_destroys_lvgl_view(tmp_path: Path) -> 
     assert scrolled_payload["selected_visible_index"] == 2
 
     screen.exit()
-    assert binding.playlist_destroy_calls == 1
+    assert binding.playlist_destroy_calls == 0
+
+    screen.enter()
+
+    assert binding.playlist_build_calls == 1
+    assert len(binding.playlist_sync_payloads) >= 4
+
+
+def test_playlist_screen_rebuilds_retained_lvgl_view_after_backend_reset(tmp_path: Path) -> None:
+    """PlaylistScreen should rebuild after a backend clear releases the native scene."""
+
+    music_dir = tmp_path / "Music"
+    music_dir.mkdir()
+    _write_playlist(music_dir / "Alpha.m3u", 12)
+
+    binding = FakeLvglBinding()
+    display = FakeLvglDisplay(binding)
+    backend = MockMusicBackend()
+    backend.start()
+    screen = PlaylistScreen(
+        display,
+        AppContext(interaction_profile=InteractionProfile.ONE_BUTTON),
+        music_service=LocalMusicService(backend, music_dir=music_dir),
+    )
+
+    screen.enter()
+
+    assert binding.playlist_build_calls == 1
+    first_view = screen._lvgl_view
+
+    display.get_ui_backend().reset()
+    screen.enter()
+
+    assert screen._lvgl_view is not first_view
+    assert binding.playlist_build_calls == 2
+
+
+def test_playlist_view_sync_rebuilds_same_retained_instance_after_backend_reset(
+    tmp_path: Path,
+) -> None:
+    """A built retained playlist view should self-rebuild on sync after backend reset."""
+
+    music_dir = tmp_path / "Music"
+    music_dir.mkdir()
+    _write_playlist(music_dir / "Alpha.m3u", 12)
+
+    binding = FakeLvglBinding()
+    display = FakeLvglDisplay(binding)
+    backend = MockMusicBackend()
+    backend.start()
+    screen = PlaylistScreen(
+        display,
+        AppContext(interaction_profile=InteractionProfile.ONE_BUTTON),
+        music_service=LocalMusicService(backend, music_dir=music_dir),
+    )
+
+    screen.enter()
+
+    retained_view = screen._lvgl_view
+    assert retained_view is not None
+    assert binding.playlist_build_calls == 1
+    sync_count_before_reset = len(binding.playlist_sync_payloads)
+
+    display.get_ui_backend().reset()
+    retained_view.sync()
+
+    assert screen._lvgl_view is retained_view
+    assert binding.playlist_build_calls == 2
+    assert len(binding.playlist_sync_payloads) == sync_count_before_reset + 1
+    assert binding.playlist_sync_payloads[-1]["items"] == ["Alpha"]
 
 
 def test_playlist_screen_syncs_error_state_through_lvgl(tmp_path: Path) -> None:

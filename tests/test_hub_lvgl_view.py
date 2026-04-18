@@ -31,6 +31,10 @@ class FakeLvglBackend:
     def __init__(self, binding: FakeLvglBinding) -> None:
         self.binding = binding
         self.initialized = True
+        self.scene_generation = 0
+
+    def reset(self) -> None:
+        self.scene_generation += 1
 
 
 class FakeLvglDisplay:
@@ -45,8 +49,8 @@ class FakeLvglDisplay:
         return self._ui_backend
 
 
-def test_hub_screen_builds_syncs_and_destroys_lvgl_view() -> None:
-    """HubScreen should delegate its lifecycle to an LVGL view when available."""
+def test_hub_screen_reuses_retained_lvgl_view_across_exit_and_reentry() -> None:
+    """HubScreen should retain its LVGL view across transitions."""
 
     binding = FakeLvglBinding()
     display = FakeLvglDisplay(binding)
@@ -82,7 +86,35 @@ def test_hub_screen_builds_syncs_and_destroys_lvgl_view() -> None:
     assert second_payload["selected_index"] == 1
 
     screen.exit()
-    assert binding.hub_destroy_calls == 1
+    assert binding.hub_destroy_calls == 0
+
+    screen.enter()
+    screen.render()
+
+    assert binding.hub_build_calls == 1
+    assert len(binding.hub_sync_payloads) == 3
+
+
+def test_hub_screen_rebuilds_retained_lvgl_view_after_backend_reset() -> None:
+    """HubScreen should rebuild a retained view after the backend clears native scenes."""
+
+    binding = FakeLvglBinding()
+    display = FakeLvglDisplay(binding)
+    screen = HubScreen(display, AppContext(interaction_profile=InteractionProfile.ONE_BUTTON))
+
+    screen.enter()
+    screen.render()
+
+    assert binding.hub_build_calls == 1
+    first_view = screen._lvgl_view
+
+    display.get_ui_backend().reset()
+    screen.enter()
+    screen.render()
+
+    assert screen._lvgl_view is not first_view
+    assert binding.hub_build_calls == 2
+    assert len(binding.hub_sync_payloads) == 2
 
 
 def test_hub_screen_falls_back_cleanly_when_lvgl_backend_is_unavailable() -> None:

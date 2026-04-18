@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from yoyopod.ui.screens.lvgl_lifecycle import current_retained_view
 from yoyopod.ui.screens.navigation.lvgl import LvglAskView
 from yoyopod.ui.screens.theme import (
     ASK,
@@ -42,10 +43,8 @@ class AskScreenRenderingMixin:
     def _ensure_lvgl_view(self) -> "ScreenView | None":
         """Create an LVGL view when the Whisplay renderer is active."""
 
-        if self._lvgl_view is not None:
-            return self._lvgl_view
-
         if getattr(self.display, "backend_kind", "pil") != "lvgl":
+            self._lvgl_view = None
             return None
 
         ui_backend = (
@@ -54,7 +53,12 @@ class AskScreenRenderingMixin:
             else None
         )
         if ui_backend is None or not getattr(ui_backend, "initialized", False):
+            self._lvgl_view = None
             return None
+
+        self._lvgl_view = current_retained_view(self._lvgl_view, ui_backend)
+        if self._lvgl_view is not None:
+            return self._lvgl_view
 
         self._lvgl_view = LvglAskView(self, ui_backend)
         self._lvgl_view.build()

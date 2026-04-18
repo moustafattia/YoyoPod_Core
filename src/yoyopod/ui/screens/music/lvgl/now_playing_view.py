@@ -3,9 +3,15 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, ClassVar
 
 from yoyopod.ui.lvgl_binding import LvglDisplayBackend
+from yoyopod.ui.screens.lvgl_lifecycle import (
+    ensure_retained_view_built,
+    mark_retained_view_built,
+    mark_retained_view_destroyed,
+    should_build_retained_view,
+)
 from yoyopod.ui.screens.lvgl_status import sync_network_status
 from yoyopod.ui.screens.theme import LISTEN
 
@@ -18,22 +24,24 @@ if TYPE_CHECKING:
 class LvglNowPlayingView:
     """Own the LVGL object lifecycle for NowPlayingScreen."""
 
+    scene_key: ClassVar[str] = "now_playing"
     screen: "NowPlayingScreen"
     backend: LvglDisplayBackend
     _built: bool = False
+    _build_generation: int = -1
 
     def build(self) -> None:
         """Create the native now-playing scene once."""
 
-        if self._built or self.backend.binding is None:
+        if not should_build_retained_view(self):
             return
         self.backend.binding.now_playing_build()
-        self._built = True
+        mark_retained_view_built(self)
 
     def sync(self) -> None:
         """Push the current playback controller state into the native scene."""
 
-        if not self._built or self.backend.binding is None:
+        if not ensure_retained_view_built(self):
             return
 
         state = self.screen.current_state()
@@ -67,7 +75,7 @@ class LvglNowPlayingView:
         if not self._built or self.backend.binding is None:
             return
         self.backend.binding.now_playing_destroy()
-        self._built = False
+        mark_retained_view_destroyed(self)
 
     @staticmethod
     def _battery_percent(context: "AppContext | None") -> int:

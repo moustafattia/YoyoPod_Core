@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, Callable, Optional
 
 from yoyopod.ui.display import Display
 from yoyopod.ui.screens.base import Screen
+from yoyopod.ui.screens.lvgl_lifecycle import current_retained_view
 from yoyopod.ui.screens.theme import (
     ERROR,
     INK,
@@ -197,25 +198,24 @@ class VoiceNoteScreen(Screen):
         self._ensure_lvgl_view()
 
     def exit(self) -> None:
-        """Tear down any active LVGL view when leaving voice notes."""
-
-        if self._lvgl_view is not None:
-            self._lvgl_view.destroy()
-            self._lvgl_view = None
+        """Leave the retained LVGL voice-note view alive across transitions."""
         super().exit()
 
     def _ensure_lvgl_view(self) -> "ScreenView | None":
-        if self._lvgl_view is not None:
-            return self._lvgl_view
-
         if getattr(self.display, "backend_kind", "pil") != "lvgl":
+            self._lvgl_view = None
             return None
 
         ui_backend = (
             self.display.get_ui_backend() if hasattr(self.display, "get_ui_backend") else None
         )
         if ui_backend is None or not getattr(ui_backend, "initialized", False):
+            self._lvgl_view = None
             return None
+
+        self._lvgl_view = current_retained_view(self._lvgl_view, ui_backend)
+        if self._lvgl_view is not None:
+            return self._lvgl_view
 
         self._lvgl_view = LvglVoiceNoteView(self, ui_backend)
         self._lvgl_view.build()

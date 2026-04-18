@@ -8,11 +8,17 @@ from yoyopod.app_context import AppContext
 from yoyopod.ui.input import InteractionProfile
 from yoyopod.ui.screens import (
     CallScreen,
+    CallHistoryScreen,
     ContactListScreen,
+    IncomingCallScreen,
     InCallScreen,
+    ListenScreen,
+    NowPlayingScreen,
     OutgoingCallScreen,
     PowerScreen,
+    RecentTracksScreen,
     TalkContactScreen,
+    VoiceNoteScreen,
 )
 
 
@@ -42,9 +48,15 @@ class FakeLvglBinding:
         self.in_call_build_calls = 0
         self.in_call_destroy_calls = 0
         self.in_call_sync_payloads: list[dict] = []
+        self.listen_build_calls = 0
+        self.listen_destroy_calls = 0
+        self.listen_sync_payloads: list[dict] = []
         self.ask_build_calls = 0
         self.ask_destroy_calls = 0
         self.ask_sync_payloads: list[dict] = []
+        self.now_playing_build_calls = 0
+        self.now_playing_destroy_calls = 0
+        self.now_playing_sync_payloads: list[dict] = []
         self.power_build_calls = 0
         self.power_destroy_calls = 0
         self.power_sync_payloads: list[dict] = []
@@ -112,6 +124,15 @@ class FakeLvglBinding:
     def in_call_destroy(self) -> None:
         self.in_call_destroy_calls += 1
 
+    def listen_build(self) -> None:
+        self.listen_build_calls += 1
+
+    def listen_sync(self, **payload) -> None:
+        self.listen_sync_payloads.append(payload)
+
+    def listen_destroy(self) -> None:
+        self.listen_destroy_calls += 1
+
     def ask_build(self) -> None:
         self.ask_build_calls += 1
 
@@ -120,6 +141,15 @@ class FakeLvglBinding:
 
     def ask_destroy(self) -> None:
         self.ask_destroy_calls += 1
+
+    def now_playing_build(self) -> None:
+        self.now_playing_build_calls += 1
+
+    def now_playing_sync(self, **payload) -> None:
+        self.now_playing_sync_payloads.append(payload)
+
+    def now_playing_destroy(self) -> None:
+        self.now_playing_destroy_calls += 1
 
     def power_build(self) -> None:
         self.power_build_calls += 1
@@ -140,6 +170,10 @@ class FakeLvglBackend:
     def __init__(self, binding: FakeLvglBinding) -> None:
         self.binding = binding
         self.initialized = True
+        self.scene_generation = 0
+
+    def reset(self) -> None:
+        self.scene_generation += 1
 
 
 class FakeLvglDisplay:
@@ -228,8 +262,24 @@ def make_one_button_context() -> AppContext:
     return context
 
 
-def test_call_screen_builds_syncs_and_destroys_lvgl_view() -> None:
-    """CallScreen should delegate the Talk contact deck through LVGL."""
+def make_talk_contact_context() -> AppContext:
+    """Create a TalkContact-ready context with one selected person."""
+
+    context = make_one_button_context()
+    context.set_talk_contact(name="Mama", sip_address="sip:mama@example.com")
+    return context
+
+
+def make_voice_note_context() -> AppContext:
+    """Create a VoiceNote-ready context with one selected recipient."""
+
+    context = make_one_button_context()
+    context.set_voice_note_recipient(name="Hagar", sip_address="sip:hagar@example.com")
+    return context
+
+
+def test_call_screen_reuses_retained_lvgl_view_across_exit_and_reentry() -> None:
+    """CallScreen should retain the Talk scene across transitions."""
 
     binding = FakeLvglBinding()
     screen = CallScreen(
@@ -263,10 +313,10 @@ def test_call_screen_builds_syncs_and_destroys_lvgl_view() -> None:
     assert payload["selected_index"] == 1
 
     screen.exit()
-    assert binding.talk_destroy_calls == 1
+    assert binding.talk_destroy_calls == 0
 
 
-def test_call_screen_can_reenter_lvgl_view_without_lifecycle_errors() -> None:
+def test_call_screen_can_reenter_lvgl_view_without_rebuilding() -> None:
     """Talk should survive repeated enter/render/exit cycles on the LVGL path."""
 
     binding = FakeLvglBinding()
@@ -291,8 +341,164 @@ def test_call_screen_can_reenter_lvgl_view_without_lifecycle_errors() -> None:
         assert payload["title_text"] == expected_title
         screen.exit()
 
+    assert binding.talk_build_calls == 1
+    assert binding.talk_destroy_calls == 0
+
+
+def test_call_screen_rebuilds_retained_lvgl_view_after_backend_reset() -> None:
+    """Talk should rebuild its retained LVGL scene after a backend reset clears it."""
+
+    display = FakeLvglDisplay(FakeLvglBinding())
+    binding = display.get_ui_backend().binding
+    screen = CallScreen(
+        display,
+        make_one_button_context(),
+        voip_manager=FakeVoipManager(),
+        people_directory=FakeConfigManager(
+            [
+                FakeContact("Hagar", "sip:hagar@example.com", True),
+                FakeContact("Mama", "sip:mama@example.com", True),
+            ]
+        ),
+    )
+
+    screen.enter()
+    screen.render()
+
+    assert binding.talk_build_calls == 1
+
+    display.get_ui_backend().reset()
+    screen.enter()
+    screen.render()
+
     assert binding.talk_build_calls == 2
-    assert binding.talk_destroy_calls == 2
+    assert len(binding.talk_sync_payloads) == 2
+
+
+def test_remaining_retained_lvgl_screens_rebuild_after_exit_and_backend_reset() -> None:
+    """Remaining retained LVGL controllers should rebuild after exit/reset/re-entry."""
+
+    from yoyopod.audio import LocalMusicService
+    from yoyopod.ui.screens.navigation.ask import AskScreen
+
+    cases = [
+        (
+            lambda display: ListenScreen(
+                display,
+                make_one_button_context(),
+                music_service=LocalMusicService(None),
+            ),
+            "listen_build_calls",
+        ),
+        (
+            lambda display: AskScreen(
+                display=display,
+                context=make_one_button_context(),
+            ),
+            "ask_build_calls",
+        ),
+        (
+            lambda display: RecentTracksScreen(
+                display,
+                make_one_button_context(),
+                music_service=LocalMusicService(None),
+            ),
+            "playlist_build_calls",
+        ),
+        (
+            lambda display: NowPlayingScreen(
+                display,
+                make_one_button_context(),
+            ),
+            "now_playing_build_calls",
+        ),
+        (
+            lambda display: IncomingCallScreen(
+                display,
+                make_one_button_context(),
+                caller_address="sip:parent@example.com",
+                caller_name="Parent",
+            ),
+            "incoming_call_build_calls",
+        ),
+        (
+            lambda display: OutgoingCallScreen(
+                display,
+                make_one_button_context(),
+                callee_address="sip:parent@example.com",
+                callee_name="Parent",
+            ),
+            "outgoing_call_build_calls",
+        ),
+        (
+            lambda display: InCallScreen(
+                display,
+                make_one_button_context(),
+                voip_manager=FakeVoipManager(caller_info={"display_name": "Parent"}),
+            ),
+            "in_call_build_calls",
+        ),
+        (
+            lambda display: CallHistoryScreen(
+                display,
+                make_one_button_context(),
+                voip_manager=FakeVoipManager(),
+            ),
+            "playlist_build_calls",
+        ),
+        (
+            lambda display: ContactListScreen(
+                display,
+                make_one_button_context(),
+                voip_manager=FakeVoipManager(),
+                people_directory=FakeConfigManager(
+                    [FakeContact("Amy", "sip:amy@example.com", True, notes="Mama")]
+                ),
+            ),
+            "playlist_build_calls",
+        ),
+        (
+            lambda display: TalkContactScreen(
+                display,
+                make_talk_contact_context(),
+                voip_manager=FakeVoipManager(),
+            ),
+            "talk_actions_build_calls",
+        ),
+        (
+            lambda display: VoiceNoteScreen(
+                display,
+                make_voice_note_context(),
+            ),
+            "talk_actions_build_calls",
+        ),
+        (
+            lambda display: PowerScreen(
+                display,
+                AppContext(),
+            ),
+            "power_build_calls",
+        ),
+    ]
+
+    for build_screen, build_attr in cases:
+        binding = FakeLvglBinding()
+        display = FakeLvglDisplay(binding)
+        screen = build_screen(display)
+
+        screen.enter()
+        screen.render()
+
+        assert getattr(binding, build_attr) == 1
+        first_view = screen._lvgl_view
+
+        screen.exit()
+        display.get_ui_backend().reset()
+        screen.enter()
+        screen.render()
+
+        assert screen._lvgl_view is not first_view
+        assert getattr(binding, build_attr) == 2
 
 
 def test_hub_view_syncs_network_status_bar_state_through_lvgl() -> None:
@@ -348,7 +554,7 @@ def test_talk_contact_screen_syncs_actions_through_lvgl() -> None:
     assert payload["footer"] == "Tap Next | 2x Select | Hold Back"
 
     screen.exit()
-    assert binding.talk_actions_destroy_calls == 1
+    assert binding.talk_actions_destroy_calls == 0
 
 
 def test_contact_list_screen_syncs_sorted_contacts_through_lvgl() -> None:
@@ -382,7 +588,44 @@ def test_contact_list_screen_syncs_sorted_contacts_through_lvgl() -> None:
     assert payload["footer"] == "Tap Next | 2x Open | Hold Back"
 
     screen.exit()
-    assert binding.playlist_destroy_calls == 1
+    assert binding.playlist_destroy_calls == 0
+
+
+def test_list_family_screens_replace_stale_owner_after_shared_scene_reclaim() -> None:
+    """Shared list-scene screens should replace stale wrappers on re-entry."""
+
+    binding = FakeLvglBinding()
+    display = FakeLvglDisplay(binding)
+
+    contacts = ContactListScreen(
+        display,
+        make_one_button_context(),
+        voip_manager=FakeVoipManager(),
+        people_directory=FakeConfigManager(
+            [FakeContact("Amy", "sip:amy@example.com", True, notes="Mama")]
+        ),
+    )
+    recents = CallHistoryScreen(
+        display,
+        make_one_button_context(),
+        voip_manager=FakeVoipManager(),
+    )
+
+    contacts.enter()
+    contacts.render()
+    first_contacts_view = contacts._lvgl_view
+    assert first_contacts_view is not None
+    assert binding.playlist_build_calls == 1
+
+    recents.enter()
+    recents.render()
+    assert binding.playlist_build_calls == 2
+
+    contacts.enter()
+    contacts.render()
+
+    assert contacts._lvgl_view is not first_contacts_view
+    assert binding.playlist_build_calls == 3
 
 
 def test_outgoing_call_screen_syncs_current_callee_through_lvgl() -> None:
@@ -410,7 +653,7 @@ def test_outgoing_call_screen_syncs_current_callee_through_lvgl() -> None:
     assert payload["footer"] == "Hold = Cancel"
 
     screen.exit()
-    assert binding.outgoing_call_destroy_calls == 1
+    assert binding.outgoing_call_destroy_calls == 0
 
 
 def test_in_call_screen_syncs_duration_and_mute_state_through_lvgl() -> None:
@@ -439,11 +682,11 @@ def test_in_call_screen_syncs_duration_and_mute_state_through_lvgl() -> None:
     assert payload["footer"] == "Tap = Unmute | Hold = End"
 
     screen.exit()
-    assert binding.in_call_destroy_calls == 1
+    assert binding.in_call_destroy_calls == 0
 
 
-def test_ask_screen_builds_syncs_and_destroys_lvgl_view() -> None:
-    """AskScreen should delegate its voice-command shell through LVGL."""
+def test_ask_screen_keeps_its_retained_lvgl_view_on_exit() -> None:
+    """AskScreen should keep its retained voice-command scene on exit."""
 
     from yoyopod.ui.screens.navigation.ask import AskScreen as _AskScreen
 
@@ -463,7 +706,7 @@ def test_ask_screen_builds_syncs_and_destroys_lvgl_view() -> None:
     assert payload["icon_key"] == "ask"
 
     screen.exit()
-    assert binding.ask_destroy_calls == 1
+    assert binding.ask_destroy_calls == 0
 
 
 def test_voice_note_screen_uses_talk_actions_scene_for_voice_note_states() -> None:
@@ -497,7 +740,40 @@ def test_voice_note_screen_uses_talk_actions_scene_for_voice_note_states() -> No
     assert payload["icon_keys"] == ["voice_note"]
 
     screen.exit()
-    assert binding.talk_actions_destroy_calls == 1
+    assert binding.talk_actions_destroy_calls == 0
+
+
+def test_talk_action_screens_replace_stale_owner_after_shared_scene_reclaim() -> None:
+    """Shared Talk action screens should replace stale wrappers on re-entry."""
+
+    binding = FakeLvglBinding()
+    display = FakeLvglDisplay(binding)
+
+    contact_actions = TalkContactScreen(
+        display,
+        make_talk_contact_context(),
+        voip_manager=FakeVoipManager(),
+    )
+    voice_note = VoiceNoteScreen(
+        display,
+        make_voice_note_context(),
+    )
+
+    contact_actions.enter()
+    contact_actions.render()
+    first_contact_view = contact_actions._lvgl_view
+    assert first_contact_view is not None
+    assert binding.talk_actions_build_calls == 1
+
+    voice_note.enter()
+    voice_note.render()
+    assert binding.talk_actions_build_calls == 2
+
+    contact_actions.enter()
+    contact_actions.render()
+
+    assert contact_actions._lvgl_view is not first_contact_view
+    assert binding.talk_actions_build_calls == 3
 
 
 def test_power_screen_cycles_four_lvgl_pages() -> None:
@@ -597,7 +873,7 @@ def test_power_screen_cycles_four_lvgl_pages() -> None:
     assert any("Speaker:" in item for item in payload["items"])
 
     screen.exit()
-    assert binding.power_destroy_calls == 1
+    assert binding.power_destroy_calls == 0
 
 
 def test_power_screen_one_button_voice_page_wraps_immediately() -> None:
@@ -692,3 +968,29 @@ def test_power_screen_reports_full_network_page_count_through_lvgl() -> None:
     ]
 
     screen.exit()
+
+
+def test_power_screen_lvgl_render_keeps_controller_indices_stable() -> None:
+    """LVGL sync should derive the active Setup page without rewriting controller indices."""
+
+    from yoyopod.ui.screens.system.power import build_power_screen_state_provider
+
+    binding = FakeLvglBinding()
+    screen = PowerScreen(
+        FakeLvglDisplay(binding),
+        AppContext(),
+        state_provider=build_power_screen_state_provider(status_provider=lambda: {}),
+    )
+
+    screen.enter()
+    screen.page_index = 7
+    screen.in_detail = True
+    screen.selected_row = 7
+    screen.render()
+
+    payload = binding.power_sync_payloads[-1]
+    assert payload["title_text"] == "Voice"
+    assert payload["current_page_index"] == 3
+    assert payload["items"][0].startswith("> Voice Cmds:")
+    assert screen.page_index == 7
+    assert screen.selected_row == 7
