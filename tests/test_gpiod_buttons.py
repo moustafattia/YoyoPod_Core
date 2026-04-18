@@ -124,6 +124,57 @@ def test_edge_wait_loop_blocks_between_events(monkeypatch: pytest.MonkeyPatch) -
     assert timeouts == [gpiod_buttons._EDGE_IDLE_WAIT_TIMEOUT]
 
 
+def test_negative_event_fd_falls_back_to_polling_loop(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from yoyopod.ui.input.adapters import gpiod_buttons
+
+    class FakeLine:
+        def event_get_fd(self) -> int:
+            return -1
+
+        def get_value(self) -> int:
+            return 1
+
+        def release(self) -> None:
+            return None
+
+    class FakeChip:
+        def close(self) -> None:
+            return None
+
+    line = FakeLine()
+    polling_calls: list[str] = []
+
+    def fake_select(_reads, _writes, _errors, _timeout):
+        raise AssertionError("invalid GPIO event fds should never reach select()")
+
+    monkeypatch.setattr(gpiod_buttons, "HAS_GPIOD", True)
+    monkeypatch.setattr(gpiod_buttons, "open_chip", lambda _name: FakeChip())
+    monkeypatch.setattr(
+        gpiod_buttons,
+        "request_input_events",
+        lambda _chip, _line_offset, _consumer: line,
+    )
+    monkeypatch.setattr(gpiod_buttons.select, "select", fake_select)
+
+    adapter = gpiod_buttons.GpiodButtonAdapter(
+        pin_config={"button_a": {"chip": "gpiochip0", "line": 10}},
+        simulate=False,
+    )
+    monkeypatch.setattr(
+        adapter,
+        "_polling_loop",
+        lambda: polling_calls.append("polled"),
+    )
+
+    assert adapter._line_event_fds == {}
+
+    adapter._poll_loop()
+
+    assert polling_calls == ["polled"]
+
+
 def test_edge_wait_loop_samples_level_when_event_drain_fails(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

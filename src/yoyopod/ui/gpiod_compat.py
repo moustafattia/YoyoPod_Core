@@ -108,20 +108,33 @@ def request_input_events(chip: Any, line_offset: int, consumer: str) -> Any:
     raise RuntimeError("gpiod edge-event requests are unavailable")
 
 
+def _normalize_event_fd(candidate: Any) -> int | None:
+    """Return a waitable GPIO event fd or ``None`` when the runtime reports none."""
+    try:
+        event_fd = int(candidate)
+    except Exception as exc:
+        logger.debug("Failed to normalize GPIO event fd: {}", exc)
+        return None
+
+    if event_fd < 0:
+        logger.debug("Ignoring invalid negative GPIO event fd: {}", event_fd)
+        return None
+
+    return event_fd
+
+
 def get_event_fd(line: Any) -> int | None:
     """Return the file descriptor used for waiting on GPIO edge events."""
     getter = getattr(line, "event_get_fd", None)
     if callable(getter):
         try:
-            return int(getter())
+            return _normalize_event_fd(getter())
         except Exception as exc:
             logger.debug("Failed to read GPIO event fd: {}", exc)
             return None
 
     fd = getattr(line, "fd", None)
-    if isinstance(fd, int):
-        return fd
-    return None
+    return _normalize_event_fd(fd)
 
 
 def read_edge_events(line: Any) -> list[Any]:
