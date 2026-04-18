@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import threading
 import time
 from typing import Callable, Protocol, runtime_checkable
 
@@ -72,6 +73,7 @@ class MpvBackend:
         self._current_track: Track | None = None
         self._playback_state = "stopped"
         self._event_handler_registered = False
+        self._state_lock = threading.RLock()
         self._cached_path: str | None = None
         self._cached_metadata: dict[str, object] = {}
         self._cached_duration: object | None = None
@@ -122,6 +124,7 @@ class MpvBackend:
             self._ipc.observe_property("duration", 5)
             self._ipc.observe_property("path", 6)
             self._ipc.observe_property("time-pos", 7)
+            self._prime_track_cache_from_ipc()
         except Exception as exc:
             logger.warning("Failed to observe mpv properties: {}", exc)
 
@@ -168,15 +171,24 @@ class MpvBackend:
         return self._set_property("audio-device", device)
 
     def get_current_track(self) -> Track | None:
-        if self._current_track is None and self._cached_path is not None:
+        with self._state_lock:
+            current_track = self._current_track
+            cached_path = self._cached_path
+        if current_track is None and cached_path is not None:
             self._sync_track_from_cache()
-        return self._current_track
+            with self._state_lock:
+                return self._current_track
+        return current_track
 
     def get_playback_state(self) -> str:
-        return self._playback_state
+        with self._state_lock:
+            return self._playback_state
 
     def get_time_position(self) -> int:
-        return self._cached_time_position_ms
+        if not self.is_connected:
+            return 0
+        with self._state_lock:
+            return self._cached_time_position_ms
 
     def load_tracks(self, uris: list[str]) -> bool:
         if not uris:
@@ -230,6 +242,10 @@ class MpvBackend:
 
         if event_name == "file-loaded":
             self._update_time_position_cache(0, force=True)
+            with self._state_lock:
+                needs_track_prime = self._cached_path is None
+            if needs_track_prime:
+                self._prime_track_cache_from_ipc()
             self._sync_track_from_cache()
             self._update_playback_state("playing")
         elif event_name in ("pause", "unpause"):
@@ -247,18 +263,24 @@ class MpvBackend:
             prop_name = event.get("name", "")
             if prop_name == "path":
                 path = event.get("data")
-                self._cached_path = str(path) if path else None
+                with self._state_lock:
+                    self._cached_path = str(path) if path else None
                 self._sync_track_from_cache()
             elif prop_name == "metadata":
                 metadata = event.get("data")
-                self._cached_metadata = metadata if isinstance(metadata, dict) else {}
+                with self._state_lock:
+                    self._cached_metadata = (
+                        metadata if isinstance(metadata, dict) else {}
+                    )
                 self._sync_track_from_cache()
             elif prop_name == "duration":
-                self._cached_duration = event.get("data")
+                with self._state_lock:
+                    self._cached_duration = event.get("data")
                 self._sync_track_from_cache()
             elif prop_name == "media-title":
                 media_title = event.get("data")
-                self._cached_media_title = str(media_title) if media_title else None
+                with self._state_lock:
+                    self._cached_media_title = str(media_title) if media_title else None
                 self._sync_track_from_cache()
             elif prop_name == "time-pos":
                 self._update_time_position_cache(event.get("data"))
@@ -273,25 +295,44 @@ class MpvBackend:
 
     def _sync_track_from_cache(self) -> None:
         """Build the current track from the latest observed mpv properties."""
-        if not self._cached_path:
+        with self._state_lock:
+            cached_path = self._cached_path
+            cached_metadata = dict(self._cached_metadata)
+            cached_duration = self._cached_duration
+            cached_media_title = self._cached_media_title
+
+        if not cached_path:
             return
 
-        metadata = dict(self._cached_metadata)
-        if self._cached_duration is not None:
-            metadata["duration"] = self._cached_duration
-        if self._cached_media_title and not metadata.get("title"):
-            metadata["title"] = self._cached_media_title
+        if cached_duration is not None:
+            cached_metadata["duration"] = cached_duration
+        if cached_media_title and not cached_metadata.get("title"):
+            cached_metadata["title"] = cached_media_title
 
-        track = Track.from_mpv_metadata(self._cached_path, metadata)
+        track = Track.from_mpv_metadata(cached_path, cached_metadata)
         self._update_track(track)
 
     def _clear_track_cache(self) -> None:
         """Clear cached playback properties after stop/end-of-playback."""
-        self._cached_path = None
-        self._cached_metadata = {}
-        self._cached_duration = None
-        self._cached_media_title = None
+        with self._state_lock:
+            self._cached_path = None
+            self._cached_metadata = {}
+            self._cached_duration = None
+            self._cached_media_title = None
         self._update_time_position_cache(0, force=True)
+
+    def _prime_track_cache_from_ipc(self) -> None:
+        """Seed observed track cache once when mpv has data before events arrive."""
+        path = self._get_property("path")
+        metadata = self._get_property("metadata")
+        duration = self._get_property("duration")
+        media_title = self._get_property("media-title")
+
+        with self._state_lock:
+            self._cached_path = str(path) if path else None
+            self._cached_metadata = metadata if isinstance(metadata, dict) else {}
+            self._cached_duration = duration
+            self._cached_media_title = str(media_title) if media_title else None
 
     def _update_time_position_cache(
         self,
@@ -302,34 +343,40 @@ class MpvBackend:
         """Throttle time-pos updates while keeping visible progress current."""
         position_ms = _coerce_time_position_ms(value)
         now = time.monotonic()
-        if (
-            force
-            or position_ms == 0
-            or position_ms < self._cached_time_position_ms
-            or abs(position_ms - self._cached_time_position_ms) >= 1000
-            or now - self._last_time_position_cache_update
-            >= self._TIME_POSITION_CACHE_MIN_INTERVAL_SECONDS
-        ):
-            self._cached_time_position_ms = position_ms
-            self._last_time_position_cache_update = now
+        with self._state_lock:
+            if (
+                force
+                or position_ms < self._cached_time_position_ms
+                or abs(position_ms - self._cached_time_position_ms) >= 1000
+                or now - self._last_time_position_cache_update
+                >= self._TIME_POSITION_CACHE_MIN_INTERVAL_SECONDS
+            ):
+                self._cached_time_position_ms = position_ms
+                self._last_time_position_cache_update = now
 
     def _update_track(self, track: Track | None) -> None:
-        if track != self._current_track:
+        with self._state_lock:
+            if track == self._current_track:
+                return
             self._current_track = track
-            for cb in self._track_change_callbacks:
-                try:
-                    cb(track)
-                except Exception as exc:
-                    logger.error("Track change callback error: {}", exc)
+
+        for cb in self._track_change_callbacks:
+            try:
+                cb(track)
+            except Exception as exc:
+                logger.error("Track change callback error: {}", exc)
 
     def _update_playback_state(self, state: str) -> None:
-        if state != self._playback_state:
+        with self._state_lock:
+            if state == self._playback_state:
+                return
             self._playback_state = state
-            for cb in self._playback_state_callbacks:
-                try:
-                    cb(state)
-                except Exception as exc:
-                    logger.error("Playback state callback error: {}", exc)
+
+        for cb in self._playback_state_callbacks:
+            try:
+                cb(state)
+            except Exception as exc:
+                logger.error("Playback state callback error: {}", exc)
 
     def _fire_connection_change(self, connected: bool, reason: str) -> None:
         for cb in self._connection_change_callbacks:

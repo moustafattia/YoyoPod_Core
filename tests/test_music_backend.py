@@ -6,6 +6,18 @@ from yoyopod.audio.music.backend import MockMusicBackend, MpvBackend, MusicBacke
 from yoyopod.audio.music.models import MusicConfig, Track
 
 
+def _monotonic_stub(*values: float):
+    remaining = list(values)
+    fallback = values[-1] if values else 0.0
+
+    def fake_monotonic() -> float:
+        if remaining:
+            return remaining.pop(0)
+        return fallback
+
+    return fake_monotonic
+
+
 def test_mock_backend_satisfies_protocol() -> None:
     backend: MusicBackend = MockMusicBackend()
     assert backend.start() is True
@@ -206,6 +218,65 @@ def test_mpv_backend_retries_spawn_when_early_launches_never_open_ipc(
     assert fake_process.spawn_calls == 4
     assert fake_process.kill_calls == 3
     assert backend.is_connected is True
+
+
+def test_mpv_backend_primes_track_cache_from_ipc_before_property_events(
+    monkeypatch,
+) -> None:
+    class FakeProcess:
+        def spawn(self) -> bool:
+            return True
+
+        def kill(self) -> None:
+            return None
+
+        def is_alive(self) -> bool:
+            return True
+
+    class FakeIpc:
+        def __init__(self) -> None:
+            self.connected = False
+            self.responses = {
+                "path": "/music/primed.ogg",
+                "metadata": {"artist": "Composer"},
+                "duration": 9.0,
+                "media-title": "Primed",
+            }
+
+        def connect(self) -> bool:
+            self.connected = True
+            return True
+
+        def on_event(self, callback) -> None:
+            self._callback = callback
+
+        def start_reader(self) -> None:
+            return None
+
+        def observe_property(self, name: str, observe_id: int) -> None:
+            return None
+
+        def send_command(self, args: list[object]) -> dict[str, object]:
+            if args[0] == "get_property":
+                return {"error": "success", "data": self.responses.get(str(args[1]))}
+            return {"error": "success"}
+
+        def disconnect(self) -> None:
+            self.connected = False
+
+    backend = MpvBackend(MusicConfig())
+    backend._process = FakeProcess()
+    backend._ipc = FakeIpc()
+    monkeypatch.setattr("yoyopod.audio.music.backend.time.sleep", lambda _: None)
+
+    assert backend.start() is True
+
+    track = backend.get_current_track()
+
+    assert track is not None
+    assert track.name == "Primed"
+    assert track.artists == ["Composer"]
+    assert track.length == 9000
 
 
 def test_mpv_backend_builds_track_from_property_events() -> None:
@@ -435,15 +506,22 @@ def test_mpv_backend_get_current_track_tolerates_non_numeric_duration_in_observe
 
 def test_mpv_backend_get_time_position_uses_observed_cache(monkeypatch) -> None:
     class FakeIpc:
+        connected = True
+
         def send_command(self, args: list[object]) -> dict[str, object]:
             raise AssertionError(f"unexpected synchronous IPC read: {args}")
 
+    class FakeProcess:
+        def is_alive(self) -> bool:
+            return True
+
     backend = MpvBackend(MusicConfig())
+    backend._connected = True
     backend._ipc = FakeIpc()
-    monotonic_values = iter([100.0])
+    backend._process = FakeProcess()
     monkeypatch.setattr(
         "yoyopod.audio.music.backend.time.monotonic",
-        lambda: next(monotonic_values),
+        _monotonic_stub(100.0),
     )
 
     backend._handle_mpv_event(
@@ -460,13 +538,22 @@ def test_mpv_backend_get_time_position_uses_observed_cache(monkeypatch) -> None:
 def test_mpv_backend_get_time_position_throttles_small_observed_updates(
     monkeypatch,
 ) -> None:
-    monotonic_values = iter([100.0, 100.1, 100.2])
+    class FakeIpc:
+        connected = True
+
+    class FakeProcess:
+        def is_alive(self) -> bool:
+            return True
+
     monkeypatch.setattr(
         "yoyopod.audio.music.backend.time.monotonic",
-        lambda: next(monotonic_values),
+        _monotonic_stub(100.0, 100.1, 100.2),
     )
 
     backend = MpvBackend(MusicConfig())
+    backend._connected = True
+    backend._ipc = FakeIpc()
+    backend._process = FakeProcess()
     backend._handle_mpv_event(
         {
             "event": "property-change",
@@ -496,13 +583,22 @@ def test_mpv_backend_get_time_position_throttles_small_observed_updates(
 def test_mpv_backend_get_time_position_returns_zero_for_non_numeric_observed_value(
     monkeypatch,
 ) -> None:
-    monotonic_values = iter([100.0])
+    class FakeIpc:
+        connected = True
+
+    class FakeProcess:
+        def is_alive(self) -> bool:
+            return True
+
     monkeypatch.setattr(
         "yoyopod.audio.music.backend.time.monotonic",
-        lambda: next(monotonic_values),
+        _monotonic_stub(100.0),
     )
 
     backend = MpvBackend(MusicConfig())
+    backend._connected = True
+    backend._ipc = FakeIpc()
+    backend._process = FakeProcess()
     backend._handle_mpv_event(
         {
             "event": "property-change",
@@ -510,6 +606,23 @@ def test_mpv_backend_get_time_position_returns_zero_for_non_numeric_observed_val
             "data": "N/A",
         }
     )
+
+    assert backend.get_time_position() == 0
+
+
+def test_mpv_backend_get_time_position_returns_zero_when_disconnected() -> None:
+    class FakeIpc:
+        connected = False
+
+    class FakeProcess:
+        def is_alive(self) -> bool:
+            return True
+
+    backend = MpvBackend(MusicConfig())
+    backend._connected = True
+    backend._ipc = FakeIpc()
+    backend._process = FakeProcess()
+    backend._cached_time_position_ms = 12500
 
     assert backend.get_time_position() == 0
 
