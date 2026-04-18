@@ -67,6 +67,7 @@ def test_shutdown_clears_retained_scenes_before_freeing_draw_buffers() -> None:
 
     assert "yoyopod_lvgl_clear_screen();" in body
     assert body.index("yoyopod_lvgl_clear_screen();") < body.index("lv_free(g_draw_buf);")
+    assert "g_blank_screen = NULL;" in body
 
 
 def test_retained_scene_syncs_guard_missing_roots_before_activation() -> None:

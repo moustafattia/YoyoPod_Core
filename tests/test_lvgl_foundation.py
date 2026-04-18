@@ -183,6 +183,7 @@ def test_lvgl_backend_cleanup_shuts_down_the_native_binding() -> None:
     backend.cleanup()
 
     assert binding.shutdown_calls == 1
+    assert backend.binding is None
     assert backend.initialized is False
     assert backend.scene_generation == 1
 

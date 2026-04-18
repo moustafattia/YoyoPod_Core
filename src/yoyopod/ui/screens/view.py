@@ -6,7 +6,12 @@ from typing import Protocol
 
 
 class ScreenView(Protocol):
-    """Lifecycle shared by backend-specific screen view implementations."""
+    """Lifecycle shared by backend-specific screen view implementations.
+
+    destroy() is backend-managed teardown for permanently released retained views;
+    the current runtime relies on backend clear/reset/cleanup rather than calling it
+    during normal screen transitions.
+    """
 
     def build(self) -> None:
         """Create widget/object state once for a retained backend view."""
@@ -15,4 +20,4 @@ class ScreenView(Protocol):
         """Update and present an already-built view from controller state."""
 
     def destroy(self) -> None:
-        """Tear down widgets only when the retained view is permanently released."""
+        """Backend-managed teardown hook, mainly exercised by lifecycle tests."""

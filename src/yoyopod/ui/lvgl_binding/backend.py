@@ -150,4 +150,5 @@ class LvglDisplayBackend:
             return
         self.scene_generation += 1
         self.binding.shutdown()
+        self.binding = None
         self.initialized = False
