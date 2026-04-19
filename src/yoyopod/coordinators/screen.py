@@ -60,8 +60,7 @@ class ScreenCoordinator:
             and self.runtime.power_screen is not None
             and self.runtime.screen_manager.current_screen == self.runtime.power_screen
         ):
-            self.runtime.power_screen.refresh_for_visible_tick()
-            self.runtime.power_screen.render()
+            self.refresh_current_screen()
 
     def refresh_current_screen(self) -> None:
         """Refresh whichever screen is currently visible."""

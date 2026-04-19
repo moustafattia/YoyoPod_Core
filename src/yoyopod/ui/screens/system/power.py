@@ -790,6 +790,8 @@ class PowerScreen(Screen):
         if not force and self._prepared_state is not None and not gps_refreshed:
             return self._prepared_state
 
+        # GPS refresh mutates shared modem state, so a successful query should be followed by a
+        # fresh provider read even when we would otherwise keep reusing cached prepared state.
         try:
             self._prepared_state = self._state_provider()
         except Exception:
@@ -897,6 +899,9 @@ class PowerScreen(Screen):
     def _refresh_after_page_change(self) -> None:
         """Refresh prepared state after explicit user navigation between pages."""
 
+        # Page navigation is still an explicit controller action, so we can refresh prepared state
+        # here without reintroducing render-time work. Keep providers cached/in-memory if this
+        # hook ever starts to feel expensive.
         self.refresh_prepared_state(
             force=True,
             allow_gps_refresh=self._current_page_title() == "GPS",
