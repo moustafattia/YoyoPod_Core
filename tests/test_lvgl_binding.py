@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections import OrderedDict
+
 from yoyopod.ui.lvgl_binding.binding import LvglBinding
 
 
@@ -43,7 +45,7 @@ def _make_binding() -> tuple[LvglBinding, FakeFFI, FakeLib]:
     lib = FakeLib()
     binding.ffi = ffi
     binding.lib = lib
-    binding._hub_sync_string_cache = {}
+    binding._hub_sync_string_cache = OrderedDict()
     return binding, ffi, lib
 
 
@@ -97,3 +99,32 @@ def test_hub_sync_reuses_cached_char_arrays_for_static_strings() -> None:
         b"12:00",
         b"12:01",
     ]
+
+
+def test_hub_sync_cache_evicts_old_dynamic_entries() -> None:
+    """Hub sync should keep the cache bounded when titles churn."""
+
+    binding, _, _ = _make_binding()
+
+    for index in range(binding.HUB_SYNC_STRING_CACHE_LIMIT - 2):
+        binding.hub_sync(
+            icon_key="listen",
+            title=f"Title {index}",
+            subtitle="",
+            footer="Tap = Next | 2x Tap = Open",
+            time_text=None,
+            accent=(1, 2, 3),
+            selected_index=index,
+            total_cards=4,
+            voip_state=1,
+            battery_percent=92,
+            charging=False,
+            power_available=True,
+        )
+
+    assert len(binding._hub_sync_string_cache) == binding.HUB_SYNC_STRING_CACHE_LIMIT
+    assert "Title 0" not in binding._hub_sync_string_cache
+    assert f"Title {binding.HUB_SYNC_STRING_CACHE_LIMIT - 3}" in binding._hub_sync_string_cache
+    assert "listen" in binding._hub_sync_string_cache
+    assert "" in binding._hub_sync_string_cache
+    assert "Tap = Next | 2x Tap = Open" in binding._hub_sync_string_cache
