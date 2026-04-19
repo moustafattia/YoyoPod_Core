@@ -152,6 +152,11 @@ class CallInterruptionPolicy:
 
     music_interrupted_by_call: bool = False
 
+    def mark_paused_for_call(self, music_fsm: MusicFSM) -> None:
+        """Record that a call successfully paused active playback."""
+        self.music_interrupted_by_call = True
+        music_fsm.transition("pause")
+
     def pause_for_call(self, music_fsm: MusicFSM) -> bool:
         """
         Mark and pause music if the call interrupted active playback.
@@ -161,7 +166,7 @@ class CallInterruptionPolicy:
         """
         self.music_interrupted_by_call = music_fsm.state == MusicState.PLAYING
         if self.music_interrupted_by_call:
-            music_fsm.transition("pause")
+            self.mark_paused_for_call(music_fsm)
         return self.music_interrupted_by_call
 
     def should_auto_resume(self, auto_resume: bool) -> bool:
