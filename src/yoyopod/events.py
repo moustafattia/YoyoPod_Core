@@ -69,6 +69,7 @@ class VoIPAvailabilityChangedEvent:
 
     available: bool
     reason: str = ""
+    registration_state: RegistrationState = RegistrationState.NONE
 
 
 @dataclass(frozen=True, slots=True)

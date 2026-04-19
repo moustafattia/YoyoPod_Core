@@ -615,7 +615,7 @@ def test_voip_manager_background_iterate_worker_surfaces_unexpected_failure(
     config.message_store_dir = str(tmp_path / "messages")
     config.voice_note_store_dir = str(tmp_path / "voice_notes")
     scheduled_callbacks: queue.Queue[Callable[[], None]] = queue.Queue()
-    availability_changes: list[tuple[bool, str]] = []
+    availability_changes: list[tuple[bool, str, RegistrationState]] = []
     manager = VoIPManager(
         config,
         backend=backend,
@@ -623,7 +623,9 @@ def test_voip_manager_background_iterate_worker_surfaces_unexpected_failure(
         background_iterate_enabled=True,
     )
     manager.on_availability_change(
-        lambda available, reason: availability_changes.append((available, reason))
+        lambda available, reason, registration_state: availability_changes.append(
+            (available, reason, registration_state)
+        )
     )
 
     assert manager.start()
@@ -638,7 +640,11 @@ def test_voip_manager_background_iterate_worker_surfaces_unexpected_failure(
         assert manager.running is False
         assert manager.registered is False
         assert manager.registration_state == RegistrationState.FAILED
-        assert availability_changes[-1] == (False, "metrics exploded")
+        assert availability_changes[-1] == (
+            False,
+            "metrics exploded",
+            RegistrationState.FAILED,
+        )
 
         worker_thread = manager._iterate_thread
         assert worker_thread is not None
