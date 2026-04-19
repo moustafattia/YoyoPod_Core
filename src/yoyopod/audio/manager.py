@@ -6,19 +6,25 @@ pygame for cross-platform compatibility with ALSA backend on Linux.
 """
 
 import subprocess
-from enum import Enum
-from pathlib import Path
-from typing import Optional, List, Callable
 from dataclasses import dataclass
-from threading import Thread, Event
+from enum import Enum
+from functools import lru_cache
+from importlib import import_module
+from pathlib import Path
+from typing import Any, Callable, List, Optional
+
 from loguru import logger
 
-try:
-    import pygame.mixer
-    HAS_PYGAME = True
-except ImportError:
-    HAS_PYGAME = False
-    logger.warning("pygame not available - audio will be simulated")
+
+@lru_cache(maxsize=1)
+def _load_pygame_mixer() -> object | None:
+    """Import pygame.mixer only when an AudioManager instance needs it."""
+
+    try:
+        return import_module("pygame.mixer")
+    except ImportError:
+        logger.warning("pygame not available - audio will be simulated")
+        return None
 
 
 class AudioDevice(Enum):
@@ -64,7 +70,8 @@ class AudioManager:
             max_volume: Maximum volume limit (0-100), default 80% for parental control
             simulate: If True, run in simulation mode without actual audio
         """
-        self.simulate = simulate or not HAS_PYGAME
+        self._pygame_mixer: Any | None = None if simulate else _load_pygame_mixer()
+        self.simulate = simulate or self._pygame_mixer is None
         self.max_volume = max(0, min(100, max_volume))
         self._volume = 50  # Current volume (0-100)
         self.is_playing = False
@@ -78,7 +85,7 @@ class AudioManager:
         # Initialize pygame mixer
         if not self.simulate:
             try:
-                pygame.mixer.init(
+                self._mixer().init(
                     frequency=self.SAMPLE_RATE,
                     size=-16,  # 16-bit
                     channels=self.CHANNELS,
@@ -94,6 +101,13 @@ class AudioManager:
 
         # Detect available audio devices
         self._detect_devices()
+
+    def _mixer(self) -> Any:
+        """Return the pygame mixer module when real audio is active."""
+
+        if self._pygame_mixer is None:
+            raise RuntimeError("pygame.mixer is unavailable while audio simulation is disabled")
+        return self._pygame_mixer
 
     def _detect_devices(self) -> List[AudioDeviceInfo]:
         """
@@ -169,7 +183,7 @@ class AudioManager:
             # Update pygame mixer volume (0.0 to 1.0)
             if not self.simulate:
                 pygame_volume = value / 100.0
-                pygame.mixer.music.set_volume(pygame_volume)
+                self._mixer().music.set_volume(pygame_volume)
 
             logger.info(f"Volume set to {value}% (max: {self.max_volume}%)")
 
@@ -236,7 +250,7 @@ class AudioManager:
             return True
 
         try:
-            pygame.mixer.music.load(str(file_path))
+            self._mixer().music.load(str(file_path))
             self.current_file = file_path
             logger.info(f"Loaded audio: {file_path.name}")
             return True
@@ -265,7 +279,7 @@ class AudioManager:
             return True
 
         try:
-            pygame.mixer.music.play(loops=loops)
+            self._mixer().music.play(loops=loops)
             self.is_playing = True
             self.is_paused = False
             logger.info(f"Playing: {self.current_file.name}")
@@ -287,7 +301,7 @@ class AudioManager:
             return
 
         try:
-            pygame.mixer.music.pause()
+            self._mixer().music.pause()
             self.is_paused = True
             self.is_playing = False
             logger.info("Paused playback")
@@ -307,7 +321,7 @@ class AudioManager:
             return
 
         try:
-            pygame.mixer.music.unpause()
+            self._mixer().music.unpause()
             self.is_paused = False
             self.is_playing = True
             logger.info("Resumed playback")
@@ -323,7 +337,7 @@ class AudioManager:
             return
 
         try:
-            pygame.mixer.music.stop()
+            self._mixer().music.stop()
             self.is_playing = False
             self.is_paused = False
             logger.info("Stopped playback")
@@ -342,7 +356,7 @@ class AudioManager:
 
         try:
             # pygame.mixer.music.get_pos() returns milliseconds
-            pos_ms = pygame.mixer.music.get_pos()
+            pos_ms = self._mixer().music.get_pos()
             return pos_ms / 1000.0 if pos_ms >= 0 else 0.0
         except Exception as e:
             logger.error(f"Failed to get position: {e}")
@@ -359,7 +373,7 @@ class AudioManager:
             return self.is_playing
 
         try:
-            return pygame.mixer.music.get_busy()
+            return self._mixer().music.get_busy()
         except Exception as e:
             logger.error(f"Failed to check if busy: {e}")
             return False
@@ -386,8 +400,9 @@ class AudioManager:
         """Clean up audio resources."""
         if not self.simulate:
             try:
-                pygame.mixer.music.stop()
-                pygame.mixer.quit()
+                mixer = self._mixer()
+                mixer.music.stop()
+                mixer.quit()
                 logger.info("Audio system cleaned up")
             except Exception as e:
                 logger.error(f"Error during audio cleanup: {e}")
