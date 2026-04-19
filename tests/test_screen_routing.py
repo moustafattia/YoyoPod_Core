@@ -41,6 +41,23 @@ class RoutableStubScreen(Screen):
         self.request_route("back")
 
 
+class HookAwareStubScreen(Screen):
+    """Minimal screen double that exposes refresh-hook counters."""
+
+    def __init__(self, display: Display, context: AppContext | None = None) -> None:
+        super().__init__(display, context, "HookAwareStub")
+        self.render_calls = 0
+        self.refresh_for_visible_tick_calls = 0
+
+    def render(self) -> None:
+        """Count renders performed by the screen manager."""
+        self.render_calls += 1
+
+    def refresh_for_visible_tick(self) -> None:
+        """Count visible-tick refreshes before render."""
+        self.refresh_for_visible_tick_calls += 1
+
+
 @pytest.fixture
 def display() -> Display:
     """Create a simulation display and clean it up after the test."""
@@ -172,6 +189,35 @@ def test_screen_manager_routes_power_status_through_stack(display: Display) -> N
     input_manager.simulate_action(InputAction.SELECT)
 
     assert screen_manager.current_screen is power
+
+
+def test_screen_manager_routes_visible_screen_renders_through_refresh_hook(
+    display: Display,
+) -> None:
+    """Push/pop/replace should invoke the visible-screen refresh hook before render."""
+
+    context = AppContext()
+    input_manager = InputManager()
+    screen_manager = ScreenManager(display, input_manager)
+
+    menu = RoutableStubScreen(display, context)
+    power = HookAwareStubScreen(display, context)
+    other = RoutableStubScreen(display, context)
+
+    screen_manager.register_screen("menu", menu)
+    screen_manager.register_screen("power", power)
+    screen_manager.register_screen("other", other)
+
+    screen_manager.replace_screen("power")
+
+    assert power.render_calls == 1
+    assert power.refresh_for_visible_tick_calls == 1
+
+    screen_manager.push_screen("other")
+    screen_manager.pop_screen()
+
+    assert power.render_calls == 2
+    assert power.refresh_for_visible_tick_calls == 2
 
 
 def test_screen_manager_routes_whisplay_hub_cards_through_stack(display: Display) -> None:
@@ -574,7 +620,9 @@ def test_ask_screen_fallback_settings_keep_configured_voice_defaults() -> None:
     """Missing providers should still inherit configured backend/model voice settings."""
 
     context = AppContext()
-    context.configure_voice(commands_enabled=True, ai_requests_enabled=True, screen_read_enabled=True)
+    context.configure_voice(
+        commands_enabled=True, ai_requests_enabled=True, screen_read_enabled=True
+    )
     context.set_mic_muted(True)
     context.set_volume(77)
     screen = AskScreen(
@@ -721,7 +769,9 @@ def test_ask_screen_quick_command_errors_schedule_auto_return() -> None:
     """Quick-command failures should still auto-return after showing the reply."""
 
     context = AppContext()
-    context.configure_voice(commands_enabled=False, ai_requests_enabled=True, screen_read_enabled=True)
+    context.configure_voice(
+        commands_enabled=False, ai_requests_enabled=True, screen_read_enabled=True
+    )
     ask = AskScreen(display=object(), context=context)
 
     ask.set_quick_command(True)
@@ -765,7 +815,8 @@ def test_ask_screen_applies_route_requests_immediately_off_input_path() -> None:
         action_scheduler=None,
         apply_navigation_request=lambda request, source_screen=None: applied_requests.append(
             (request, source_screen)
-        ) or True,
+        )
+        or True,
         get_current_screen=lambda: ask,
         refresh_current_screen=lambda: None,
     )
@@ -794,7 +845,8 @@ def test_ask_screen_auto_pop_applies_back_route_immediately() -> None:
         action_scheduler=None,
         apply_navigation_request=lambda request, source_screen=None: applied_requests.append(
             (request, source_screen)
-        ) or True,
+        )
+        or True,
     )
     ask.set_screen_manager(manager)
     ask.set_route_name("ask")
