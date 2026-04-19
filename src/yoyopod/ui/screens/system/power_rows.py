@@ -82,26 +82,23 @@ def _build_runtime_rows(
     shutdown_value = "Ready"
     if status.get("shutdown_pending"):
         shutdown_value = f"In {_format_duration_short(status.get('shutdown_in_seconds'))}"
+    warn_crit_value = f"{warning_percent}/{critical_percent}"
+    if snapshot is not None and snapshot.shutdown.safe_shutdown_level_percent is not None:
+        safe_shutdown_percent = _format_percent(snapshot.shutdown.safe_shutdown_level_percent)
+        warn_crit_value = f"{warning_percent}/{safe_shutdown_percent}"
 
-    rows = [
+    return [
         ("Uptime", _format_duration_short(status.get("app_uptime_seconds"))),
         ("Screen", _format_screen_state(status)),
         ("Idle", _format_duration_short(status.get("screen_idle_seconds"))),
         ("Timeout", _format_duration_short(status.get("screen_timeout_seconds"))),
-        ("Warn/Crit", f"{warning_percent}/{critical_percent}"),
+        ("Warn/Crit", warn_crit_value),
         (
             "Shutdown",
             shutdown_value if delay_seconds == "0s" else f"{shutdown_value} ({delay_seconds})",
         ),
         ("Watchdog", _format_watchdog(status)),
     ]
-
-    if snapshot is not None and snapshot.shutdown.safe_shutdown_level_percent is not None:
-        rows[4] = (
-            "Warn/Crit",
-            f"{warning_percent}/{_format_percent(snapshot.shutdown.safe_shutdown_level_percent)}",
-        )
-    return rows
 
 
 def _build_voice_rows(
@@ -151,12 +148,6 @@ def _build_voice_rows(
             ("Volume", rows[6][1]),
         ]
     return rows
-
-
-def _active_pages(pages: list[PowerPage]) -> list[PowerPage]:
-    """Return the current page list for navigation helpers."""
-
-    return pages
 
 
 def _row_capacity_for_page(page: PowerPage, *, is_portrait: bool) -> int:

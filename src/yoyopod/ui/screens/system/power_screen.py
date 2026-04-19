@@ -14,7 +14,6 @@ from yoyopod.ui.screens.lvgl_lifecycle import current_retained_view
 from yoyopod.ui.screens.system.lvgl import LvglPowerView
 from yoyopod.ui.screens.system.power_rows import (
     PowerPage,
-    _active_pages,
     _build_battery_rows,
     _build_runtime_rows,
     _build_voice_rows,
@@ -71,9 +70,7 @@ class PowerScreen(Screen):
     ) -> None:
         super().__init__(display, context, "PowerStatus")
         self._state_provider = (
-            state_provider
-            if state_provider is not None
-            else build_power_screen_state_provider()
+            state_provider if state_provider is not None else build_power_screen_state_provider()
         )
         self._actions = actions or PowerScreenActions()
         self.page_index = 0
@@ -665,11 +662,8 @@ class PowerScreen(Screen):
     def prefers_simple_one_button_navigation(self) -> bool:
         return self.is_one_button_mode()
 
-    def _active_pages(self) -> list[PowerPage]:
-        return _active_pages(self._prepared_pages())
-
     def _active_page(self) -> PowerPage:
-        pages = self._active_pages()
+        pages = self._prepared_pages()
         self.page_index %= len(pages)
         page = pages[self.page_index]
         if page.rows:
@@ -707,7 +701,9 @@ class PowerScreen(Screen):
             )
             return
         if row_index == 2:
-            self.context.configure_voice(screen_read_enabled=not self.context.voice.screen_read_enabled)
+            self.context.configure_voice(
+                screen_read_enabled=not self.context.voice.screen_read_enabled
+            )
             return
         if row_index == 3:
             self._cycle_speaker_device(direction)
@@ -775,7 +771,7 @@ class PowerScreen(Screen):
             self._actions.persist_capture_device(next_device)
 
     def _next_page(self) -> None:
-        pages = self._active_pages()
+        pages = self._prepared_pages()
         if not pages:
             return
         self.page_index = (self.page_index + 1) % len(pages)
@@ -783,7 +779,7 @@ class PowerScreen(Screen):
         self._refresh_after_page_change()
 
     def _previous_page(self) -> None:
-        pages = self._active_pages()
+        pages = self._prepared_pages()
         if not pages:
             return
         self.page_index = (self.page_index - 1) % len(pages)
