@@ -197,6 +197,8 @@ class PeopleDirectory:
             merged_cloud_contacts.append(contact)
 
             quick_dial = entry.get("quick_dial")
+            if isinstance(quick_dial, str) and quick_dial.isdigit():
+                quick_dial = int(quick_dial)
             if isinstance(quick_dial, int) and 1 <= quick_dial <= 9:
                 route, address = contact.preferred_call_target(gsm_enabled=False)
                 if route == "sip" and address:

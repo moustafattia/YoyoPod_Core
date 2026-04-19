@@ -37,6 +37,8 @@ class Contact:
     ) -> tuple[str | None, str]:
         """Return the active call route and address for this contact."""
 
+        if not self.can_call:
+            return None, ""
         if self.sip_address.strip():
             return "sip", self.sip_address.strip()
         if gsm_enabled and self.phone_number.strip():
