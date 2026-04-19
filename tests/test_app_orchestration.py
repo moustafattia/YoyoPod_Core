@@ -39,6 +39,7 @@ from yoyopod.fsm import (
 )
 from yoyopod.power import BatteryState, PowerSnapshot
 from yoyopod.runtime.loop import RuntimeLoopService
+from yoyopod.runtime.models import PowerAlert
 from yoyopod.ui.input import InputManager, InteractionProfile
 
 
@@ -46,9 +47,12 @@ class RenderableScreen(Protocol):
     """Small screen surface used by orchestration test doubles."""
 
     render_calls: int
+    refresh_for_visible_tick_calls: int
     route_name: str | None
 
     def render(self) -> None: ...
+
+    def refresh_for_visible_tick(self) -> None: ...
 
 
 class IncomingCallScreenLike(RenderableScreen, Protocol):
@@ -64,10 +68,14 @@ class FakeScreen:
 
     def __init__(self) -> None:
         self.render_calls = 0
+        self.refresh_for_visible_tick_calls = 0
         self.route_name: str | None = None
 
     def render(self) -> None:
         self.render_calls += 1
+
+    def refresh_for_visible_tick(self) -> None:
+        self.refresh_for_visible_tick_calls += 1
 
 
 class FakeIncomingCallScreen(FakeScreen):
@@ -139,6 +147,12 @@ class FakeScreenManager:
 
     def get_current_screen(self) -> RenderableScreen | None:
         return self.current_screen
+
+    def refresh_current_screen(self) -> None:
+        if self.current_screen is None:
+            return
+        self.current_screen.refresh_for_visible_tick()
+        self.current_screen.render()
 
     def _notify_screen_changed(self, route_name: str | None) -> None:
         if self.on_screen_changed is not None:
@@ -1077,10 +1091,25 @@ def test_periodic_power_refresh_only_renders_visible_power_screen() -> None:
 
     app._update_power_screen_if_needed()
     assert app.power_screen.render_calls == 0
+    assert app.power_screen.refresh_for_visible_tick_calls == 0
 
     screen_manager.push_screen("power")
     app._update_power_screen_if_needed()
     assert app.power_screen.render_calls == 1
+    assert app.power_screen.refresh_for_visible_tick_calls == 1
+
+
+def test_power_poll_refreshes_visible_power_screen_through_shared_refresh_hook() -> None:
+    """Power snapshot refreshes should reuse the generic visible-screen refresh hook."""
+    app, _, screen_manager = _build_app_with_power(
+        FakePowerManager([_power_snapshot(available=True, battery_percent=55.0)])
+    )
+    screen_manager.push_screen("power")
+
+    app._poll_power_status(now=0.0, force=True)
+
+    assert app.power_screen.render_calls == 1
+    assert app.power_screen.refresh_for_visible_tick_calls == 1
 
 
 def test_power_poll_honors_interval_and_tracks_unavailable_backend() -> None:
@@ -1212,6 +1241,35 @@ def test_user_activity_event_wakes_screen_and_refreshes_current_screen() -> None
     assert app.display.set_backlight_calls[-1] == 0.75
     assert app.context.screen_awake is True
     assert app.menu_screen.render_calls == render_calls_before + 1
+
+
+def test_user_activity_event_wakes_screen_and_refreshes_visible_power_screen_hook() -> None:
+    """Wake renders should route visible Setup screens through the shared refresh hook."""
+
+    app, _, screen_manager = _build_app_with_power(
+        FakePowerManager([_power_snapshot(available=True, battery_percent=55.0)])
+    )
+    app.display = FakeDisplay()
+    app.app_settings = SimpleNamespace(
+        ui=SimpleNamespace(screen_timeout_seconds=300),
+        display=SimpleNamespace(brightness=75, backlight_timeout_seconds=30),
+    )
+
+    app._screen_timeout_seconds = app._resolve_screen_timeout_seconds()
+    app._active_brightness = app._resolve_active_brightness()
+    app._configure_screen_power(initial_now=0.0)
+    screen_manager.push_screen("power")
+    app._sleep_screen(31.0)
+
+    render_calls_before = app.power_screen.render_calls
+    refresh_calls_before = app.power_screen.refresh_for_visible_tick_calls
+
+    _publish_from_worker(app, UserActivityEvent(action_name="select"))
+
+    assert app.event_bus.drain() == 1
+    assert app.context.screen_awake is True
+    assert app.power_screen.render_calls == render_calls_before + 1
+    assert app.power_screen.refresh_for_visible_tick_calls == refresh_calls_before + 1
 
 
 def test_status_exposes_input_and_responsiveness_markers() -> None:
@@ -1416,6 +1474,31 @@ def test_power_restore_cancels_pending_shutdown() -> None:
     assert app._pending_shutdown is None
     assert app._power_alert is not None
     assert app._power_alert.title == "Power Restored"
+
+
+def test_expired_power_alert_refreshes_visible_power_screen_through_shared_hook() -> None:
+    """Overlay dismissal should reuse the shared refresh path for the Setup screen."""
+
+    app, _, screen_manager = _build_app_with_power(
+        FakePowerManager([_power_snapshot(available=True, battery_percent=55.0)])
+    )
+    screen_manager.push_screen("power")
+    app._power_alert = PowerAlert(
+        title="Low Battery",
+        subtitle="15% remaining",
+        color=(255, 255, 0),
+        expires_at=0.0,
+    )
+
+    render_calls_before = app.power_screen.render_calls
+    refresh_calls_before = app.power_screen.refresh_for_visible_tick_calls
+
+    handled = app.screen_power_service.update_power_overlays(now=1.0)
+
+    assert handled is False
+    assert app._power_alert is None
+    assert app.power_screen.render_calls == render_calls_before + 1
+    assert app.power_screen.refresh_for_visible_tick_calls == refresh_calls_before + 1
 
 
 def test_pending_shutdown_runs_hooks_and_requests_system_poweroff(tmp_path) -> None:
@@ -1634,6 +1717,7 @@ def test_runtime_loop_service_refreshes_visible_power_screen() -> None:
 
     assert updated_at == 1.0
     assert app.power_screen.render_calls > render_calls_before
+    assert app.power_screen.refresh_for_visible_tick_calls > 0
 
 
 def test_runtime_loop_relaxes_idle_cadence_and_exposes_snapshot() -> None:

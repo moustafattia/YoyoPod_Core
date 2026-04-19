@@ -82,6 +82,17 @@ class PowerScreenLvglPayload:
     total_pages: int
 
 
+_VOICE_PAGE_SIGNATURE_FIELDS = (
+    "commands_enabled",
+    "ai_requests_enabled",
+    "screen_read_enabled",
+    "speaker_device_id",
+    "capture_device_id",
+    "mic_muted",
+    "output_volume",
+)
+
+
 def _build_network_rows_from_manager(network_manager: object | None) -> list[tuple[str, str]]:
     """Build the cellular network status rows from a backend-facing manager."""
 
@@ -262,6 +273,11 @@ class PowerScreen(Screen):
         self._lvgl_view: "ScreenView | None" = None
         self._last_gps_query_at = 0.0
         self._gps_refresh_interval_seconds = 2.0
+        self._visible_tick_refresh_grace_seconds = 0.5
+        self._last_prepared_refresh_at = 0.0
+        self._prepared_state: PowerScreenState | None = None
+        self._cached_pages: list[PowerPage] | None = None
+        self._cached_pages_signature: tuple[object, ...] | None = None
 
     def enter(self) -> None:
         """Create the LVGL view when the screen becomes active."""
@@ -272,6 +288,7 @@ class PowerScreen(Screen):
         self.in_detail = False
         if self._actions.refresh_voice_devices is not None:
             self._actions.refresh_voice_devices()
+        self.refresh_prepared_state()
         self._ensure_lvgl_view()
 
     def exit(self) -> None:
@@ -302,7 +319,7 @@ class PowerScreen(Screen):
     def render(self) -> None:
         """Render the active Setup page."""
         lvgl_view = self._ensure_lvgl_view()
-        pages = self._build_pages_for_display()
+        pages = self._prepared_pages()
         if not pages:
             return
         active_page_index = self._page_index_for(pages)
@@ -591,7 +608,7 @@ class PowerScreen(Screen):
         """Build compact setup pages for rendering and tests."""
         resolved_state = state or self._get_state()
         resolved_snapshot = snapshot if snapshot is not None else resolved_state.snapshot
-        resolved_status = status if status is not None else resolved_state.status
+        resolved_status = status if status is not None else dict(resolved_state.status)
         battery_rows = self._build_battery_rows(snapshot=resolved_snapshot)
         runtime_rows = self._build_runtime_rows(
             snapshot=resolved_snapshot,
@@ -618,36 +635,10 @@ class PowerScreen(Screen):
         )
         return pages
 
-    def _build_pages_for_display(
-        self,
-        *,
-        snapshot: Optional["PowerSnapshot"] = None,
-        status: dict[str, object] | None = None,
-        state: PowerScreenState | None = None,
-    ) -> list[PowerPage]:
-        """Build pages and opportunistically refresh GPS when the GPS page is active."""
-
-        resolved_state = state or self._get_state()
-        pages = self.build_pages(
-            snapshot=snapshot,
-            status=status,
-            state=resolved_state,
-        )
-        if not pages:
-            return pages
-
-        active_page = pages[self._page_index_for(pages)]
-        if active_page.title != "GPS":
-            return pages
-
-        if self._maybe_refresh_gps_page():
-            pages = self.build_pages(state=self._get_state())
-        return pages
-
     def lvgl_payload(self) -> PowerScreenLvglPayload:
         """Return the current Setup LVGL payload without mutating controller state."""
 
-        pages = self.build_pages(state=self._get_state())
+        pages = self._prepared_pages()
         if not pages:
             return PowerScreenLvglPayload(
                 title_text="Setup",
@@ -762,8 +753,8 @@ class PowerScreen(Screen):
             )
         )
 
-    def _maybe_refresh_gps_page(self) -> bool:
-        """Query GPS when the user is actively viewing the GPS page."""
+    def _refresh_gps_if_due(self) -> bool:
+        """Query GPS through an explicit refresh hook when the GPS page is active."""
 
         now = time.monotonic()
         if now - self._last_gps_query_at < self._gps_refresh_interval_seconds:
@@ -781,12 +772,154 @@ class PowerScreen(Screen):
         return bool(coord)
 
     def _get_state(self) -> PowerScreenState:
-        """Return the prepared state for the current render."""
+        """Return cached prepared state, hydrating it for explicit non-render callers."""
 
+        if self._prepared_state is None:
+            return self.refresh_prepared_state()
+        return self._prepared_state
+
+    def refresh_prepared_state(
+        self,
+        *,
+        allow_gps_refresh: bool = False,
+    ) -> PowerScreenState:
+        """Refresh and cache prepared Setup state outside render-time code paths."""
+
+        # Explicit refresh hooks intentionally rerun the provider; page caching only skips the
+        # later build_pages work. If provider inputs ever become expensive, memoize them below this
+        # screen layer rather than trying to recover that cost from render-time caching.
+        # GPS refresh mutates shared modem state, so a successful query should be followed by the
+        # same fresh provider read as any other explicit hydration path.
+        if allow_gps_refresh:
+            self._refresh_gps_if_due()
         try:
-            return self._state_provider()
+            self._prepared_state = self._normalize_prepared_state(self._state_provider())
+            self._last_prepared_refresh_at = time.monotonic()
         except Exception:
-            return PowerScreenState()
+            self._prepared_state = PowerScreenState()
+        return self._prepared_state
+
+    def refresh_for_visible_tick(self) -> None:
+        """Refresh prepared state before a coordinator-driven visible-screen render."""
+
+        if (
+            self._prepared_state is not None
+            and (time.monotonic() - self._last_prepared_refresh_at)
+            < self._visible_tick_refresh_grace_seconds
+        ):
+            return
+        # Determine GPS eligibility from the page the user is already viewing before this refresh
+        # starts. Page navigation performs its own explicit refresh, so the pre-refresh page title
+        # still represents the active page when the periodic visible-tick arrives.
+        self.refresh_prepared_state(
+            allow_gps_refresh=self._current_page_title() == "GPS",
+        )
+
+    def _prepared_pages(self) -> list[PowerPage]:
+        """Return cached page models until prepared state or voice inputs change."""
+
+        if self._prepared_state is None:
+            resolved_state = PowerScreenState()
+        else:
+            resolved_state = self._prepared_state
+        voice_signature = self._voice_page_signature()
+        one_button_mode = self.is_one_button_mode()
+        cache_signature = self._page_cache_signature(
+            state=resolved_state,
+            voice_signature=voice_signature,
+            one_button_mode=one_button_mode,
+        )
+        if self._cached_pages is not None and self._cached_pages_signature == cache_signature:
+            return self._cached_pages
+
+        self._cached_pages = self.build_pages(state=resolved_state)
+        self._cached_pages_signature = cache_signature
+        return self._cached_pages
+
+    @staticmethod
+    def _normalize_prepared_state(state: PowerScreenState) -> PowerScreenState:
+        """Freeze provider output into a self-owned prepared-state snapshot."""
+
+        return PowerScreenState(
+            snapshot=state.snapshot,
+            status=dict(state.status),
+            network_enabled=state.network_enabled,
+            network_rows=tuple(state.network_rows),
+            gps_rows=tuple(state.gps_rows),
+            playback_devices=tuple(state.playback_devices),
+            capture_devices=tuple(state.capture_devices),
+        )
+
+    def _voice_page_signature(self) -> tuple[object, ...] | None:
+        """Return the voice-facing inputs that affect Setup page content."""
+
+        if self.context is None:
+            return None
+
+        voice = self.context.voice
+        return tuple(getattr(voice, field_name) for field_name in _VOICE_PAGE_SIGNATURE_FIELDS)
+
+    @staticmethod
+    def _snapshot_page_signature(snapshot: "PowerSnapshot | None") -> tuple[object, ...] | None:
+        """Return only the snapshot fields that affect prepared Setup page content."""
+
+        if snapshot is None:
+            return None
+
+        return (
+            snapshot.available,
+            snapshot.error,
+            snapshot.source,
+            snapshot.device.model,
+            snapshot.battery.level_percent,
+            snapshot.battery.charging,
+            snapshot.battery.power_plugged,
+            snapshot.battery.voltage_volts,
+            snapshot.battery.temperature_celsius,
+            snapshot.rtc.time,
+            snapshot.rtc.alarm_enabled,
+            snapshot.rtc.alarm_time,
+            snapshot.shutdown.safe_shutdown_level_percent,
+        )
+
+    @staticmethod
+    def _page_cache_signature(
+        *,
+        state: PowerScreenState,
+        voice_signature: tuple[object, ...] | None,
+        one_button_mode: bool,
+    ) -> tuple[object, ...]:
+        """Return the stable inputs used to reuse prepared page models."""
+
+        return (
+            PowerScreen._snapshot_page_signature(state.snapshot),
+            tuple(sorted(state.status.items(), key=lambda item: item[0])),
+            state.network_enabled,
+            state.network_rows,
+            state.gps_rows,
+            state.playback_devices,
+            state.capture_devices,
+            voice_signature,
+            one_button_mode,
+        )
+
+    def _current_page_title(self) -> str | None:
+        """Return the currently selected Setup page title from prepared pages."""
+
+        pages = self._prepared_pages()
+        if not pages:
+            return None
+        return pages[self._page_index_for(pages)].title
+
+    def _refresh_after_page_change(self) -> None:
+        """Refresh prepared state after explicit user navigation between pages."""
+
+        # Page navigation is still an explicit controller action, so we can refresh prepared state
+        # here without reintroducing render-time work. Keep providers cached/in-memory if this
+        # hook ever starts to feel expensive.
+        self.refresh_prepared_state(
+            allow_gps_refresh=self._current_page_title() == "GPS",
+        )
 
     def _get_snapshot(self) -> Optional["PowerSnapshot"]:
         """Return the latest power snapshot."""
@@ -977,7 +1110,7 @@ class PowerScreen(Screen):
     def _active_pages(self) -> list[PowerPage]:
         """Return the current page list for navigation helpers."""
 
-        return self.build_pages(state=self._get_state())
+        return self._prepared_pages()
 
     def _active_page(self) -> PowerPage:
         """Return the current active page."""
@@ -1103,13 +1236,21 @@ class PowerScreen(Screen):
 
     def _next_page(self) -> None:
         """Advance to the next page with wraparound."""
-        self.page_index = (self.page_index + 1) % len(self._active_pages())
+        pages = self._active_pages()
+        if not pages:
+            return
+        self.page_index = (self.page_index + 1) % len(pages)
         self.selected_row = 0
+        self._refresh_after_page_change()
 
     def _previous_page(self) -> None:
         """Return to the previous page with wraparound."""
-        self.page_index = (self.page_index - 1) % len(self._active_pages())
+        pages = self._active_pages()
+        if not pages:
+            return
+        self.page_index = (self.page_index - 1) % len(pages)
         self.selected_row = 0
+        self._refresh_after_page_change()
 
     def on_advance(self, data=None) -> None:
         """Single-button tap cycles pages."""

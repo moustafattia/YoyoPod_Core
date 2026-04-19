@@ -2,14 +2,18 @@
 
 from __future__ import annotations
 
+from dataclasses import fields
 from datetime import datetime
 
 from yoyopod.app_context import AppContext
 from yoyopod.power import BatteryState, PowerDeviceInfo, PowerSnapshot, RTCState, ShutdownState
+from yoyopod.runtime_state import VoiceState
 from yoyopod.ui.display import Display
 from yoyopod.ui.input import InteractionProfile
 from yoyopod.ui.screens.system.power import (
+    _VOICE_PAGE_SIGNATURE_FIELDS,
     PowerScreen,
+    PowerScreenState,
     build_power_screen_actions,
     build_power_screen_state_provider,
 )
@@ -75,6 +79,7 @@ def test_power_screen_builds_battery_and_runtime_pages() -> None:
                 status_provider=lambda: status,
             ),
         )
+        screen.enter()
 
         pages = screen.build_pages(
             snapshot=screen._get_snapshot(),
@@ -114,6 +119,7 @@ def test_power_screen_formats_unavailable_snapshot() -> None:
                 status_provider=lambda: {},
             ),
         )
+        screen.enter()
 
         pages = screen.build_pages(snapshot=snapshot, status={})
 
@@ -286,5 +292,195 @@ def test_power_screen_uses_injected_voice_device_hooks() -> None:
             ("speaker", "plughw:CARD=wm8960soundcard,DEV=0"),
             ("capture", "plughw:CARD=USB,DEV=0"),
         ]
+    finally:
+        display.cleanup()
+
+
+def test_power_screen_reuses_prepared_pages_until_explicit_refresh() -> None:
+    """Setup should reuse cached prepared pages until an explicit refresh updates state."""
+
+    class TogglingStateProvider:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def __call__(self) -> PowerScreenState:
+            self.calls += 1
+            network_enabled = self.calls > 1
+            return PowerScreenState(
+                network_enabled=network_enabled,
+                network_rows=(("Status", "Online"),),
+                gps_rows=(
+                    ("Fix", "Yes"),
+                    ("Lat", "48.873800"),
+                    ("Lng", "2.352200"),
+                    ("Alt", "349.6m"),
+                    ("Speed", "0.0km/h"),
+                ),
+            )
+
+    display = Display(simulate=True)
+    try:
+        provider = TogglingStateProvider()
+        screen = PowerScreen(display, AppContext(), state_provider=provider)
+
+        screen.enter()
+        first_payload = screen.lvgl_payload()
+        second_payload = screen.lvgl_payload()
+
+        assert provider.calls == 1
+        assert first_payload.total_pages == 4
+        assert second_payload.total_pages == 4
+
+        screen.refresh_prepared_state()
+        refreshed_payload = screen.lvgl_payload()
+
+        assert provider.calls == 2
+        assert refreshed_payload.total_pages == 6
+    finally:
+        display.cleanup()
+
+
+def test_power_screen_visible_tick_skips_immediate_post_enter_refresh() -> None:
+    """Entering Setup should not immediately double-fetch on the next visible tick."""
+
+    class CountingStateProvider:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def __call__(self) -> PowerScreenState:
+            self.calls += 1
+            return PowerScreenState()
+
+    display = Display(simulate=True)
+    try:
+        provider = CountingStateProvider()
+        screen = PowerScreen(display, AppContext(), state_provider=provider)
+        screen._visible_tick_refresh_grace_seconds = 60.0
+
+        screen.enter()
+        screen.refresh_for_visible_tick()
+
+        assert provider.calls == 1
+    finally:
+        display.cleanup()
+
+
+def test_power_screen_copies_provider_status_on_refresh() -> None:
+    """Prepared state should not retain provider-owned mutable status mappings."""
+
+    shared_status = {"screen_awake": True}
+
+    def provider() -> PowerScreenState:
+        return PowerScreenState(status=shared_status)
+
+    display = Display(simulate=True)
+    try:
+        screen = PowerScreen(display, AppContext(), state_provider=provider)
+
+        refreshed_state = screen.refresh_prepared_state()
+        shared_status["screen_awake"] = False
+
+        assert refreshed_state.status["screen_awake"] is True
+        assert screen._get_status()["screen_awake"] is True
+    finally:
+        display.cleanup()
+
+
+def test_power_screen_snapshot_cache_ignores_hidden_snapshot_fields() -> None:
+    """Prepared pages should survive snapshot-only churn that does not affect Setup rows."""
+
+    class HiddenFieldChurnProvider:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def __call__(self) -> PowerScreenState:
+            self.calls += 1
+            return PowerScreenState(
+                snapshot=PowerSnapshot(
+                    available=True,
+                    checked_at=datetime(2026, 4, 5, 12, 0, self.calls),
+                    source="battery",
+                    error=None,
+                    device=PowerDeviceInfo(
+                        model="PiSugar 3",
+                        firmware_version=f"v{self.calls}",
+                    ),
+                    battery=BatteryState(
+                        level_percent=55.2,
+                        voltage_volts=3.62,
+                        charging=True,
+                        power_plugged=True,
+                        allow_charging=bool(self.calls % 2),
+                        output_enabled=bool((self.calls + 1) % 2),
+                        temperature_celsius=29.5,
+                    ),
+                    rtc=RTCState(
+                        time=datetime(2026, 4, 5, 13, 30, 0),
+                        alarm_enabled=True,
+                        alarm_time=datetime(2026, 4, 6, 7, 30, 0),
+                        alarm_repeat_mask=self.calls,
+                        adjust_ppm=self.calls,
+                    ),
+                    shutdown=ShutdownState(
+                        safe_shutdown_level_percent=10.0,
+                        safe_shutdown_delay_seconds=15 + self.calls,
+                    ),
+                )
+            )
+
+    display = Display(simulate=True)
+    try:
+        provider = HiddenFieldChurnProvider()
+        screen = PowerScreen(display, AppContext(), state_provider=provider)
+
+        screen.enter()
+        first_pages = screen._prepared_pages()
+
+        screen.refresh_prepared_state()
+        second_pages = screen._prepared_pages()
+
+        assert provider.calls == 2
+        assert second_pages is first_pages
+    finally:
+        display.cleanup()
+
+
+def test_power_screen_voice_signature_fields_stay_in_sync_with_voice_state() -> None:
+    """Only the voice-signature subset should require review when the schema changes."""
+
+    assert _VOICE_PAGE_SIGNATURE_FIELDS == (
+        "commands_enabled",
+        "ai_requests_enabled",
+        "screen_read_enabled",
+        "speaker_device_id",
+        "capture_device_id",
+        "mic_muted",
+        "output_volume",
+    )
+    assert set(_VOICE_PAGE_SIGNATURE_FIELDS).issubset(
+        {field_info.name for field_info in fields(VoiceState)}
+    )
+
+
+def test_power_screen_render_path_uses_default_state_without_provider_call() -> None:
+    """Render-adjacent page preparation should not hydrate the provider on cache miss."""
+
+    class CountingStateProvider:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def __call__(self) -> PowerScreenState:
+            self.calls += 1
+            return PowerScreenState(network_enabled=True)
+
+    display = Display(simulate=True)
+    try:
+        provider = CountingStateProvider()
+        screen = PowerScreen(display, AppContext(), state_provider=provider)
+
+        payload = screen.lvgl_payload()
+
+        assert payload.total_pages == 4
+        assert provider.calls == 0
     finally:
         display.cleanup()
