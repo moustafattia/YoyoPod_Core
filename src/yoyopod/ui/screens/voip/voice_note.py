@@ -2,18 +2,14 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import TYPE_CHECKING, Callable, Optional
+from typing import TYPE_CHECKING, Any, Callable, Optional, cast
 
 from yoyopod.ui.display import Display
 from yoyopod.ui.screens.base import Screen
 from yoyopod.ui.screens.lvgl_lifecycle import current_retained_view
 from yoyopod.ui.screens.theme import (
-    ERROR,
     INK,
-    MUTED,
     SUCCESS,
-    TALK,
     WARNING,
     draw_talk_action_button,
     draw_talk_page_dots,
@@ -24,150 +20,28 @@ from yoyopod.ui.screens.theme import (
     talk_monogram,
 )
 from yoyopod.ui.screens.voip.lvgl.voice_note_view import LvglVoiceNoteView
+from yoyopod.ui.screens.voip.voice_note_models import (
+    VoiceNoteAction,
+    VoiceNoteActions,
+    VoiceNoteState,
+    build_voice_note_actions,
+    build_voice_note_state_provider,
+)
+from yoyopod.ui.screens.voip.voice_note_recording import VoiceNoteRecordingController
+from yoyopod.ui.screens.voip.voice_note_viewmodel import VoiceNoteViewModel
 
 if TYPE_CHECKING:
     from yoyopod.app_context import AppContext
-    from yoyopod.communication import VoIPManager
-    from yoyopod.ui.screens import ScreenView
+    from yoyopod.ui.screens.voip.voice_note_recording import VoiceNoteRecordingResult
 
-
-@dataclass(frozen=True, slots=True)
-class VoiceNoteAction:
-    """One selectable action in the voice-note flow."""
-
-    key: str
-    title: str
-    badge: str = ""
-
-
-@dataclass(frozen=True, slots=True)
-class VoiceNoteState:
-    """Prepared state for the voice-note flow."""
-
-    recipient_name: str = "Friend"
-    recipient_address: str = ""
-    send_state: str = "idle"
-    status_text: str = ""
-    file_path: str = ""
-    duration_ms: int = 0
-
-
-@dataclass(frozen=True, slots=True)
-class VoiceNoteActions:
-    """Focused voice-note actions exposed to the screen."""
-
-    start_recording: Callable[[str, str], bool] | None = None
-    stop_recording: Callable[[], object | None] | None = None
-    cancel_recording: Callable[[], bool] | None = None
-    discard_active_draft: Callable[[], None] | None = None
-    send_active_draft: Callable[[], bool] | None = None
-    preview_draft: Callable[[str], bool] | None = None
-    set_draft_status_text: Callable[[str], None] | None = None
-
-
-def _resolve_voice_note_recipient(context: "AppContext | None") -> tuple[str, str]:
-    """Return the active voice-note recipient from the current UI context."""
-
-    if context is None:
-        return ("Friend", "")
-
-    voice_note = context.talk.active_voice_note
-    selected_contact = context.talk
-    return (
-        voice_note.recipient_name or selected_contact.selected_contact_name or "Friend",
-        voice_note.recipient_address or selected_contact.selected_contact_address,
-    )
-
-
-def build_voice_note_state_provider(
-    *,
-    context: "AppContext | None" = None,
-    voip_manager: "VoIPManager | None" = None,
-) -> Callable[[], VoiceNoteState]:
-    """Build a narrow prepared-state provider for the voice-note screen."""
-
-    def provider() -> VoiceNoteState:
-        recipient_name, recipient_address = _resolve_voice_note_recipient(context)
-        if voip_manager is None:
-            active_voice_note = context.talk.active_voice_note if context is not None else None
-            return VoiceNoteState(
-                recipient_name=recipient_name,
-                recipient_address=recipient_address,
-                send_state=(
-                    active_voice_note.send_state if active_voice_note is not None else "idle"
-                ),
-                status_text=active_voice_note.status_text if active_voice_note is not None else "",
-                file_path=active_voice_note.file_path if active_voice_note is not None else "",
-                duration_ms=active_voice_note.duration_ms if active_voice_note is not None else 0,
-            )
-
-        draft = voip_manager.get_active_voice_note()
-        if draft is None:
-            return VoiceNoteState(
-                recipient_name=recipient_name,
-                recipient_address=recipient_address,
-            )
-        if (
-            recipient_address
-            and draft.recipient_address
-            and draft.recipient_address != recipient_address
-        ):
-            return VoiceNoteState(
-                recipient_name=recipient_name,
-                recipient_address=recipient_address,
-            )
-
-        return VoiceNoteState(
-            recipient_name=draft.recipient_name or recipient_name,
-            recipient_address=draft.recipient_address or recipient_address,
-            send_state=draft.send_state or "idle",
-            status_text=draft.status_text,
-            file_path=draft.file_path,
-            duration_ms=draft.duration_ms,
-        )
-
-    return provider
-
-
-def build_voice_note_actions(
-    *,
-    voip_manager: "VoIPManager | None" = None,
-) -> VoiceNoteActions:
-    """Build the focused voice-note actions for the screen."""
-
-    def set_draft_status_text(status_text: str) -> None:
-        if voip_manager is None:
-            return
-        draft = voip_manager.get_active_voice_note()
-        if draft is not None:
-            draft.status_text = status_text
-
-    if voip_manager is None:
-        return VoiceNoteActions(set_draft_status_text=set_draft_status_text)
-
-    start_voice_note_recording = getattr(voip_manager, "start_voice_note_recording", None)
-    stop_voice_note_recording = getattr(voip_manager, "stop_voice_note_recording", None)
-    cancel_voice_note_recording = getattr(voip_manager, "cancel_voice_note_recording", None)
-    discard_active_voice_note = getattr(voip_manager, "discard_active_voice_note", None)
-    send_active_voice_note = getattr(voip_manager, "send_active_voice_note", None)
-    play_voice_note = getattr(voip_manager, "play_voice_note", None)
-
-    return VoiceNoteActions(
-        start_recording=(
-            None
-            if start_voice_note_recording is None
-            else lambda recipient_address, recipient_name: start_voice_note_recording(
-                recipient_address,
-                recipient_name=recipient_name,
-            )
-        ),
-        stop_recording=stop_voice_note_recording,
-        cancel_recording=cancel_voice_note_recording,
-        discard_active_draft=discard_active_voice_note,
-        send_active_draft=send_active_voice_note,
-        preview_draft=play_voice_note,
-        set_draft_status_text=set_draft_status_text,
-    )
+__all__ = [
+    "VoiceNoteScreen",
+    "VoiceNoteAction",
+    "VoiceNoteActions",
+    "VoiceNoteState",
+    "build_voice_note_actions",
+    "build_voice_note_state_provider",
+]
 
 
 class VoiceNoteScreen(Screen):
@@ -184,9 +58,10 @@ class VoiceNoteScreen(Screen):
         super().__init__(display, context, "VoiceNote")
         self._state_provider = state_provider or build_voice_note_state_provider(context=context)
         self._actions = actions or VoiceNoteActions()
+        self._recording_controller = VoiceNoteRecordingController(self._actions)
         self._state = "ready"
         self._selected_action_index = 0
-        self._lvgl_view: "ScreenView | None" = None
+        self._lvgl_view: LvglVoiceNoteView | None = None
 
     def enter(self) -> None:
         """Reset the voice-note flow when opened."""
@@ -201,7 +76,7 @@ class VoiceNoteScreen(Screen):
         """Leave the retained LVGL voice-note view alive across transitions."""
         super().exit()
 
-    def _ensure_lvgl_view(self) -> "ScreenView | None":
+    def _ensure_lvgl_view(self) -> LvglVoiceNoteView | None:
         if getattr(self.display, "backend_kind", "pil") != "lvgl":
             self._lvgl_view = None
             return None
@@ -213,7 +88,10 @@ class VoiceNoteScreen(Screen):
             self._lvgl_view = None
             return None
 
-        self._lvgl_view = current_retained_view(self._lvgl_view, ui_backend)
+        self._lvgl_view = cast(
+            LvglVoiceNoteView | None,
+            current_retained_view(cast(Any, self._lvgl_view), ui_backend),
+        )
         if self._lvgl_view is not None:
             return self._lvgl_view
 
@@ -225,6 +103,16 @@ class VoiceNoteScreen(Screen):
         """Return True when the single-button adapter should emit raw PTT hold events."""
 
         return self.is_one_button_mode() and self._state in {"ready", "recording"}
+
+    def _view_model(self) -> VoiceNoteViewModel:
+        """Build the pure voice-note view model for rendering."""
+
+        return VoiceNoteViewModel(
+            state=self.current_state(),
+            flow_state=self._state,
+            one_button_mode=self.is_one_button_mode(),
+            selected_action_index=self._selected_action_index,
+        )
 
     def recipient_name(self) -> str:
         """Return the selected recipient."""
@@ -286,221 +174,70 @@ class VoiceNoteScreen(Screen):
         if callable(rebind):
             rebind()
 
-    def _duration_label(self) -> str:
-        """Return a compact duration label for the active draft."""
-
-        duration_ms = self.current_state().duration_ms
-        if duration_ms <= 0:
-            return ""
-        seconds = max(1, round(duration_ms / 1000))
-        return f"{seconds}s"
-
     def actions(self) -> list[VoiceNoteAction]:
         """Return the selectable actions for the current voice-note state."""
 
-        duration_badge = self._duration_label()
-        if self._state == "review":
-            return [
-                VoiceNoteAction("send", "Send", duration_badge),
-                VoiceNoteAction("play", "Play"),
-                VoiceNoteAction("again", "Again"),
-            ]
-        if self._state == "failed":
-            return [
-                VoiceNoteAction("retry", "Retry"),
-                VoiceNoteAction("again", "Again"),
-            ]
-        return []
+        return self._view_model().actions()
 
     def current_actions_for_view(self) -> tuple[list[str], list[str], int]:
         """Return visible action rows for the current state."""
 
-        actions = self.actions()
-        return (
-            [action.title for action in actions],
-            [action.badge for action in actions],
-            min(self._selected_action_index, max(0, len(actions) - 1)),
-        )
+        return self._view_model().current_actions_for_view()
 
     def current_action_subtitles(self) -> list[str]:
         """Return subtitles for the current action list."""
 
-        subtitles: list[str] = []
-        for action in self.actions():
-            if action.key == "send":
-                subtitles.append("Deliver this voice note")
-            elif action.key == "play":
-                subtitles.append("Listen before sending")
-            elif action.key == "again":
-                subtitles.append("Record a new version")
-            else:
-                subtitles.append("Try that step again")
-        return subtitles
+        return self._view_model().current_action_subtitles()
 
     def current_action_icons(self) -> list[str]:
         """Return icon keys for the current action list."""
 
-        icons: list[str] = []
-        for action in self.actions():
-            if action.key == "send":
-                icons.append("check")
-            elif action.key == "play":
-                icons.append("play")
-            elif action.key == "retry":
-                icons.append("retry")
-            else:
-                icons.append("close")
-        return icons
+        return self._view_model().current_action_icons()
 
     def current_action_colors(self) -> list[tuple[int, int, int]]:
         """Return the Talk action colors for the current button row."""
 
-        colors: list[tuple[int, int, int]] = []
-        for action in self.actions():
-            if action.key == "send":
-                colors.append(SUCCESS)
-            elif action.key == "play":
-                colors.append(TALK.accent)
-            elif action.key == "retry":
-                colors.append(WARNING)
-            elif action.key == "again":
-                colors.append(WARNING)
-            else:
-                colors.append(ERROR)
-        return colors
+        return self._view_model().current_action_colors()
 
     def current_action_color_kinds(self) -> list[int]:
         """Return native LVGL color kinds for the current action row."""
 
-        kinds: list[int] = []
-        for action in self.actions():
-            if action.key == "send":
-                kinds.append(1)
-            elif action.key == "play":
-                kinds.append(0)
-            elif action.key in {"retry", "again"}:
-                kinds.append(2)
-            else:
-                kinds.append(3)
-        return kinds
+        return self._view_model().current_action_color_kinds()
 
     def current_primary_icon(self) -> str:
         """Return the large centered action icon for non-review states."""
 
-        if self._state == "sent":
-            return "check"
-        if self._state == "failed":
-            return "close"
-        return "voice_note"
+        return self._view_model().current_primary_icon()
 
     def current_primary_color(self) -> tuple[int, int, int]:
         """Return the large centered action color for non-review states."""
 
-        if self._state == "sent":
-            return SUCCESS
-        if self._state == "sending":
-            return TALK.accent
-        return ERROR
+        return self._view_model().current_primary_color()
 
     def current_primary_color_kind(self) -> int:
         """Return the native LVGL color kind for the centered action."""
 
-        if self._state == "sent":
-            return 1
-        if self._state == "sending":
-            return 0
-        if self._state == "ready":
-            return 3
-        return 3
+        return self._view_model().current_primary_color_kind()
 
     def current_primary_status(self) -> tuple[str, tuple[int, int, int]]:
         """Return the main status label and color for non-review states."""
 
-        if self._state == "ready":
-            return ("Hold to record", MUTED)
-        if self._state == "recording":
-            return ("Recording", ERROR)
-        if self._state == "sending":
-            return ("Sending", TALK.accent)
-        if self._state == "sent":
-            return ("Sent", SUCCESS)
-        if self._state == "failed":
-            return ("Couldn't send", ERROR)
-        return ("Voice Note", MUTED)
+        return self._view_model().current_primary_status()
 
     def current_primary_status_kind(self) -> int:
         """Return the native LVGL color kind for the centered status label."""
 
-        if self._state == "sent":
-            return 1
-        if self._state == "sending":
-            return 0
-        if self._state == "ready":
-            return 4
-        return 3
+        return self._view_model().current_primary_status_kind()
 
     def current_status_chip(self) -> tuple[str | None, int]:
         """Return the current state-chip label and style kind."""
 
-        duration_badge = self._duration_label()
-        if self._state == "recording":
-            return (duration_badge or "Recording", 2)
-        if self._state == "review":
-            return (duration_badge or "Ready", 4)
-        if self._state == "sending":
-            return ("Sending", 4)
-        if self._state == "sent":
-            return ("Sent", 1)
-        if self._state == "failed":
-            return ("Failed", 3)
-        return ("Ready", 4)
+        return self._view_model().current_status_chip()
 
     def current_view_model(self) -> tuple[str, str, str, str]:
         """Return title, subtitle, footer, and icon for the current voice-note state."""
 
-        recipient = self.recipient_name()
-        state = self.current_state()
-        if self._state == "recording":
-            return (
-                "Recording",
-                f"Release to stop your note for {recipient}.",
-                "Release to stop" if self.is_one_button_mode() else "Select stop / Back cancel",
-                "voice_note",
-            )
-        if self._state == "review":
-            return (
-                "Review",
-                state.status_text or f"Listen, send, or record again for {recipient}.",
-                "Tap next / Double choose" if self.is_one_button_mode() else "Select choose / Back",
-                "voice_note",
-            )
-        if self._state == "sending":
-            return (
-                "Sending",
-                state.status_text or f"Sending your note to {recipient}.",
-                "Please wait",
-                "voice_note",
-            )
-        if self._state == "sent":
-            return (
-                "Sent",
-                state.status_text or f"Your note reached {recipient}.",
-                "Double done / Hold back" if self.is_one_button_mode() else "Back",
-                "voice_note",
-            )
-        if self._state == "failed":
-            return (
-                "Couldn't Send",
-                state.status_text or f"Try {recipient}'s note again.",
-                "Tap next / Double choose" if self.is_one_button_mode() else "Select retry / Back",
-                "voice_note",
-            )
-        return (
-            "Voice Note",
-            f"Hold to record for {recipient}.",
-            "Hold record / Double back" if self.is_one_button_mode() else "Select record / Back",
-            "voice_note",
-        )
+        return self._view_model().current_view_model()
 
     def render(self) -> None:
         """Render the current voice-note flow state."""
@@ -511,7 +248,8 @@ class VoiceNoteScreen(Screen):
             lvgl_view.sync()
             return
 
-        title_text, _subtitle_text, footer_text, _icon_key = self.current_view_model()
+        view_model = self._view_model()
+        title_text, _subtitle_text, footer_text, _icon_key = view_model.current_view_model()
         render_status_bar(self.display, self.context, show_time=True)
         bottom = draw_talk_person_header(
             self.display,
@@ -521,10 +259,10 @@ class VoiceNoteScreen(Screen):
             label=self.recipient_monogram(),
         )
 
-        items, badges, selected_index = self.current_actions_for_view()
+        items, _badges, selected_index = view_model.current_actions_for_view()
         if items:
-            icons = self.current_action_icons()
-            colors = self.current_action_colors()
+            icons = view_model.current_action_icons()
+            colors = view_model.current_action_colors()
             diameter = 56
             gap = 12
             center_y = bottom + 52
@@ -567,12 +305,12 @@ class VoiceNoteScreen(Screen):
                 center_x=self.display.WIDTH // 2,
                 center_y=center_y,
                 button_size="large",
-                color=self.current_primary_color(),
-                icon=self.current_primary_icon(),
+                color=view_model.current_primary_color(),
+                icon=view_model.current_primary_icon(),
                 filled=False,
                 active=True,
             )
-            status_text, status_color = self.current_primary_status()
+            status_text, status_color = view_model.current_primary_status()
             draw_talk_status_chip(
                 self.display,
                 center_x=self.display.WIDTH // 2,
@@ -634,7 +372,7 @@ class VoiceNoteScreen(Screen):
             duration_ms=state.duration_ms,
         )
 
-    def on_select(self, data=None) -> None:
+    def on_select(self, data: object | None = None) -> None:
         """Advance the voice-note flow."""
 
         if self._state == "ready":
@@ -672,7 +410,7 @@ class VoiceNoteScreen(Screen):
             return
         self.request_route("back")
 
-    def on_advance(self, data=None) -> None:
+    def on_advance(self, data: object | None = None) -> None:
         """Cycle selectable actions in one-button mode."""
 
         actions = self.actions()
@@ -680,7 +418,7 @@ class VoiceNoteScreen(Screen):
             return
         self._selected_action_index = (self._selected_action_index + 1) % len(actions)
 
-    def on_back(self, data=None) -> None:
+    def on_back(self, data: object | None = None) -> None:
         """Return to the previous Talk screen."""
 
         if self._state == "recording":
@@ -693,7 +431,7 @@ class VoiceNoteScreen(Screen):
             return
         self.request_route("back")
 
-    def on_ptt_press(self, data=None) -> None:
+    def on_ptt_press(self, data: object | None = None) -> None:
         """Start recording once the raw hold threshold is crossed."""
 
         if not isinstance(data, dict) or data.get("stage") != "hold_started":
@@ -702,7 +440,7 @@ class VoiceNoteScreen(Screen):
             return
         self._start_recording()
 
-    def on_ptt_release(self, data=None) -> None:
+    def on_ptt_release(self, data: object | None = None) -> None:
         """Stop an active recording when the button is released."""
 
         if self._state != "recording":
@@ -715,51 +453,34 @@ class VoiceNoteScreen(Screen):
     def _start_recording(self) -> None:
         """Start a new voice-note recording for the active recipient."""
 
-        if self._actions.start_recording is None:
-            return
-        if not self._actions.start_recording(
-            self.recipient_address(),
-            self.recipient_name(),
-        ):
-            self._state = "failed"
-            if self.context is not None:
-                self.context.update_active_voice_note(
-                    send_state="failed",
-                    status_text="Couldn't start recorder",
-                )
-            return
-        self._selected_action_index = 0
-        self._sync_state_from_provider(default_state="recording")
-        self._refresh_input_mode()
+        result = self._recording_controller.start_recording(
+            recipient_address=self.recipient_address(),
+            recipient_name=self.recipient_name(),
+        )
+        self._consume_recording_result(result, on_success=self._sync_state_from_provider)
+        if result.next_state == "recording":
+            self._refresh_input_mode()
 
     def _stop_recording(self) -> None:
         """Stop the active recording and move to review."""
 
-        if self._actions.stop_recording is None:
-            return
-        draft = self._actions.stop_recording()
-        if draft is None:
-            self._state = "failed"
-            if self.context is not None:
-                self.context.update_active_voice_note(
-                    send_state="failed",
-                    status_text="Couldn't save note",
-                )
-        else:
-            self._state = "review"
-            self._selected_action_index = 0
-            self._sync_state_from_provider(default_state="review")
+        result = self._recording_controller.stop_recording()
+        self._consume_recording_result(
+            result,
+            on_success=lambda default_state: self._sync_state_from_provider(
+                default_state=default_state,
+            ),
+        )
         self._refresh_input_mode()
 
     def _cancel_recording(self) -> None:
         """Cancel the active recording and return to the ready state."""
 
-        if self._actions.cancel_recording is not None:
-            self._actions.cancel_recording()
-        self._state = "ready"
-        self._selected_action_index = 0
-        if self.context is not None:
-            self.context.update_active_voice_note(send_state="idle")
+        result = self._recording_controller.cancel_recording()
+        self._consume_recording_result(
+            result,
+            on_success=lambda _default_state: self._mark_recording_idle(),
+        )
         self._refresh_input_mode()
 
     def _discard_and_reset(self) -> None:
@@ -784,3 +505,38 @@ class VoiceNoteScreen(Screen):
             return
         self._sync_state_from_provider(default_state="failed")
         self._state = "failed"
+
+    def _consume_recording_result(
+        self,
+        result: VoiceNoteRecordingResult,
+        on_success: Callable[[str], None],
+    ) -> None:
+        """Apply recording lifecycle transitions from the recording controller."""
+
+        if result.next_state is None:
+            return
+        if result.next_state == "ready":
+            self._mark_recording_idle()
+            return
+        if result.next_state == "failed":
+            self._state = "failed"
+            if self.context is not None and result.status_text is not None:
+                self.context.update_active_voice_note(
+                    send_state="failed",
+                    status_text=result.status_text,
+                )
+            return
+
+        if result.next_state in {"recording", "review", "sending", "sent"}:
+            if result.next_state in {"recording", "review"}:
+                self._selected_action_index = 0
+            on_success(result.next_state)
+            self._state = result.next_state
+
+    def _mark_recording_idle(self) -> None:
+        """Clear transient recording state."""
+
+        self._state = "ready"
+        self._selected_action_index = 0
+        if self.context is not None:
+            self.context.update_active_voice_note(send_state="idle")
