@@ -200,12 +200,25 @@ class VoipRuntimeState:
 
     configured: bool = False
     ready: bool = False
+    running: bool = False
+    registration_state: str = "none"
 
-    def update(self, *, configured: bool, ready: bool) -> None:
+    def update(
+        self,
+        *,
+        configured: bool,
+        ready: bool,
+        running: bool | None = None,
+        registration_state: str | None = None,
+    ) -> None:
         """Refresh the cached VoIP availability."""
 
         self.configured = configured
         self.ready = ready
+        if running is not None:
+            self.running = running
+        if registration_state is not None:
+            self.registration_state = registration_state
 
 
 @dataclass(slots=True)

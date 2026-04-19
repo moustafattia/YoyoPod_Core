@@ -264,6 +264,8 @@ class RuntimeBootService:
                         or self.app.config_manager.get_sip_username().strip()
                     ),
                     ready=False,
+                    running=False,
+                    registration_state="none",
                 )
             if self.app.context is not None and self.app.config_manager is not None:
                 voice_cfg = self.app.config_manager.get_voice_settings()
@@ -371,6 +373,8 @@ class RuntimeBootService:
                         or config_manager.get_sip_username().strip()
                     ),
                     ready=False,
+                    running=self.app.voip_manager.running,
+                    registration_state=self.app.voip_manager.registration_state.value,
                 )
 
             logger.info("  - MpvBackend")

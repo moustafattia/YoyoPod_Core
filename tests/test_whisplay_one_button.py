@@ -368,6 +368,33 @@ def test_hub_listen_subtitle_handles_active_track_without_crashing(
     assert hub._listen_subtitle().startswith("Playing ")
 
 
+def test_hub_talk_subtitle_uses_cached_context_status_without_polling_voip_manager(
+    display: Display,
+    one_button_context: AppContext,
+) -> None:
+    """The Hub Talk subtitle should come from cached context state, not live manager polling."""
+
+    class PollingVoIPManager:
+        def get_status(self) -> dict[str, object]:
+            raise AssertionError("HubScreen should not poll get_status() during render")
+
+    one_button_context.update_voip_status(
+        configured=True,
+        ready=False,
+        running=True,
+        registration_state="progress",
+    )
+    hub = HubScreen(
+        display,
+        one_button_context,
+        music_backend=FakeMusicBackend(),
+        local_music_service=LocalMusicService(FakeMusicBackend()),
+        voip_manager=PollingVoIPManager(),
+    )
+
+    assert hub._talk_subtitle() == "Connecting"
+
+
 def test_now_playing_advance_and_select_follow_one_button_mapping(
     display: Display,
     one_button_context: AppContext,

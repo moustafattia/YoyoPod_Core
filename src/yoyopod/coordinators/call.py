@@ -296,6 +296,8 @@ class CallCoordinator:
             self.runtime.context.update_voip_status(
                 configured=self._is_voip_configured(),
                 ready=self.voip_registered,
+                running=True,
+                registration_state=state.value,
             )
 
         if state == RegistrationState.OK:
@@ -313,6 +315,12 @@ class CallCoordinator:
                 self.runtime.context.update_voip_status(
                     configured=self._is_voip_configured(),
                     ready=self.voip_registered,
+                    running=True,
+                    registration_state=(
+                        RegistrationState.OK.value
+                        if self.voip_registered
+                        else self.runtime.context.voip.registration_state
+                    ),
                 )
             self.screen_coordinator.refresh_call_screen_if_visible()
             return
@@ -324,6 +332,8 @@ class CallCoordinator:
             self.runtime.context.update_voip_status(
                 configured=self._is_voip_configured(),
                 ready=False,
+                running=False,
+                registration_state=RegistrationState.FAILED.value,
             )
         self.stop_ringing()
         self.screen_coordinator.refresh_call_screen_if_visible()

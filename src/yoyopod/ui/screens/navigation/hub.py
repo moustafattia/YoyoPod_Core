@@ -142,17 +142,15 @@ class HubScreen(Screen):
             label = "call" if missed_calls == 1 else "calls"
             return f"{missed_calls} missed {label}"
 
-        if self.voip_manager is None:
+        if self.context is None:
             return "Unavailable"
-
-        status = self.voip_manager.get_status()
-        if not status.get("sip_identity"):
+        if not self.context.voip.configured:
             return "Not set up"
-        if not status.get("running", False):
+        if not self.context.voip.running:
             return "Recovering"
-        if status.get("registered", False):
+        if self.context.voip.ready:
             return "Calls ready"
-        if status.get("registration_state") == "progress":
+        if self.context.voip.registration_state == "progress":
             return "Connecting"
         return "Offline"
 

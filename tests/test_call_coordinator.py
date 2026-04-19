@@ -130,8 +130,32 @@ def test_registration_change_uses_config_manager_for_voip_configured_status() ->
 
     assert context.voip.configured is True
     assert context.voip.ready is True
+    assert context.voip.running is True
+    assert context.voip.registration_state == RegistrationState.OK.value
     assert runtime.voip_ready is True
     assert screen_coordinator.refresh_calls == 1
+
+
+def test_availability_change_marks_context_recovering_when_backend_stops() -> None:
+    """Availability loss should leave the shared Talk status in the recovering state."""
+
+    context = AppContext()
+    runtime = _build_runtime(
+        config_manager=_ConfigManagerStub(sip_username="kid@example.com"),
+        context=context,
+    )
+    coordinator = CallCoordinator(
+        runtime=runtime,
+        screen_coordinator=_ScreenCoordinatorStub(),
+        auto_resume_after_call=True,
+    )
+
+    coordinator.handle_availability_change(False, "backend_stopped")
+
+    assert context.voip.configured is True
+    assert context.voip.ready is False
+    assert context.voip.running is False
+    assert context.voip.registration_state == RegistrationState.FAILED.value
 
 
 def test_terminal_call_states_record_rejected_and_failed_history(tmp_path: Path) -> None:
