@@ -105,7 +105,7 @@ class VoIPManager:
         self.registration_callbacks: list[Callable[[RegistrationState], None]] = []
         self.call_state_callbacks: list[Callable[[CallState], None]] = []
         self.incoming_call_callbacks: list[Callable[[str, str], None]] = []
-        self.availability_callbacks: list[Callable[[bool, str], None]] = []
+        self.availability_callbacks: list[Callable[[bool, str, RegistrationState], None]] = []
         self.message_received_callbacks: list[Callable[[VoIPMessageRecord], None]] = []
         self.message_delivery_callbacks: list[Callable[[VoIPMessageRecord], None]] = []
         self.message_failure_callbacks: list[Callable[[str, str], None]] = []
@@ -455,7 +455,10 @@ class VoIPManager:
     def on_incoming_call(self, callback: Callable[[str, str], None]) -> None:
         self.incoming_call_callbacks.append(callback)
 
-    def on_availability_change(self, callback: Callable[[bool, str], None]) -> None:
+    def on_availability_change(
+        self,
+        callback: Callable[[bool, str, RegistrationState], None],
+    ) -> None:
         self.availability_callbacks.append(callback)
 
     def on_message_received(self, callback: Callable[[VoIPMessageRecord], None]) -> None:
@@ -885,7 +888,7 @@ class VoIPManager:
     def _notify_availability_change(self, available: bool, reason: str) -> None:
         for callback in self.availability_callbacks:
             try:
-                callback(available, reason)
+                callback(available, reason, self.registration_state)
             except Exception as exc:
                 logger.error("Error in availability callback: {}", exc)
 

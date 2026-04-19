@@ -520,10 +520,22 @@ class AppContext:
 
         self.power.update_from_snapshot(snapshot)
 
-    def update_voip_status(self, *, configured: bool, ready: bool) -> None:
+    def update_voip_status(
+        self,
+        *,
+        configured: bool,
+        ready: bool,
+        running: bool | None = None,
+        registration_state: str | None = None,
+    ) -> None:
         """Update cached VoIP availability used by simplified chrome."""
 
-        self.voip.update(configured=configured, ready=ready)
+        self.voip.update(
+            configured=configured,
+            ready=ready,
+            running=running,
+            registration_state=registration_state,
+        )
 
     def update_network_status(
         self,

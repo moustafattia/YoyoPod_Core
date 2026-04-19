@@ -96,12 +96,23 @@ class CallCoordinator:
 
         self._event_bus.publish(RegistrationChangedEvent(state=state))
 
-    def publish_availability_change(self, available: bool, reason: str = "") -> None:
+    def publish_availability_change(
+        self,
+        available: bool,
+        reason: str = "",
+        registration_state: RegistrationState = RegistrationState.NONE,
+    ) -> None:
         """Publish backend availability changes from VoIP threads."""
         if self._event_bus is None:
             raise RuntimeError("CallCoordinator is not bound to an EventBus")
 
-        self._event_bus.publish(VoIPAvailabilityChangedEvent(available=available, reason=reason))
+        self._event_bus.publish(
+            VoIPAvailabilityChangedEvent(
+                available=available,
+                reason=reason,
+                registration_state=registration_state,
+            )
+        )
 
     def start_ringing(self) -> None:
         """Start playing the ring tone for an incoming call."""
@@ -166,7 +177,11 @@ class CallCoordinator:
         self.handle_registration_change(event.state)
 
     def _on_availability_changed_event(self, event: VoIPAvailabilityChangedEvent) -> None:
-        self.handle_availability_change(event.available, event.reason)
+        self.handle_availability_change(
+            event.available,
+            event.reason,
+            event.registration_state,
+        )
 
     def handle_incoming_call(self, caller_address: str, caller_name: str) -> None:
         """Capture incoming-call metadata for the active incoming phase."""
@@ -296,6 +311,8 @@ class CallCoordinator:
             self.runtime.context.update_voip_status(
                 configured=self._is_voip_configured(),
                 ready=self.voip_registered,
+                running=True,
+                registration_state=state.value,
             )
 
         if state == RegistrationState.OK:
@@ -305,25 +322,35 @@ class CallCoordinator:
 
         self.screen_coordinator.refresh_call_screen_if_visible()
 
-    def handle_availability_change(self, available: bool, reason: str) -> None:
+    def handle_availability_change(
+        self,
+        available: bool,
+        reason: str,
+        registration_state: RegistrationState = RegistrationState.NONE,
+    ) -> None:
         """Coordinate backend availability changes and forced call cleanup."""
+        self.voip_registered = registration_state == RegistrationState.OK
+        self.runtime.set_voip_ready(self.voip_registered)
+
         if available:
             logger.info(f"VoIP backend available ({reason or 'ready'})")
             if self.runtime.context is not None:
                 self.runtime.context.update_voip_status(
                     configured=self._is_voip_configured(),
                     ready=self.voip_registered,
+                    running=True,
+                    registration_state=registration_state.value,
                 )
             self.screen_coordinator.refresh_call_screen_if_visible()
             return
 
         logger.warning(f"VoIP backend unavailable ({reason or 'unknown'})")
-        self.voip_registered = False
-        self.runtime.set_voip_ready(False, trigger=f"voip_{reason or 'unavailable'}")
         if self.runtime.context is not None:
             self.runtime.context.update_voip_status(
                 configured=self._is_voip_configured(),
                 ready=False,
+                running=False,
+                registration_state=registration_state.value,
             )
         self.stop_ringing()
         self.screen_coordinator.refresh_call_screen_if_visible()

@@ -23,7 +23,12 @@ def test_app_context_groups_runtime_state_by_concern() -> None:
     )
 
     context.set_playlist(playlist)
-    context.update_voip_status(configured=True, ready=False)
+    context.update_voip_status(
+        configured=True,
+        ready=False,
+        running=True,
+        registration_state="progress",
+    )
     context.update_network_status(
         network_enabled=True,
         signal_bars=3,
@@ -51,6 +56,8 @@ def test_app_context_groups_runtime_state_by_concern() -> None:
     assert context.media.current_track() == playlist.current_track()
     assert context.voip.configured is True
     assert context.voip.ready is False
+    assert context.voip.running is True
+    assert context.voip.registration_state == "progress"
     assert context.network.enabled is True
     assert context.network.signal_strength == 3
     assert context.network.connection_type == "4g"
