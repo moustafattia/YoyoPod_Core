@@ -106,6 +106,11 @@ class PeopleDirectory:
             if contact_is_callable(contact, gsm_enabled=gsm_enabled)
         ]
 
+    def get_local_contacts(self) -> list[Contact]:
+        """Return contacts that are not managed by cloud sync."""
+
+        return [contact for contact in self.contacts if contact.sync_origin != "cloud"]
+
     def get_contact_by_name(self, name: str) -> Contact | None:
         """Return one contact matched by source name."""
 
@@ -176,6 +181,16 @@ class PeopleDirectory:
         self.speed_dial[number] = sip_address
         self.save()
 
+    @staticmethod
+    def _contact_identity(contact: Contact) -> tuple[str, str, str]:
+        """Return a normalized identity tuple for dedupe decisions."""
+
+        return (
+            contact.name.strip().lower(),
+            contact.sip_address.strip().lower(),
+            contact.phone_number.strip(),
+        )
+
     def merge_cloud_contacts(self, entries: list[dict[str, object]]) -> bool:
         """Replace the cloud-managed contact subset while preserving local contacts."""
 
@@ -184,9 +199,8 @@ class PeopleDirectory:
             for contact in self.contacts
             if contact.sync_origin == "cloud" and contact.sip_address.strip()
         }
-        local_contacts = [contact for contact in self.contacts if contact.sync_origin != "cloud"]
-
         merged_cloud_contacts: list[Contact] = []
+        merged_cloud_identities: set[tuple[str, str, str]] = set()
         updated_speed_dial = {
             int(slot): address
             for slot, address in self.speed_dial.items()
@@ -200,6 +214,7 @@ class PeopleDirectory:
             if contact is None:
                 continue
             merged_cloud_contacts.append(contact)
+            merged_cloud_identities.add(self._contact_identity(contact))
 
             quick_dial = entry.get("quick_dial")
             if isinstance(quick_dial, bool):
@@ -218,6 +233,13 @@ class PeopleDirectory:
                 route, address = contact.preferred_call_target(gsm_enabled=False)
                 if route == "sip" and address:
                     updated_speed_dial[quick_dial] = address
+
+        local_contacts = [
+            contact
+            for contact in self.contacts
+            if contact.sync_origin != "cloud"
+            and self._contact_identity(contact) not in merged_cloud_identities
+        ]
 
         self.contacts = local_contacts + merged_cloud_contacts
         self.speed_dial = dict(sorted(updated_speed_dial.items()))
