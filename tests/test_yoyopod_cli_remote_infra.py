@@ -103,7 +103,8 @@ def test_build_service_install_persists_project_dir_env_file() -> None:
 
 def test_build_service_install_chains_env_write_with_copy_and_enable() -> None:
     shell = _build_service_install()
-    assert "<<'ENV_EOF' && sudo cp deploy/systemd/yoyopod@.service" in shell
+    assert "<<ENV_EOF && sudo cp deploy/systemd/yoyopod@.service" in shell
+    assert "<<'ENV_EOF'" not in shell
     assert "sudo systemctl enable --now yoyopod@$USER" in shell
 
 
