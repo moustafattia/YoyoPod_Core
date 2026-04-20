@@ -452,6 +452,7 @@ def run_navigation_idle_soak(
                             step.wait_for_route,
                             timeout_seconds=wait_timeout_seconds,
                         )
+                        _reset_selection(app.screen_manager.current_screen)
                     _pump_app(app, hold_seconds)
 
                     if step.expect_track_loaded:

@@ -113,3 +113,101 @@ def test_navigation_idle_soak_resets_hub_selection_between_cycles(
     )
 
     assert report.final_route == "hub"
+
+
+def test_navigation_idle_soak_resets_reopened_listen_selection(
+    monkeypatch,
+) -> None:
+    class _FakeScreen:
+        def __init__(self, route_name: str, *, selected_index: int = 0) -> None:
+            self.route_name = route_name
+            self.name = route_name
+            self.selected_index = selected_index
+
+    class _FakeScreenManager:
+        def __init__(self) -> None:
+            self.hub = _FakeScreen("hub")
+            self.listen = _FakeScreen("listen")
+            self.playlists = _FakeScreen("playlists")
+            self.recent_tracks = _FakeScreen("recent_tracks")
+            self.current_screen = self.hub
+
+        def replace_screen(self, screen_name: str) -> None:
+            self.current_screen = getattr(self, screen_name)
+
+    class _FakeApp:
+        def __init__(self, *, config_dir: str, simulate: bool) -> None:
+            self.config_dir = config_dir
+            self.simulate = simulate
+            self.display = SimpleNamespace(backend_kind="lvgl")
+            self.screen_manager = _FakeScreenManager()
+            self.local_music_service = None
+            self.music_backend = None
+
+        def setup(self) -> bool:
+            return True
+
+        def stop(self) -> None:
+            return None
+
+    fake_app_module = ModuleType("yoyopod.app")
+    fake_app_module.YoyoPodApp = _FakeApp
+    monkeypatch.setitem(sys.modules, "yoyopod.app", fake_app_module)
+    monkeypatch.setattr(helpers, "_pump_app", lambda app, duration_seconds: None)
+    monkeypatch.setattr(
+        helpers,
+        "build_navigation_soak_plan",
+        lambda *, with_music: (
+            helpers.NavigationSoakStep("replace", "Reset to the root hub", target="hub"),
+            helpers.NavigationSoakStep(
+                "action",
+                "Open Listen from the hub",
+                action=helpers.InputAction.SELECT,
+                wait_for_route="listen",
+            ),
+            helpers.NavigationSoakStep(
+                "action",
+                "Open Playlists from Listen",
+                action=helpers.InputAction.SELECT,
+                wait_for_route="playlists",
+            ),
+            helpers.NavigationSoakStep(
+                "action",
+                "Return to Listen",
+                action=helpers.InputAction.BACK,
+                wait_for_route="listen",
+            ),
+        ),
+    )
+
+    def fake_dispatch_action(app: _FakeApp, action: helpers.InputAction) -> None:
+        current_route = app.screen_manager.current_screen.route_name
+        if current_route == "hub" and action == helpers.InputAction.SELECT:
+            app.screen_manager.current_screen = app.screen_manager.listen
+            return
+
+        if current_route == "listen" and action == helpers.InputAction.SELECT:
+            app.screen_manager.current_screen = (
+                app.screen_manager.playlists
+                if app.screen_manager.listen.selected_index == 0
+                else app.screen_manager.recent_tracks
+            )
+            return
+
+        if current_route in {"playlists", "recent_tracks"} and action == helpers.InputAction.BACK:
+            app.screen_manager.listen.selected_index = 1
+            app.screen_manager.current_screen = app.screen_manager.listen
+            return
+
+        raise AssertionError(f"unexpected route/action: {current_route} / {action}")
+
+    monkeypatch.setattr(helpers, "_dispatch_action", fake_dispatch_action)
+
+    report = helpers.run_navigation_idle_soak(
+        cycles=2,
+        hold_seconds=0.1,
+        idle_seconds=0.0,
+        skip_sleep=True,
+    )
+
+    assert report.final_route == "listen"
