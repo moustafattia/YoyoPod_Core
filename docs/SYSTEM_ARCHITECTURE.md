@@ -50,7 +50,7 @@ This is the startup sequence that exists on `main` today.
 3. `main()` constructs `YoyoPodApp(config_dir="config", simulate=simulate)`.
    - The constructor does not start hardware or backend processes yet.
    - It allocates the typed `EventBus`, runtime services (`RuntimeBootService`, `RuntimeLoopService`, `RecoverySupervisor`, `PowerRuntimeService`, `ScreenPowerService`, `ShutdownLifecycleService`), and the long-lived placeholder fields for managers, screens, and shared context.
-   - `RecoverySupervisor` now keeps VoIP/music recovery while `yoyopod.power.runtime.PowerRuntimeService` owns PiSugar polling and watchdog cadence.
+   - `RecoverySupervisor` now keeps VoIP/music recovery while `yoyopod.runtime.power_service.PowerRuntimeService` owns PiSugar polling and watchdog cadence.
    - It also registers app-level event subscriptions on the `EventBus` so later boot stages can publish typed events back onto the coordinator thread.
 4. `main()` calls `app.setup()`, which delegates to `RuntimeBootService.setup()`.
 5. `RuntimeBootService.setup()` currently executes boot in this order:
@@ -165,7 +165,7 @@ yoyopod.py / yoyopod.main
 - `src/yoyopod/app.py`: thin runtime shell and compatibility surface
 - `src/yoyopod/main.py`: package entry point
 - `src/yoyopod/fsm.py`: split music and call state models
-- `src/yoyopod/coordinators/runtime.py`: derived app runtime state
+- `src/yoyopod/coordinators/registry.py`: derived app runtime state
 - `src/yoyopod/app_context.py`: compatibility wrapper over focused shared runtime state
 - `src/yoyopod/runtime_state.py`: focused runtime state objects owned by `AppContext`
 - `src/yoyopod/runtime/boot.py`: boot-time composition and manager wiring
@@ -173,7 +173,7 @@ yoyopod.py / yoyopod.main
 - `src/yoyopod/runtime/recovery.py`: backend recovery supervision
 - `src/yoyopod/runtime/screen_power.py`: screen wake/sleep policy and power overlays
 - `src/yoyopod/runtime/shutdown.py`: shutdown countdowns, hooks, and lifecycle cleanup
-- `src/yoyopod/power/runtime.py`: power polling and watchdog cadence
+- `src/yoyopod/runtime/power_service.py`: power polling and watchdog cadence
 
 ### Coordinators
 
@@ -181,7 +181,7 @@ yoyopod.py / yoyopod.main
 - `src/yoyopod/coordinators/playback.py`: music-flow orchestration
 - `src/yoyopod/coordinators/power.py`: power and shutdown-related orchestration
 - `src/yoyopod/coordinators/screen.py`: screen refresh and call-screen updates
-- `src/yoyopod/coordinators/runtime.py`: derived runtime state and shared runtime references
+- `src/yoyopod/coordinators/registry.py`: derived runtime state and shared runtime references
 
 ### Audio and Communication
 
@@ -274,7 +274,7 @@ Playback and call orchestration use composed models:
 - `MusicFSM` in `src/yoyopod/fsm.py`
 - `CallFSM` in `src/yoyopod/fsm.py`
 - `CallInterruptionPolicy` in `src/yoyopod/fsm.py`
-- `CoordinatorRuntime` in `src/yoyopod/coordinators/runtime.py`
+- `CoordinatorRuntime` in `src/yoyopod/coordinators/registry.py`
 
 `CoordinatorRuntime` derives the current application status from those models, including:
 
@@ -332,7 +332,7 @@ For current behavior, trust these files over older notes or demos:
 
 - `src/yoyopod/app.py`
 - `src/yoyopod/fsm.py`
-- `src/yoyopod/coordinators/runtime.py`
+- `src/yoyopod/coordinators/registry.py`
 - `src/yoyopod/audio/`
 - `src/yoyopod/communication/`
 - `src/yoyopod/people/`

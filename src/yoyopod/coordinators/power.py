@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING, Callable
 from loguru import logger
 
 from yoyopod.core import AppContext
-from yoyopod.coordinators.runtime import CoordinatorRuntime
+from yoyopod.coordinators.registry import CoordinatorRuntime
 from yoyopod.coordinators.screen import ScreenCoordinator
 from yoyopod.core import EventBus
 from yoyopod.power import (

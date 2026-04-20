@@ -1,4 +1,4 @@
-"""Runtime-owned voice orchestration split by responsibility."""
+"""Voice coordination modules split by responsibility."""
 
 from __future__ import annotations
 

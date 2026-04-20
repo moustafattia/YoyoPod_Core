@@ -1,4 +1,4 @@
-"""Session orchestration for local Ask voice interactions."""
+"""Voice session coordination for local Ask interactions."""
 
 from __future__ import annotations
 

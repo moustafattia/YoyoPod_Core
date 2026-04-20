@@ -5,7 +5,11 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from yoyopod.coordinators import AppRuntimeState
-from yoyopod.runtime.voice import VoiceCommandExecutor, VoiceRuntimeCoordinator, VoiceSettingsResolver
+from yoyopod.coordinators.voice import (
+    VoiceCommandExecutor,
+    VoiceRuntimeCoordinator,
+    VoiceSettingsResolver,
+)
 from yoyopod.ui.input import InteractionProfile
 from yoyopod.voice import VoiceSettings
 
