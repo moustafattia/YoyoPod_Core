@@ -8,7 +8,12 @@ import wave
 from dataclasses import dataclass
 from pathlib import Path
 
-DEFAULT_TEST_MUSIC_TARGET_DIR = "~/YoyoPod_Test_Music"
+from yoyopod.cli.defaults import (
+    DEFAULT_TEST_MUSIC_TARGET_DIR as CLI_DEFAULT_TEST_MUSIC_TARGET_DIR,
+)
+
+DEFAULT_TEST_MUSIC_TARGET_DIR = CLI_DEFAULT_TEST_MUSIC_TARGET_DIR
+
 TEST_MUSIC_MANIFEST_FILENAME = ".yoyopod_test_music_manifest.json"
 TEST_MUSIC_LIBRARY_VERSION = 1
 
