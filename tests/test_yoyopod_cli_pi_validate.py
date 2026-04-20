@@ -67,12 +67,29 @@ def test_voip_soak_flag_registered() -> None:
 
 
 def test_voip_soak_call_requires_target() -> None:
+    import re
+    import typer
+
     runner = CliRunner()
     result = runner.invoke(app, ["voip", "--soak", "call"])
-    # should fail with BadParameter — message surfaces in output or exception repr
     assert result.exit_code != 0
-    combined = result.output + str(result.exception or "")
-    assert "soak-target" in combined.lower() or "soak_target" in combined.lower()
+
+    # BadParameter gets wrapped in SystemExit by Click's error handler.
+    # The original exception is preserved on result.exc_info (a tuple) when
+    # catch_exceptions=True (default).
+    if result.exc_info is not None:
+        _type, exc, _tb = result.exc_info
+        if isinstance(exc, typer.BadParameter):
+            assert "soak-target" in str(exc).lower()
+            return
+
+    # Fallback: strip ANSI codes and check in the combined output.
+    ansi_re = re.compile(r"\x1b\[[0-9;]*m")
+    stripped = ansi_re.sub("", result.output)
+    assert "soak-target" in stripped.lower(), (
+        f"BadParameter message missing from output. Got exit={result.exit_code}, "
+        f"exc_info={result.exc_info}, output_stripped={stripped!r}"
+    )
 
 
 def test_voip_soak_unknown_value_rejected() -> None:
