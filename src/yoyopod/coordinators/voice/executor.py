@@ -1,4 +1,4 @@
-"""Deterministic voice-command execution for runtime seam consumption."""
+"""Deterministic voice-command execution for coordinator seam consumption."""
 
 from __future__ import annotations
 

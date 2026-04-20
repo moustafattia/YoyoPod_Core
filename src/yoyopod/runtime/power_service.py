@@ -1,4 +1,4 @@
-"""Power-domain runtime service for PiSugar polling and watchdog cadence."""
+"""Runtime-owned power service for PiSugar polling and watchdog cadence."""
 
 from __future__ import annotations
 

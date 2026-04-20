@@ -10,7 +10,8 @@ yoyopod.py / src/yoyopod/main.py  (entry points)
     |- ScreenPowerService (runtime/screen_power.py)
     |- ShutdownLifecycleService (runtime/shutdown.py)
     |- MusicFSM + CallFSM (fsm.py) -- composed playback and call state machines
-    |- CoordinatorRuntime (coordinators/runtime.py) -- derived app state
+    |- CoordinatorRuntime (coordinators/registry.py) -- shared coordinator registry + derived app state
+    |- VoiceRuntimeCoordinator (coordinators/voice/coordinator.py) -- Ask voice session orchestration
     |- AppContext (app_context.py) -- compatibility wrapper over focused runtime state objects
     |  |- media / power / network / screen / voip / talk / voice
     |- LocalMusicService (audio/local_service.py) -- playlists, recents, shuffle
@@ -38,7 +39,7 @@ yoyopod.py / src/yoyopod/main.py  (entry points)
 
 ## State Orchestration
 
-`MusicFSM` and `CallFSM` stay independent, while `CoordinatorRuntime` derives combined runtime states such as `PLAYING_WITH_VOIP`, `PAUSED_BY_CALL`, and `CALL_ACTIVE_MUSIC_PAUSED`. Incoming calls can auto-pause music, and playback can auto-resume after the call ends when enabled.
+`MusicFSM` and `CallFSM` stay independent, while `CoordinatorRuntime` (from `coordinators/registry.py`) derives combined runtime states such as `PLAYING_WITH_VOIP`, `PAUSED_BY_CALL`, and `CALL_ACTIVE_MUSIC_PAUSED`. Incoming calls can auto-pause music, and playback can auto-resume after the call ends when enabled.
 
 ## Key Patterns
 
@@ -66,16 +67,18 @@ yoyopod.py / src/yoyopod/main.py  (entry points)
 ### Coordinators
 
 - `src/yoyopod/coordinators/` owns cross-subsystem orchestration.
+- `src/yoyopod/coordinators/registry.py` is the shared state/composition registry for coordinator modules.
 - Coordinators may translate events into runtime state changes and navigation changes.
 - Coordinators should not contain rendering code, hardware-driver code, or long-lived persistence logic.
+- Per-domain coordinator modules currently include call, playback, power, screen, and voice.
 
 ### Subsystem managers and backends
 
 - `audio/`, `communication/`, `people/`, `power/`, `network/`, and `voice/` own subsystem behavior and backend integration.
 - `backend.py` is the low-level I/O or protocol driver (one concrete driver implementation per module family).
 - `manager.py` is the domain-owned app-facing facade for that subsystem.
-- `runtime.py` is the loop-thread-aware service that owns periodic polling/iteration behavior outside coordinators.
-- `coordinator.py` is the app-level orchestrator that joins subsystem managers to FSMs and EventBus.
+- `src/yoyopod/runtime/` is reserved for loop-attached lifecycle and threaded services (`boot`, `loop`, `screen_power`, `shutdown`, `recovery`, `power_service`), not per-domain orchestrators.
+- `src/yoyopod/coordinators/` is reserved for per-domain event-driven orchestration between managers, FSMs, and EventBus.
 - Keep backend-specific details behind the subsystem boundary whenever possible.
 
 ### Hardware abstraction

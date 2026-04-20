@@ -5,7 +5,7 @@ from __future__ import annotations
 import threading
 from typing import TYPE_CHECKING, Callable, Optional
 
-from yoyopod.runtime.voice import (
+from yoyopod.coordinators.voice import (
     VoiceCommandOutcome,
     VoiceCommandExecutor,
     VoiceRuntimeCoordinator,

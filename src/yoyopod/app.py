@@ -30,6 +30,7 @@ from yoyopod.coordinators import (
     PowerCoordinator,
     ScreenCoordinator,
 )
+from yoyopod.coordinators.voice import VoiceRuntimeCoordinator
 from yoyopod.core import EventBus
 from yoyopod.core import (
     RecoveryAttemptCompletedEvent,
@@ -40,12 +41,10 @@ from yoyopod.device import AudioDeviceCatalog
 from yoyopod.people import PeopleManager
 from yoyopod.core import CallFSM, CallInterruptionPolicy, MusicFSM
 from yoyopod.network import NetworkManager
-from yoyopod.power import (
-    PowerManager,
-    PowerRuntimeService,
-)
+from yoyopod.power import PowerManager
 from yoyopod.runtime import (
     PendingShutdown,
+    PowerRuntimeService,
     PowerAlert,
     RecoveryState,
     RecoverySupervisor,
@@ -53,7 +52,6 @@ from yoyopod.runtime import (
     RuntimeLoopService,
     ScreenPowerService,
     ShutdownLifecycleService,
-    VoiceRuntimeCoordinator,
 )
 from yoyopod.runtime.event_wiring import RuntimeEventWiring
 from yoyopod.ui.input import InteractionProfile

@@ -1,6 +1,4 @@
-"""
-Shared runtime references for YoyoPod coordinators.
-"""
+"""Shared coordinator registry state for YoyoPod."""
 
 from __future__ import annotations
 

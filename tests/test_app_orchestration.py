@@ -17,7 +17,7 @@ from yoyopod.app import YoyoPodApp
 from yoyopod.core import AppContext
 from yoyopod.audio import AudioVolumeController, MockMusicBackend
 from yoyopod.communication import CallState, RegistrationState
-from yoyopod.coordinators.runtime import AppRuntimeState, CoordinatorRuntime
+from yoyopod.coordinators.registry import AppRuntimeState, CoordinatorRuntime
 from yoyopod.core import (
     CallEndedEvent,
     CallStateChangedEvent,

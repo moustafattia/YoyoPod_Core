@@ -1,4 +1,4 @@
-"""Resolve voice settings and expose command outcomes."""
+"""Resolve voice settings and expose coordinator command outcomes."""
 
 from __future__ import annotations
 

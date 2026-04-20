@@ -26,7 +26,6 @@ from yoyopod.power.models import (
     ShutdownState,
 )
 from yoyopod.power.policies import PowerSafetyPolicy
-from yoyopod.power.runtime import PowerRuntimeService
 from yoyopod.power.watchdog import PiSugarWatchdog, WatchdogCommandError
 
 __all__ = [
@@ -38,7 +37,6 @@ __all__ = [
     "PiSugarAutoTransport",
     "build_pisugar_transport",
     "PowerManager",
-    "PowerRuntimeService",
     "PiSugarWatchdog",
     "WatchdogCommandError",
     "PowerConfig",

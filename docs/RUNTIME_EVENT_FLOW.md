@@ -347,7 +347,7 @@ If ordering looks inconsistent, this is usually the first place to check.
 - `src/yoyopod/app.py`
 - `src/yoyopod/runtime/boot.py`
 - `src/yoyopod/runtime/loop.py`
-- `src/yoyopod/coordinators/runtime.py`
+- `src/yoyopod/coordinators/registry.py`
 - `src/yoyopod/coordinators/call.py`
 - `src/yoyopod/coordinators/playback.py`
 - `src/yoyopod/coordinators/power.py`

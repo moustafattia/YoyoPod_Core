@@ -13,7 +13,7 @@ import time
 from loguru import logger
 
 from yoyopod.app_context import AppContext
-from yoyopod.coordinators.runtime import AppRuntimeState, CoordinatorRuntime
+from yoyopod.coordinators.registry import AppRuntimeState, CoordinatorRuntime
 from yoyopod.fsm import CallFSM, CallInterruptionPolicy, MusicFSM
 from yoyopod.ui.display import Display
 from yoyopod.ui.input import InputAction, get_input_manager

@@ -2,6 +2,7 @@
 
 from yoyopod.runtime.loop import RuntimeLoopService
 from yoyopod.runtime.models import PendingShutdown, PowerAlert, RecoveryState
+from yoyopod.runtime.power_service import PowerRuntimeService
 from yoyopod.runtime.recovery import RecoverySupervisor
 from yoyopod.runtime.responsiveness import (
     ResponsivenessWatchdog,
@@ -10,16 +11,11 @@ from yoyopod.runtime.responsiveness import (
 )
 from yoyopod.runtime.screen_power import ScreenPowerService
 from yoyopod.runtime.shutdown import ShutdownLifecycleService
-from yoyopod.runtime.voice import (
-    VoiceCommandExecutor,
-    VoiceCommandOutcome,
-    VoiceRuntimeCoordinator,
-    VoiceSettingsResolver,
-)
 
 __all__ = [
     "PendingShutdown",
     "PowerAlert",
+    "PowerRuntimeService",
     "RecoveryState",
     "RecoverySupervisor",
     "ResponsivenessWatchdog",
@@ -28,10 +24,6 @@ __all__ = [
     "RuntimeLoopService",
     "ScreenPowerService",
     "ShutdownLifecycleService",
-    "VoiceCommandExecutor",
-    "VoiceCommandOutcome",
-    "VoiceRuntimeCoordinator",
-    "VoiceSettingsResolver",
     "evaluate_responsiveness_status",
 ]
 
