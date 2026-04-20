@@ -48,3 +48,27 @@ def test_all_six_base_subcommands_present() -> None:
     assert result.exit_code == 0
     for name in ("deploy", "smoke", "music", "voip", "stability", "navigation"):
         assert name in result.output
+
+
+def test_voip_soak_flag_registered() -> None:
+    runner = CliRunner()
+    result = runner.invoke(app, ["voip", "--help"])
+    assert result.exit_code == 0
+    assert "--soak" in result.output
+    assert "registration" in result.output
+    assert "reconnect" in result.output
+    assert "call" in result.output
+
+
+def test_voip_soak_call_requires_target() -> None:
+    runner = CliRunner()
+    result = runner.invoke(app, ["voip", "--soak", "call"])
+    # should fail with BadParameter
+    assert result.exit_code != 0
+    assert "soak-target" in result.output.lower() or "soak_target" in result.output.lower()
+
+
+def test_voip_soak_unknown_value_rejected() -> None:
+    runner = CliRunner()
+    result = runner.invoke(app, ["voip", "--soak", "invalid"])
+    assert result.exit_code != 0
