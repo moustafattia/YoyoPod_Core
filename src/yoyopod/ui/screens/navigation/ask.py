@@ -18,7 +18,7 @@ from yoyopod.voice import VoiceManager, VoiceSettings
 if TYPE_CHECKING:
     from yoyopod.core import AppContext
     from yoyopod.config import ConfigManager
-    from yoyopod.people import PeopleDirectory
+    from yoyopod.people import PeopleManager
     from yoyopod.ui.screens import ScreenView
     from yoyopod.communication import VoIPManager
 
@@ -38,7 +38,7 @@ class AskScreen(AskScreenVoiceMixin, AskScreenRenderingMixin, Screen):
         context: Optional["AppContext"] = None,
         *,
         config_manager: Optional["ConfigManager"] = None,
-        people_directory: Optional["PeopleDirectory"] = None,
+        people_directory: Optional["PeopleManager"] = None,
         voip_manager: Optional["VoIPManager"] = None,
         volume_up_action: Optional[Callable[[int], int | None]] = None,
         volume_down_action: Optional[Callable[[int], int | None]] = None,

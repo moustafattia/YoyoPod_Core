@@ -22,10 +22,6 @@ from .settings import VoiceCommandOutcome, VoiceSettingsResolver
 if TYPE_CHECKING:
     from yoyopod.core import AppContext
 
-
-VoiceService = VoiceManager
-
-
 class VoiceRuntimeCoordinator:
     """Own one reusable voice interaction session outside the screen layer."""
 
@@ -269,11 +265,11 @@ class VoiceRuntimeCoordinator:
         if self._voice_service_factory is not None:
             return self._voice_service_factory(settings)
         if self._cached_voice_service is None:
-            self._cached_voice_service = VoiceService(settings=settings)
+            self._cached_voice_service = VoiceManager(settings=settings)
             return self._cached_voice_service
         if self._cached_voice_service.settings != settings:
             self._cached_voice_service.release_resources()
-            self._cached_voice_service = VoiceService(settings=settings)
+            self._cached_voice_service = VoiceManager(settings=settings)
         return self._cached_voice_service
 
     def _next_generation(self) -> int:
