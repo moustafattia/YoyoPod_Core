@@ -47,7 +47,9 @@ def _resolve_remote_connection(
     return RemoteConnection(
         host=host or str(defaults.get("host", "")).strip(),
         user=user or str(defaults.get("user", "")).strip(),
-        project_dir=project_dir or str(defaults.get("project_dir", pi.project_dir)).strip() or pi.project_dir,
+        project_dir=project_dir
+        or str(defaults.get("project_dir", pi.project_dir)).strip()
+        or pi.project_dir,
         branch=(branch or str(defaults.get("branch", "main")).strip()) or "main",
     )
 
@@ -60,11 +62,15 @@ def build_remote_app(name: str, help: str) -> typer.Typer:
     def _capture_connection(
         ctx: typer.Context,
         host: str = typer.Option("", "--host", envvar="YOYOPOD_PI_HOST", help="SSH host or alias."),
-        user: str = typer.Option("", "--user", envvar="YOYOPOD_PI_USER", help="SSH user (optional)."),
+        user: str = typer.Option(
+            "", "--user", envvar="YOYOPOD_PI_USER", help="SSH user (optional)."
+        ),
         project_dir: str = typer.Option(
             "", "--project-dir", envvar="YOYOPOD_PI_PROJECT_DIR", help="Project dir on the Pi."
         ),
-        branch: str = typer.Option("", "--branch", envvar="YOYOPOD_PI_BRANCH", help="Git branch to target."),
+        branch: str = typer.Option(
+            "", "--branch", envvar="YOYOPOD_PI_BRANCH", help="Git branch to target."
+        ),
     ) -> None:
         ctx.obj = _resolve_remote_connection(host, user, project_dir, branch)
 

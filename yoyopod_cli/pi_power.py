@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Annotated, Optional
+from typing import Annotated
 
 import typer
 
@@ -15,7 +15,9 @@ app.add_typer(rtc_app)
 
 @app.command()
 def battery(
-    config_dir: Annotated[str, typer.Option("--config-dir", help="Configuration directory to use.")] = "config",
+    config_dir: Annotated[
+        str, typer.Option("--config-dir", help="Configuration directory to use.")
+    ] = "config",
     verbose: Annotated[bool, typer.Option("--verbose", help="Enable DEBUG logging.")] = False,
 ) -> None:
     """Inspect PiSugar power telemetry through YoyoPod's power module."""
@@ -98,7 +100,9 @@ def _build_power_manager(config_dir: str) -> object:
 
 @rtc_app.command()
 def status(
-    config_dir: Annotated[str, typer.Option("--config-dir", help="Configuration directory to use.")] = "config",
+    config_dir: Annotated[
+        str, typer.Option("--config-dir", help="Configuration directory to use.")
+    ] = "config",
     verbose: Annotated[bool, typer.Option("--verbose", help="Enable DEBUG logging.")] = False,
 ) -> None:
     """Show current RTC and alarm state."""
@@ -123,7 +127,9 @@ def status(
 
 @rtc_app.command(name="sync-to")
 def sync_to(
-    config_dir: Annotated[str, typer.Option("--config-dir", help="Configuration directory to use.")] = "config",
+    config_dir: Annotated[
+        str, typer.Option("--config-dir", help="Configuration directory to use.")
+    ] = "config",
     verbose: Annotated[bool, typer.Option("--verbose", help="Enable DEBUG logging.")] = False,
 ) -> None:
     """Sync Raspberry Pi system time to the PiSugar RTC."""
@@ -140,7 +146,9 @@ def sync_to(
 
 @rtc_app.command(name="sync-from")
 def sync_from(
-    config_dir: Annotated[str, typer.Option("--config-dir", help="Configuration directory to use.")] = "config",
+    config_dir: Annotated[
+        str, typer.Option("--config-dir", help="Configuration directory to use.")
+    ] = "config",
     verbose: Annotated[bool, typer.Option("--verbose", help="Enable DEBUG logging.")] = False,
 ) -> None:
     """Sync PiSugar RTC time to the Raspberry Pi system clock."""
@@ -158,9 +166,14 @@ def sync_from(
 @rtc_app.command(name="set-alarm")
 def set_alarm(
     time: Annotated[str, typer.Option("--time", help="Alarm time as ISO 8601 timestamp.")],
-    config_dir: Annotated[str, typer.Option("--config-dir", help="Configuration directory to use.")] = "config",
+    config_dir: Annotated[
+        str, typer.Option("--config-dir", help="Configuration directory to use.")
+    ] = "config",
     verbose: Annotated[bool, typer.Option("--verbose", help="Enable DEBUG logging.")] = False,
-    repeat_mask: Annotated[int, typer.Option("--repeat-mask", help="Weekday repeat bitmask (default: 127 for every day).")] = 127,
+    repeat_mask: Annotated[
+        int,
+        typer.Option("--repeat-mask", help="Weekday repeat bitmask (default: 127 for every day)."),
+    ] = 127,
 ) -> None:
     """Set the PiSugar RTC wake alarm."""
     from datetime import datetime
@@ -183,7 +196,9 @@ def set_alarm(
 
 @rtc_app.command(name="disable-alarm")
 def disable_alarm(
-    config_dir: Annotated[str, typer.Option("--config-dir", help="Configuration directory to use.")] = "config",
+    config_dir: Annotated[
+        str, typer.Option("--config-dir", help="Configuration directory to use.")
+    ] = "config",
     verbose: Annotated[bool, typer.Option("--verbose", help="Enable DEBUG logging.")] = False,
 ) -> None:
     """Disable the PiSugar RTC wake alarm."""

@@ -78,26 +78,17 @@ testpaths = ["tests"]
 gate_format_paths = [
     "scripts/quality.py",
     "src/yoyopod/main.py",
-    "src/yoyopod/cli/__init__.py",
-    "src/yoyopod/cli/common.py",
-    "src/yoyopod/cli/build.py",
-    "src/yoyopod/cli/remote",
+    "yoyopod_cli",
 ]
 gate_lint_paths = [
     "scripts/quality.py",
     "src/yoyopod/main.py",
-    "src/yoyopod/cli/__init__.py",
-    "src/yoyopod/cli/common.py",
-    "src/yoyopod/cli/build.py",
-    "src/yoyopod/cli/remote",
+    "yoyopod_cli",
 ]
 gate_type_paths = [
     "scripts/quality.py",
     "src/yoyopod/main.py",
-    "src/yoyopod/cli/__init__.py",
-    "src/yoyopod/cli/common.py",
-    "src/yoyopod/cli/build.py",
-    "src/yoyopod/cli/remote",
+    "yoyopod_cli",
 ]
 audit_format_paths = ["."]
 audit_lint_paths = ["."]

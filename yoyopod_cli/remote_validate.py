@@ -19,10 +19,7 @@ app = build_remote_app("validate_app", "Validate commit + health on the Pi.")
 
 def _build_preflight() -> str:
     """Local shell that fails fast on dirty tree + bad quality gate."""
-    return (
-        "git diff --quiet && git diff --cached --quiet && "
-        "uv run python scripts/quality.py ci"
-    )
+    return "git diff --quiet && git diff --cached --quiet && " "uv run python scripts/quality.py ci"
 
 
 def _build_validate(

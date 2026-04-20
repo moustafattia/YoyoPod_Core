@@ -58,23 +58,23 @@ def run() -> None:
 
 
 # --- subapps ---
-from yoyopod_cli import build as _build
+from yoyopod_cli import build as _build  # noqa: E402
 
 app.add_typer(_build.app, name="build")
 
-from yoyopod_cli import setup as _setup
+from yoyopod_cli import setup as _setup  # noqa: E402
 
 app.add_typer(_setup.app, name="setup")
 
 # --- remote group (assembled from flat sub-modules)
-from yoyopod_cli import (
+from yoyopod_cli import (  # noqa: E402
     remote_config as _remote_config,
     remote_infra as _remote_infra,
     remote_ops as _remote_ops,
     remote_setup as _remote_setup,
     remote_validate as _remote_validate,
 )
-from yoyopod_cli.remote_shared import build_remote_app as _build_remote_app
+from yoyopod_cli.remote_shared import build_remote_app as _build_remote_app  # noqa: E402
 
 remote_app = _build_remote_app("remote", "Dev-machine -> Pi commands via SSH.")
 
@@ -104,7 +104,7 @@ remote_app.add_typer(_remote_config.app, name="config")
 app.add_typer(remote_app, name="remote")
 
 # --- pi group (commands that run on the Pi directly)
-from yoyopod_cli import (
+from yoyopod_cli import (  # noqa: E402
     pi_network as _pi_network,
     pi_power as _pi_power,
     pi_validate as _pi_validate,
@@ -120,7 +120,7 @@ pi_app.add_typer(_pi_network.app, name="network")
 app.add_typer(pi_app, name="pi")
 
 # --- top-level shortcut commands (thin aliases to remote_ops / remote_validate)
-from yoyopod_cli.remote_shared import _resolve_remote_connection as _resolve_conn
+from yoyopod_cli.remote_shared import _resolve_remote_connection as _resolve_conn  # noqa: E402
 
 
 def _with_connection(host: str, user: str, project_dir: str, branch: str):
@@ -132,9 +132,7 @@ def _with_connection(host: str, user: str, project_dir: str, branch: str):
 
         def ensure_object(self, cls):
             if not isinstance(self.obj, cls):
-                raise RuntimeError(
-                    "shortcut context not seeded with a RemoteConnection"
-                )
+                raise RuntimeError("shortcut context not seeded with a RemoteConnection")
             return self.obj
 
     conn = _resolve_conn(host, user, project_dir, branch)
@@ -221,6 +219,7 @@ def _validate_shortcut(
         with_navigation=with_navigation,
         verbose=verbose,
     )
+
 
 # --- dev utilities
 dev_app = typer.Typer(name="dev", help="Developer utilities.", no_args_is_help=True)

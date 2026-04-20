@@ -8,9 +8,7 @@ import typer
 
 from yoyopod_cli.common import configure_logging, resolve_config_dir
 
-app = typer.Typer(
-    name="network", help="SIM7600 modem commands.", no_args_is_help=True
-)
+app = typer.Typer(name="network", help="SIM7600 modem commands.", no_args_is_help=True)
 
 
 @app.command()

@@ -28,9 +28,9 @@ def quote_remote_project_dir(project_dir: str) -> str:
         suffix = (
             project_dir[2:]
             .replace("\\", "\\\\")  # escape backslashes first
-            .replace('"', '\\"')     # then embedded double quotes
-            .replace("$", "\\$")     # then dollar signs
-            .replace("`", "\\`")     # then backticks
+            .replace('"', '\\"')  # then embedded double quotes
+            .replace("$", "\\$")  # then dollar signs
+            .replace("`", "\\`")  # then backticks
         )
         return f'"$HOME/{suffix}"'
     return shlex.quote(project_dir)

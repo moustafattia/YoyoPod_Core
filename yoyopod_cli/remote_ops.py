@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import shlex
 import subprocess
 from pathlib import Path
 
@@ -21,6 +20,7 @@ app = build_remote_app("ops", "Runtime ops on the Pi via SSH.")
 
 
 # ---- shell builders (private, single-file) ----------------------------------
+
 
 def _build_status(pi: PiPaths) -> str:
     """Build the shell that prints repo SHA, process list, and log tail."""
@@ -70,6 +70,7 @@ def _build_sync(pi: PiPaths, branch: str) -> str:
 
 
 # ---- commands ---------------------------------------------------------------
+
 
 @app.command()
 def status(ctx: typer.Context, verbose: bool = typer.Option(False, "--verbose")) -> None:
@@ -122,7 +123,9 @@ def sync(ctx: typer.Context, verbose: bool = typer.Option(False, "--verbose")) -
 @app.command()
 def screenshot(
     ctx: typer.Context,
-    out: str = typer.Option("", "--out", help="Local file path. Default: logs/screenshots/<timestamp>.png"),
+    out: str = typer.Option(
+        "", "--out", help="Local file path. Default: logs/screenshots/<timestamp>.png"
+    ),
     verbose: bool = typer.Option(False, "--verbose"),
 ) -> None:
     """Capture the display shadow buffer from the Pi and copy it locally."""

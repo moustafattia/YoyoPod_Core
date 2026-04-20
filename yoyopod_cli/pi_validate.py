@@ -18,7 +18,6 @@ import typer
 
 from yoyopod_cli._pi_validate_helpers import (
     NavigationSoakError,
-    NavigationSoakReport,
     run_navigation_idle_soak,
     run_navigation_soak,
 )
@@ -365,10 +364,7 @@ def _input_check(display: object, app_config: dict[str, Any]) -> _CheckResult:
         return _CheckResult(
             name="input",
             status="pass",
-            details=(
-                f"profile={interaction_profile}, "
-                f"capabilities={', '.join(capabilities)}"
-            ),
+            details=(f"profile={interaction_profile}, " f"capabilities={', '.join(capabilities)}"),
         )
     except Exception as exc:
         return _CheckResult(name="input", status="fail", details=str(exc))
@@ -403,7 +399,11 @@ def _power_check(config_dir: Path) -> _CheckResult:
     details = ", ".join(
         [
             f"model={snapshot.device.model or 'unknown'}",
-            f"battery={snapshot.battery.level_percent:.1f}%" if snapshot.battery.level_percent is not None else "battery=unknown",
+            (
+                f"battery={snapshot.battery.level_percent:.1f}%"
+                if snapshot.battery.level_percent is not None
+                else "battery=unknown"
+            ),
             f"charging={snapshot.battery.charging}",
             f"plugged={snapshot.battery.power_plugged}",
         ]
@@ -484,9 +484,7 @@ def _music_check(
 
         if expected_library is not None:
             missing_assets = [
-                path
-                for path in expected_library.expected_asset_paths
-                if not path.exists()
+                path for path in expected_library.expected_asset_paths if not path.exists()
             ]
             if missing_assets:
                 missing_list = ", ".join(str(path) for path in missing_assets)
@@ -1640,58 +1638,93 @@ def voip(
     # registration-soak options
     hold_seconds: Annotated[
         float,
-        typer.Option("--hold-seconds", help="How long SIP registration must remain OK after startup."),
+        typer.Option(
+            "--hold-seconds", help="How long SIP registration must remain OK after startup."
+        ),
     ] = 60.0,
     # reconnect-soak options
     disconnect_seconds: Annotated[
         float,
-        typer.Option("--disconnect-seconds", help="How long the temporary network outage should last."),
+        typer.Option(
+            "--disconnect-seconds", help="How long the temporary network outage should last."
+        ),
     ] = 8.0,
     drop_detect_timeout: Annotated[
         float,
-        typer.Option("--drop-detect-timeout", help="How long to wait for registration to leave OK after the outage starts."),
+        typer.Option(
+            "--drop-detect-timeout",
+            help="How long to wait for registration to leave OK after the outage starts.",
+        ),
     ] = 20.0,
     recovery_timeout: Annotated[
         float,
-        typer.Option("--recovery-timeout", help="How long to wait for SIP registration to recover after the outage."),
+        typer.Option(
+            "--recovery-timeout",
+            help="How long to wait for SIP registration to recover after the outage.",
+        ),
     ] = 45.0,
     drop_command: Annotated[
         str,
-        typer.Option("--drop-command", help="Optional shell command that intentionally drops network connectivity on the Pi."),
+        typer.Option(
+            "--drop-command",
+            help="Optional shell command that intentionally drops network connectivity on the Pi.",
+        ),
     ] = "",
     restore_command: Annotated[
         str,
-        typer.Option("--restore-command", help="Optional shell command that restores network connectivity on the Pi."),
+        typer.Option(
+            "--restore-command",
+            help="Optional shell command that restores network connectivity on the Pi.",
+        ),
     ] = "",
     # call-soak options
     soak_target: Annotated[
         str,
-        typer.Option("--soak-target", help="SIP address to call for the call soak drill, for example sip:echo@example.com."),
+        typer.Option(
+            "--soak-target",
+            help="SIP address to call for the call soak drill, for example sip:echo@example.com.",
+        ),
     ] = "",
     soak_contact_name: Annotated[
         str,
-        typer.Option("--soak-contact-name", help="Optional contact label used for log output while making the call."),
+        typer.Option(
+            "--soak-contact-name",
+            help="Optional contact label used for log output while making the call.",
+        ),
     ] = "",
     soak_seconds: Annotated[
         float,
-        typer.Option("--soak-seconds", help="How long the call must remain connected once media is up."),
+        typer.Option(
+            "--soak-seconds", help="How long the call must remain connected once media is up."
+        ),
     ] = 300.0,
     connect_timeout: Annotated[
         float,
-        typer.Option("--connect-timeout", help="How long to wait for the target call to reach a connected media state."),
+        typer.Option(
+            "--connect-timeout",
+            help="How long to wait for the target call to reach a connected media state.",
+        ),
     ] = 60.0,
     hangup_timeout: Annotated[
         float,
-        typer.Option("--hangup-timeout", help="How long to wait for the call to tear down cleanly after the soak."),
+        typer.Option(
+            "--hangup-timeout",
+            help="How long to wait for the call to tear down cleanly after the soak.",
+        ),
     ] = 15.0,
     # shared soak options
     artifacts_dir: Annotated[
         str,
-        typer.Option("--artifacts-dir", help="Directory where timestamped drill artifacts should be written."),
+        typer.Option(
+            "--artifacts-dir", help="Directory where timestamped drill artifacts should be written."
+        ),
     ] = "logs/voip-validation",
     sample_interval: Annotated[
         float,
-        typer.Option("--sample-interval", help="How often to capture periodic status samples into the timeline."),
+        typer.Option(
+            "--sample-interval",
+            help="How often to capture periodic status samples into the timeline.",
+        ),
     ] = 1.0,
     verbose: Annotated[bool, typer.Option("--verbose", help="Enable DEBUG logging.")] = False,
 ) -> None:
@@ -1733,7 +1766,9 @@ def voip(
             artifacts_dir,
             sample_interval,
         )
-    raise typer.BadParameter(f"unknown --soak value: {soak!r}; expected registration, reconnect, or call")
+    raise typer.BadParameter(
+        f"unknown --soak value: {soak!r}; expected registration, reconnect, or call"
+    )
 
 
 @app.command()

@@ -62,9 +62,13 @@ def power(ctx: typer.Context, verbose: bool = typer.Option(False, "--verbose")) 
 @app.command()
 def rtc(
     ctx: typer.Context,
-    action: str = typer.Argument("status", help="status | sync-to | sync-from | set-alarm | disable-alarm"),
+    action: str = typer.Argument(
+        "status", help="status | sync-to | sync-from | set-alarm | disable-alarm"
+    ),
     time: str = typer.Option("", "--time", help="ISO 8601 timestamp for set-alarm."),
-    repeat_mask: int = typer.Option(127, "--repeat-mask", help="Repeat-bitmask (default every day)."),
+    repeat_mask: int = typer.Option(
+        127, "--repeat-mask", help="Repeat-bitmask (default every day)."
+    ),
     verbose: bool = typer.Option(False, "--verbose"),
 ) -> None:
     """Inspect or control PiSugar RTC remotely."""
