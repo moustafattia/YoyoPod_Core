@@ -221,3 +221,18 @@ def _validate_shortcut(
         with_navigation=with_navigation,
         verbose=verbose,
     )
+
+# --- dev utilities
+dev_app = typer.Typer(name="dev", help="Developer utilities.", no_args_is_help=True)
+app.add_typer(dev_app, name="dev")
+
+
+@dev_app.command()
+def docs() -> None:
+    """Regenerate yoyopod_cli/COMMANDS.md from the live Typer tree."""
+    from yoyopod_cli._docgen import generate_commands_md
+    from yoyopod_cli.paths import HOST
+
+    md = generate_commands_md(app)
+    (HOST.repo_root / "yoyopod_cli" / "COMMANDS.md").write_text(md, encoding="utf-8")
+    typer.echo("yoyopod_cli/COMMANDS.md regenerated.")
