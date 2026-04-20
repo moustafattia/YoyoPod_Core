@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Annotated
+from typing import Annotated, Any
 
 import typer
 
@@ -71,18 +71,18 @@ def battery(
         print(line)
 
 
-def _format_rtc_state(state: object) -> list[str]:
+def _format_rtc_state(state: Any) -> list[str]:
     """Return a human-readable summary of RTC state."""
     return [
-        f"rtc_time={state.time.isoformat() if state.time is not None else 'unknown'}",  # type: ignore[union-attr]
-        f"alarm_enabled={state.alarm_enabled}",  # type: ignore[union-attr]
-        f"alarm_time={state.alarm_time.isoformat() if state.alarm_time is not None else 'none'}",  # type: ignore[union-attr]
-        f"alarm_repeat_mask={state.alarm_repeat_mask if state.alarm_repeat_mask is not None else 'unknown'}",  # type: ignore[union-attr]
-        f"adjust_ppm={state.adjust_ppm if state.adjust_ppm is not None else 'unknown'}",  # type: ignore[union-attr]
+        f"rtc_time={state.time.isoformat() if state.time is not None else 'unknown'}",
+        f"alarm_enabled={state.alarm_enabled}",
+        f"alarm_time={state.alarm_time.isoformat() if state.alarm_time is not None else 'none'}",
+        f"alarm_repeat_mask={state.alarm_repeat_mask if state.alarm_repeat_mask is not None else 'unknown'}",
+        f"adjust_ppm={state.adjust_ppm if state.adjust_ppm is not None else 'unknown'}",
     ]
 
 
-def _build_power_manager(config_dir: str) -> object:
+def _build_power_manager(config_dir: str) -> Any:
     """Build and return a PowerManager, exiting on error."""
     from loguru import logger
 
@@ -111,7 +111,7 @@ def status(
     configure_logging(verbose)
     manager = _build_power_manager(config_dir)
 
-    snapshot = manager.refresh()  # type: ignore[union-attr]
+    snapshot = manager.refresh()
     if not snapshot.available:
         logger.error(snapshot.error or "power backend unavailable")
         raise typer.Exit(code=1)
@@ -136,7 +136,7 @@ def sync_to(
     configure_logging(verbose)
     manager = _build_power_manager(config_dir)
 
-    state = manager.sync_time_to_rtc()  # type: ignore[union-attr]
+    state = manager.sync_time_to_rtc()
     print("")
     print("PiSugar RTC synced from Raspberry Pi system time")
     print("==============================================")
@@ -155,7 +155,7 @@ def sync_from(
     configure_logging(verbose)
     manager = _build_power_manager(config_dir)
 
-    state = manager.sync_time_from_rtc()  # type: ignore[union-attr]
+    state = manager.sync_time_from_rtc()
     print("")
     print("Raspberry Pi system time synced from PiSugar RTC")
     print("===============================================")
@@ -186,7 +186,7 @@ def set_alarm(
         normalized = normalized[:-1] + "+00:00"
     alarm_time = datetime.fromisoformat(normalized)
 
-    state = manager.set_rtc_alarm(alarm_time, repeat_mask=repeat_mask)  # type: ignore[union-attr]
+    state = manager.set_rtc_alarm(alarm_time, repeat_mask=repeat_mask)
     print("")
     print("PiSugar RTC alarm updated")
     print("=========================")
@@ -205,7 +205,7 @@ def disable_alarm(
     configure_logging(verbose)
     manager = _build_power_manager(config_dir)
 
-    state = manager.disable_rtc_alarm()  # type: ignore[union-attr]
+    state = manager.disable_rtc_alarm()
     print("")
     print("PiSugar RTC alarm disabled")
     print("==========================")

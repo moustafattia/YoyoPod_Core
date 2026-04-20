@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import time
-from typing import Any, Callable, Protocol
+from typing import Any, Callable, Protocol, cast
 
 import typer
 
@@ -70,7 +70,7 @@ def _build_voip_manager(config_dir: str) -> _VoIPManagerLike:
     config_path = resolve_config_dir(config_dir)
     config_manager = ConfigManager(config_dir=str(config_path))
     voip_config = VoIPConfig.from_config_manager(config_manager)
-    return VoIPManager(voip_config)
+    return cast(_VoIPManagerLike, VoIPManager(voip_config))
 
 
 @app.command()

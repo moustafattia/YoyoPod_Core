@@ -261,8 +261,8 @@ def _current_route(app: "YoyoPodApp") -> str:
         return "none"
     route_name = app.screen_manager.current_screen.route_name
     if route_name:
-        return route_name
-    return app.screen_manager.current_screen.name
+        return str(route_name)
+    return str(app.screen_manager.current_screen.name)
 
 
 def _dispatch_action(app: "YoyoPodApp", action: InputAction) -> None:
@@ -326,7 +326,7 @@ def _wait_for_track(
         current_track = app.music_backend.get_current_track()
         if current_track is not None:
             if expected_uris is None or current_track.uri in expected_uris:
-                return current_track.name
+                return str(current_track.name)
         _pump_app(app, 0.05)
 
     current_track = app.music_backend.get_current_track() if app.music_backend is not None else None
@@ -507,7 +507,7 @@ class NavigationSoakStats:
     playback_verified: bool = False
     sleep_wake_status: str = "skipped"
 
-    def observe_snapshot(self, snapshot: dict[str, float | int | None]) -> None:
+    def observe_snapshot(self, snapshot: dict[str, float | int | str | bool | None]) -> None:
         """Record high-level loop timing from one runtime snapshot."""
 
         runtime_iteration = snapshot.get("runtime_iteration_seconds")
@@ -589,7 +589,7 @@ class _RuntimePump:
                 iteration_duration_ms,
             )
 
-            current_screen = self._app.screen_manager.get_current_screen()
+            current_screen = self._app.screen_manager.get_current_screen()  # type: ignore[union-attr]
             if current_screen is not None and current_screen.route_name is not None:
                 self._stats.visited_screens.add(current_screen.route_name)
 
@@ -734,7 +734,7 @@ class NavigationSoakRunner:
     def _current_screen_name(self) -> str:
         """Return the active route name."""
 
-        current_screen = self.app.screen_manager.get_current_screen()
+        current_screen = self.app.screen_manager.get_current_screen()  # type: ignore[union-attr]
         route_name = None if current_screen is None else current_screen.route_name
         return route_name or "unknown"
 
@@ -760,7 +760,7 @@ class NavigationSoakRunner:
             label,
             self._current_screen_name(),
         )
-        self.app.input_manager.simulate_action(action)
+        self.app.input_manager.simulate_action(action)  # type: ignore[union-attr]
         self.stats.actions += 1
         self.pump.run_for(self.hold_seconds if settle_seconds is None else settle_seconds)
 
@@ -812,21 +812,21 @@ class NavigationSoakRunner:
         """Return the selected hub card mode."""
 
         self._require_screen("hub")
-        hub_screen = self.app.screen_manager.get_current_screen()
+        hub_screen = self.app.screen_manager.get_current_screen()  # type: ignore[union-attr]
         cards = [] if hub_screen is None else hub_screen._cards()
         if not cards:
             raise NavigationSoakFailure("hub has no cards to navigate")
-        return cards[hub_screen.selected_index % len(cards)].mode
+        return str(cards[hub_screen.selected_index % len(cards)].mode)
 
     def _listen_item_key(self) -> str:
         """Return the selected Listen landing item key."""
 
         self._require_screen("listen")
-        listen_screen = self.app.screen_manager.get_current_screen()
+        listen_screen = self.app.screen_manager.get_current_screen()  # type: ignore[union-attr]
         items = [] if listen_screen is None else getattr(listen_screen, "items", [])
         if not items:
             raise NavigationSoakFailure("listen screen has no items to navigate")
-        return items[listen_screen.selected_index % len(items)].key
+        return str(items[listen_screen.selected_index % len(items)].key)
 
     def _move_hub_to(self, mode: str) -> None:
         """Advance the hub carousel until one mode is selected."""
@@ -859,7 +859,8 @@ class NavigationSoakRunner:
         current_track = music_backend.get_current_track()
         if current_track is None:
             return None
-        return current_track.name
+        name = current_track.name
+        return str(name) if name is not None else None
 
     def _wait_for_playback_started(self, context_label: str) -> None:
         """Wait until playback produces one current track snapshot."""
@@ -959,7 +960,7 @@ class NavigationSoakRunner:
         self._idle_phase("playlists_idle", self.idle_seconds)
 
         if self.with_playback:
-            playlist_screen = self.app.screen_manager.get_current_screen()
+            playlist_screen = self.app.screen_manager.get_current_screen()  # type: ignore[union-attr]
             playlists = [] if playlist_screen is None else getattr(playlist_screen, "playlists", [])
             if not playlists:
                 raise NavigationSoakFailure(

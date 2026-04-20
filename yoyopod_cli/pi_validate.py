@@ -12,7 +12,7 @@ import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated, Any, Callable, Protocol
+from typing import TYPE_CHECKING, Annotated, Any, Callable, Protocol, cast
 
 import typer
 
@@ -237,7 +237,7 @@ def _load_app_config(config_dir: Path) -> dict[str, Any]:
         )
     ):
         logger.warning("Composed app config not found under {}", config_dir)
-    return config_to_dict(load_composed_app_settings(config_dir))
+    return cast(dict[str, Any], config_to_dict(load_composed_app_settings(config_dir)))
 
 
 def _load_media_config(config_dir: Path) -> MediaConfig:
@@ -268,7 +268,7 @@ def _environment_check() -> _CheckResult:
 def _display_check(
     app_config: dict[str, Any],
     hold_seconds: float,
-) -> tuple[_CheckResult, object]:
+) -> tuple[_CheckResult, Any]:
     """Validate display initialization on target hardware."""
     from yoyopod.ui.display import Display, detect_hardware
 
@@ -336,7 +336,7 @@ def _display_check(
         return _CheckResult(name="display", status="fail", details=str(exc)), None
 
 
-def _input_check(display: object, app_config: dict[str, Any]) -> _CheckResult:
+def _input_check(display: Any, app_config: dict[str, Any]) -> _CheckResult:
     """Validate that the matching input adapter can be constructed."""
     from yoyopod.ui.input import get_input_manager
 
@@ -344,7 +344,7 @@ def _input_check(display: object, app_config: dict[str, Any]) -> _CheckResult:
 
     try:
         input_manager = get_input_manager(
-            display.get_adapter(),  # type: ignore[union-attr]
+            display.get_adapter(),
             config=app_config,
             simulate=False,
         )
@@ -898,7 +898,7 @@ def _build_voip_manager_for_drill(config_dir: str) -> _VoIPManagerLike:
     config_path = resolve_config_dir(config_dir)
     config_manager = ConfigManager(config_dir=str(config_path))
     voip_config = VoIPConfig.from_config_manager(config_manager)
-    return VoIPManager(voip_config)
+    return cast(_VoIPManagerLike, VoIPManager(voip_config))
 
 
 def _iterate_interval_seconds(manager: _VoIPManagerLike) -> float:

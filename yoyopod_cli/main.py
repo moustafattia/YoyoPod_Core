@@ -16,6 +16,8 @@ Usage:
 
 from __future__ import annotations
 
+from typing import Any
+
 import typer
 
 from yoyopod_cli import __version__
@@ -123,14 +125,14 @@ app.add_typer(pi_app, name="pi")
 from yoyopod_cli.remote_shared import _resolve_remote_connection as _resolve_conn  # noqa: E402
 
 
-def _with_connection(host: str, user: str, project_dir: str, branch: str):
+def _with_connection(host: str, user: str, project_dir: str, branch: str) -> Any:
     """Build a typer.Context-like object carrying a RemoteConnection for shortcut handlers."""
 
     class _Ctx:
-        def __init__(self, conn):
+        def __init__(self, conn: Any) -> None:
             self.obj = conn
 
-        def ensure_object(self, cls):
+        def ensure_object(self, cls: Any) -> Any:
             if not isinstance(self.obj, cls):
                 raise RuntimeError("shortcut context not seeded with a RemoteConnection")
             return self.obj
