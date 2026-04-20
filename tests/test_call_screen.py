@@ -231,6 +231,22 @@ def test_talk_contact_screen_adds_play_note_action_when_latest_note_exists(
     assert voip_manager.seen_contacts == ["sip:alice@example.com"]
 
 
+def test_talk_contact_screen_clamps_visible_action_index(display: Display) -> None:
+    """Visible Talk actions should clamp stale selection indices."""
+
+    context = AppContext()
+    context.set_talk_contact(name="Mama", sip_address="sip:alice@example.com")
+    screen = TalkContactScreen(display, context, voip_manager=FakeVoIPManager())
+
+    screen.selected_index = 9
+
+    titles, subtitles, selected_index = screen.get_visible_actions()
+
+    assert titles == ["Call", "Voice Note"]
+    assert subtitles == ["Start a voice call", "Record a short message"]
+    assert selected_index == 1
+
+
 def test_voice_note_screen_records_reviews_and_sends(display: Display) -> None:
     """Voice notes should move through record, review, and sending states."""
 

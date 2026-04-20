@@ -116,11 +116,12 @@ class TalkContactScreen(Screen):
         """Return visible action rows for the LVGL scene."""
 
         actions = self.actions()
-        return (
-            [action.title for action in actions],
-            [action.subtitle for action in actions],
-            self.selected_index,
-        )
+        titles = [action.title for action in actions]
+        subtitles = [action.subtitle for action in actions]
+        if not titles:
+            return titles, subtitles, 0
+        selected_index = min(self.selected_index, len(titles) - 1)
+        return titles, subtitles, selected_index
 
     def get_visible_action_icons(self) -> list[str]:
         """Return the visible icon key for each action row."""
