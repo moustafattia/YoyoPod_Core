@@ -72,3 +72,17 @@ def test_voip_soak_unknown_value_rejected() -> None:
     runner = CliRunner()
     result = runner.invoke(app, ["voip", "--soak", "invalid"])
     assert result.exit_code != 0
+
+
+def test_lvgl_help() -> None:
+    runner = CliRunner()
+    result = runner.invoke(app, ["lvgl", "--help"])
+    assert result.exit_code == 0
+
+
+def test_all_seven_subcommands_present() -> None:
+    runner = CliRunner()
+    result = runner.invoke(app, ["--help"])
+    assert result.exit_code == 0
+    for name in ("deploy", "smoke", "music", "voip", "stability", "navigation", "lvgl"):
+        assert name in result.output
