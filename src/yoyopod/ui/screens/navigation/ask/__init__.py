@@ -200,17 +200,17 @@ class AskScreen(Screen):
             self._schedule_auto_return()
 
     def _voice_service(self) -> "VoiceManager":
-        """Compatibility shim for tests that inspect the effective service."""
+        """Return the effective voice service from the shared runtime."""
 
         return self.voice_runtime._voice_service()
 
     def _voice_settings(self) -> "VoiceSettings":
-        """Compatibility shim for tests that inspect the resolved settings."""
+        """Return the resolved voice settings from the shared runtime."""
 
         return self.voice_runtime.settings()
 
     def _default_voice_settings(self) -> "VoiceSettings":
-        """Compatibility shim for tests that inspect config-derived defaults."""
+        """Return the config-derived default voice settings."""
 
         return self.voice_runtime.defaults()
 
@@ -221,7 +221,7 @@ class AskScreen(Screen):
         capture_failed: bool,
         generation: int,
     ) -> None:
-        """Compatibility shim around the shared listen-result dispatcher."""
+        """Forward a listen result through the shared runtime dispatcher."""
 
         self.voice_runtime.state.generation = self._listen_generation
         self.voice_runtime.dispatch_listen_result(
@@ -236,7 +236,7 @@ class AskScreen(Screen):
         generation: int,
         cancel_event,
     ) -> None:
-        """Compatibility shim used by existing tests."""
+        """Delegate the PTT listening cycle to the shared runtime."""
 
         self.voice_runtime.state.generation = self._listen_generation
         self.voice_runtime.state.ptt_active = self._ptt_active
