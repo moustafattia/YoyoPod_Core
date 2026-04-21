@@ -126,7 +126,7 @@ class PTTInputAdapter(InputHAL):
                 InputAction.ADVANCE,
                 InputAction.BACK,
             ]
-            if self._state_machine.double_tap_select_enabled:
+            if self.state.double_tap_select_enabled:
                 actions.append(InputAction.SELECT)
             if self.raw_ptt_passthrough:
                 actions.extend([InputAction.PTT_PRESS, InputAction.PTT_RELEASE])
@@ -254,72 +254,72 @@ class PTTInputAdapter(InputHAL):
 
     @property
     def button_pressed(self) -> bool:
-        return self._state_machine.button_pressed
+        return self.state.button_pressed
 
     @button_pressed.setter
     def button_pressed(self, value: bool) -> None:
-        self._state_machine.button_pressed = value
+        self.state.button_pressed = value
 
     @property
     def press_start_time(self) -> Optional[float]:
-        return self._state_machine.press_start_time
+        return self.state.press_start_time
 
     @press_start_time.setter
     def press_start_time(self, value: Optional[float]) -> None:
-        self._state_machine.press_start_time = value
+        self.state.press_start_time = value
 
     @property
     def pending_single_tap_time(self) -> Optional[float]:
-        return self._state_machine.pending_single_tap_time
+        return self.state.pending_single_tap_time
 
     @pending_single_tap_time.setter
     def pending_single_tap_time(self, value: Optional[float]) -> None:
-        self._state_machine.pending_single_tap_time = value
+        self.state.pending_single_tap_time = value
 
     @property
     def double_tap_candidate(self) -> bool:
-        return self._state_machine.double_tap_candidate
+        return self.state.double_tap_candidate
 
     @double_tap_candidate.setter
     def double_tap_candidate(self, value: bool) -> None:
-        self._state_machine.double_tap_candidate = value
+        self.state.double_tap_candidate = value
 
     @property
     def raw_ptt_passthrough(self) -> bool:
-        return self._state_machine.raw_ptt_passthrough
+        return self.state.raw_ptt_passthrough
 
     @raw_ptt_passthrough.setter
     def raw_ptt_passthrough(self, value: bool) -> None:
-        self._state_machine.raw_ptt_passthrough = value
+        self.state.raw_ptt_passthrough = value
 
     @property
     def raw_hold_started(self) -> bool:
-        return self._state_machine.raw_hold_started
+        return self.state.raw_hold_started
 
     @raw_hold_started.setter
     def raw_hold_started(self, value: bool) -> None:
-        self._state_machine.raw_hold_started = value
+        self.state.raw_hold_started = value
 
     @property
     def _hold_back_fired(self) -> bool:
-        return self._state_machine.hold_back_fired
+        return self.state._hold_back_fired
 
     @_hold_back_fired.setter
     def _hold_back_fired(self, value: bool) -> None:
-        self._state_machine.hold_back_fired = value
+        self.state._hold_back_fired = value
 
     @property
     def _raw_button_state(self) -> bool:
-        return self._state_machine.raw_button_state
+        return self.state._raw_button_state
 
     @_raw_button_state.setter
     def _raw_button_state(self, value: bool) -> None:
-        self._state_machine.raw_button_state = value
+        self.state._raw_button_state = value
 
     @property
     def _button_transition_time(self) -> Optional[float]:
-        return self._state_machine.button_transition_time
+        return self.state._button_transition_time
 
     @_button_transition_time.setter
     def _button_transition_time(self, value: Optional[float]) -> None:
-        self._state_machine.button_transition_time = value
+        self.state._button_transition_time = value

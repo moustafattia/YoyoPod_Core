@@ -1,7 +1,9 @@
 """State machine for the PTT one-button interaction profile.
 
-The state machine owns press/release timing, debounce, long-hold, and tap
-resolution logic so it can be tested independently from GPIO polling.
+The state machine intentionally keeps the full temporal grammar for the single
+button in one place: debounce, pending tap resolution, and hold thresholds all
+share the same mutable timeline. Keeping those transitions together makes the
+adapter smaller without scattering gesture state across multiple helpers.
 """
 
 from __future__ import annotations
@@ -45,110 +47,6 @@ class PTTButtonStateMachine:
         self._state = state
         self._emit_action = emit_action
         self._emit_activity = emit_activity
-
-    @property
-    def button_pressed(self) -> bool:
-        return self._state.button_pressed
-
-    @button_pressed.setter
-    def button_pressed(self, value: bool) -> None:
-        self._state.button_pressed = value
-
-    @property
-    def raw_button_state(self) -> bool:
-        return self._state._raw_button_state
-
-    @raw_button_state.setter
-    def raw_button_state(self, value: bool) -> None:
-        self._state._raw_button_state = value
-
-    @property
-    def button_transition_time(self) -> Optional[float]:
-        return self._state._button_transition_time
-
-    @button_transition_time.setter
-    def button_transition_time(self, value: Optional[float]) -> None:
-        self._state._button_transition_time = value
-
-    @property
-    def press_start_time(self) -> Optional[float]:
-        return self._state.press_start_time
-
-    @press_start_time.setter
-    def press_start_time(self, value: Optional[float]) -> None:
-        self._state.press_start_time = value
-
-    @property
-    def pending_single_tap_time(self) -> Optional[float]:
-        return self._state.pending_single_tap_time
-
-    @pending_single_tap_time.setter
-    def pending_single_tap_time(self, value: Optional[float]) -> None:
-        self._state.pending_single_tap_time = value
-
-    @property
-    def double_tap_candidate(self) -> bool:
-        return self._state.double_tap_candidate
-
-    @double_tap_candidate.setter
-    def double_tap_candidate(self, value: bool) -> None:
-        self._state.double_tap_candidate = value
-
-    @property
-    def raw_ptt_passthrough(self) -> bool:
-        return self._state.raw_ptt_passthrough
-
-    @raw_ptt_passthrough.setter
-    def raw_ptt_passthrough(self, value: bool) -> None:
-        self._state.raw_ptt_passthrough = value
-
-    @property
-    def raw_hold_started(self) -> bool:
-        return self._state.raw_hold_started
-
-    @raw_hold_started.setter
-    def raw_hold_started(self, value: bool) -> None:
-        self._state.raw_hold_started = value
-
-    @property
-    def hold_back_fired(self) -> bool:
-        return self._state._hold_back_fired
-
-    @hold_back_fired.setter
-    def hold_back_fired(self, value: bool) -> None:
-        self._state._hold_back_fired = value
-
-    @property
-    def double_click_time(self) -> float:
-        return self._state.double_click_time
-
-    @double_click_time.setter
-    def double_click_time(self, value: float) -> None:
-        self._state.double_click_time = value
-
-    @property
-    def double_tap_select_enabled(self) -> bool:
-        return self._state.double_tap_select_enabled
-
-    @double_tap_select_enabled.setter
-    def double_tap_select_enabled(self, value: bool) -> None:
-        self._state.double_tap_select_enabled = value
-
-    @property
-    def enable_navigation(self) -> bool:
-        return self._state.enable_navigation
-
-    @enable_navigation.setter
-    def enable_navigation(self, value: bool) -> None:
-        self._state.enable_navigation = value
-
-    @property
-    def debounce_time(self) -> float:
-        return self._state.debounce_time
-
-    @property
-    def long_press_time(self) -> float:
-        return self._state.long_press_time
 
     def set_raw_ptt_passthrough(self, enabled: bool) -> None:
         self._state.raw_ptt_passthrough = bool(enabled)
@@ -195,8 +93,7 @@ class PTTButtonStateMachine:
             self._state.enable_navigation
             and self._state.double_tap_select_enabled
             and self._state.pending_single_tap_time is not None
-            and (current_time - self._state.pending_single_tap_time)
-            < self._state.double_click_time
+            and (current_time - self._state.pending_single_tap_time) < self._state.double_click_time
         )
         if not self._state.double_tap_candidate and self._state.double_tap_select_enabled:
             self.emit_pending_navigation(current_time)
@@ -387,7 +284,8 @@ class PTTButtonStateMachine:
             deadlines.append(
                 max(
                     0.0,
-                    self._state.debounce_time - (current_time - self._state._button_transition_time),
+                    self._state.debounce_time
+                    - (current_time - self._state._button_transition_time),
                 )
             )
 
