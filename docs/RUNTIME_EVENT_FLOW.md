@@ -1,6 +1,6 @@
 # Runtime Event Flow and Coordinator Ownership
 
-**Last updated:** 2026-04-16  
+**Last updated:** 2026-04-21  
 **Status:** Current implementation on `main`
 
 This document maps how runtime events move through the current app and which layer owns each decision.
@@ -354,7 +354,7 @@ If ordering looks inconsistent, this is usually the first place to check.
 - `src/yoyopod/coordinators/screen.py`
 - `src/yoyopod/event_bus.py`
 - `src/yoyopod/events.py`
-- `src/yoyopod/network/manager.py`
+- `src/yoyopod/integrations/network/manager.py`
 
 ## Bottom line
 

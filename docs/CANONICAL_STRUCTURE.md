@@ -1,6 +1,6 @@
 # Canonical Config And Package Structure
 
-**Last updated:** 2026-04-16
+**Last updated:** 2026-04-21
 **Status:** Current migration reference
 
 This document defines the reusable structure pattern established by the
@@ -97,9 +97,11 @@ Current exemplar package homes:
 
 - `src/yoyopod/device/`
   - device-owned helpers shared across domains
-- `src/yoyopod/network/`
-  - cellular modem lifecycle, transport, PPP, and GPS behavior
+- `src/yoyopod/integrations/network/`
+  - canonical network manager, modem models, and scaffold integration ownership
   - `__init__.py` is the app-facing seam
+- `src/yoyopod/network/`
+  - compatibility shims for the historical network import path
 - `src/yoyopod/communication/`
   - `calling/`
   - `messaging/`
@@ -124,7 +126,7 @@ Current exemplar package homes:
 
 The app layer should import from domain seams such as:
 
-- `yoyopod.network`
+- `yoyopod.integrations.network`
 - `yoyopod.audio`
 - `yoyopod.power`
 - `yoyopod.communication`
@@ -163,8 +165,11 @@ The network migration follows the same cutover shape:
 
 - network policy under `config/network/cellular.yaml`
 - `ConfigManager.get_network_settings()` as the typed runtime seam
-- `src/yoyopod/network/` as the domain-owned package home
-- app/runtime composition depending on `NetworkManager.from_config_manager()`
+- `src/yoyopod/integrations/network/` as the canonical owner of the public
+  manager/models seam
+- `src/yoyopod/network/` retained only as compatibility shims for historical
+  imports
+- app/runtime composition depending on `yoyopod.integrations.network.NetworkManager`
   instead of reading network state from app-shell config
 
 ## Media Migration Pattern

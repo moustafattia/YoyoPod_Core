@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, patch
 
 from yoyopod.backends.network.modem import Sim7600Backend
 from yoyopod.backends.network.ppp import PppProcess
-from yoyopod.network.models import ModemPhase, ModemState, SignalInfo
+from yoyopod.integrations.network.models import ModemPhase, ModemState, SignalInfo
 
 
 def test_ppp_spawn_constructs_correct_command():

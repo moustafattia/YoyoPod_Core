@@ -6,7 +6,7 @@ import threading
 import yaml
 
 from yoyopod.config import ConfigManager
-from yoyopod.config.models import build_config_model
+from yoyopod.config.models import NetworkConfig, build_config_model
 from yoyopod.core import EventBus
 from yoyopod.core import (
     NetworkGpsFixEvent,
@@ -15,8 +15,13 @@ from yoyopod.core import (
     NetworkPppUpEvent,
     NetworkRegisteredEvent,
 )
-from yoyopod.network import NetworkConfig, NetworkManager
-from yoyopod.network.models import GpsCoordinate, ModemPhase, ModemState, SignalInfo
+from yoyopod.integrations.network import NetworkManager
+from yoyopod.integrations.network.models import (
+    GpsCoordinate,
+    ModemPhase,
+    ModemState,
+    SignalInfo,
+)
 
 
 class FakeBackend:

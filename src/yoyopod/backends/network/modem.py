@@ -12,7 +12,12 @@ from yoyopod.backends.location.gps import GpsReader
 from yoyopod.backends.network.at_commands import AtCommandSet
 from yoyopod.backends.network.ppp import PppProcess
 from yoyopod.backends.network.transport import SerialTransport
-from yoyopod.network.models import GpsCoordinate, ModemPhase, ModemState, SignalInfo
+from yoyopod.integrations.network.models import (
+    GpsCoordinate,
+    ModemPhase,
+    ModemState,
+    SignalInfo,
+)
 
 if TYPE_CHECKING:
     from yoyopod.config.models import NetworkConfig

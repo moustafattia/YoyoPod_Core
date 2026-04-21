@@ -1,6 +1,6 @@
 # YoyoPod System Architecture
 
-**Last updated:** 2026-04-18
+**Last updated:** 2026-04-21
 **Status:** Current implementation
 
 This document describes the architecture that exists on `main`.
@@ -202,7 +202,8 @@ yoyopod.py / yoyopod.main
 ### Power, Network, and Voice
 
 - `src/yoyopod/power/`: PiSugar power, RTC, watchdog, and safety policy code
-- `src/yoyopod/network/`: modem backend, PPP process management, GPS, and transport code
+- `src/yoyopod/integrations/network/`: canonical network manager, modem models, and scaffold integration ownership
+- `src/yoyopod/network/`: compatibility shims for the historical network import path
 - `src/yoyopod/voice/`: local capture, STT, TTS, and command-matching code
 
 ### UI Layer
@@ -337,6 +338,7 @@ For current behavior, trust these files over older notes or demos:
 - `src/yoyopod/audio/`
 - `src/yoyopod/communication/`
 - `src/yoyopod/integrations/contacts/`
+- `src/yoyopod/integrations/network/`
 - `src/yoyopod/ui/display/`
 - `src/yoyopod/ui/input/`
 - `src/yoyopod/ui/screens/`

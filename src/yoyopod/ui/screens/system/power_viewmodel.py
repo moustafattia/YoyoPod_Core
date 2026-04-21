@@ -54,7 +54,7 @@ def _build_network_rows_from_manager(network_manager: object | None) -> list[tup
     if network_manager is None or not getattr(network_manager, "config", None) or not network_manager.config.enabled:
         return [("Status", "Disabled")]
 
-    from yoyopod.network.models import ModemPhase
+    from yoyopod.integrations.network.models import ModemPhase
 
     state = network_manager.modem_state
     if state.phase == ModemPhase.ONLINE:
@@ -99,7 +99,7 @@ def _build_gps_rows_from_manager(network_manager: object | None) -> list[tuple[s
             ("Speed", "--"),
         ]
 
-    from yoyopod.network.models import ModemPhase
+    from yoyopod.integrations.network.models import ModemPhase
 
     state = network_manager.modem_state
     if state.gps is None:

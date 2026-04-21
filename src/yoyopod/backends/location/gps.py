@@ -8,7 +8,7 @@ from yoyopod.backends.network.at_commands import AtCommandSet
 from yoyopod.backends.network.transport import SerialTransport
 
 if TYPE_CHECKING:
-    from yoyopod.network.models import GpsCoordinate
+    from yoyopod.integrations.network.models import GpsCoordinate
 
 
 class GpsReader:

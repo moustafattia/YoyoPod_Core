@@ -9,7 +9,7 @@ import yaml
 from yoyopod.config import ConfigManager
 from yoyopod.audio import MusicConfig
 from yoyopod.integrations.contacts.directory import PeopleDirectory
-from yoyopod.network import NetworkManager
+from yoyopod.integrations.network import NetworkManager
 from yoyopod.power import PowerManager
 
 

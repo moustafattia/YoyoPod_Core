@@ -11,7 +11,12 @@ from yoyopod.core import (
     NetworkPppUpEvent,
     NetworkSignalUpdateEvent,
 )
-from yoyopod.network.models import GpsCoordinate, ModemPhase, ModemState, SignalInfo
+from yoyopod.integrations.network.models import (
+    GpsCoordinate,
+    ModemPhase,
+    ModemState,
+    SignalInfo,
+)
 from yoyopod.ui.screens.lvgl_status import network_status_kwargs
 
 

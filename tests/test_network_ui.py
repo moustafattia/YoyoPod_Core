@@ -3,7 +3,12 @@
 from __future__ import annotations
 
 from yoyopod.core import AppContext
-from yoyopod.network.models import GpsCoordinate, ModemPhase, ModemState, SignalInfo
+from yoyopod.integrations.network.models import (
+    GpsCoordinate,
+    ModemPhase,
+    ModemState,
+    SignalInfo,
+)
 from yoyopod.ui.input import InteractionProfile
 from yoyopod.ui.screens.system.power import (
     PowerScreen,

@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 from typing import TYPE_CHECKING
 
-from yoyopod.network.models import GpsCoordinate, SignalInfo
+from yoyopod.integrations.network.models import GpsCoordinate, SignalInfo
 
 if TYPE_CHECKING:
     from yoyopod.backends.network.transport import SerialTransport

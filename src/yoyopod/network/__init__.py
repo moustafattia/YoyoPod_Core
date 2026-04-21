@@ -7,18 +7,23 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from yoyopod.config.models import NetworkConfig
     from yoyopod.network.backend import NetworkBackend, Sim7600Backend
-    from yoyopod.network.manager import NetworkManager
-    from yoyopod.network.models import GpsCoordinate, ModemPhase, ModemState, SignalInfo
+    from yoyopod.integrations.network.manager import NetworkManager
+    from yoyopod.integrations.network.models import (
+        GpsCoordinate,
+        ModemPhase,
+        ModemState,
+        SignalInfo,
+    )
 
 
 _EXPORTS = {
-    "GpsCoordinate": ("yoyopod.network.models", "GpsCoordinate"),
-    "ModemPhase": ("yoyopod.network.models", "ModemPhase"),
-    "ModemState": ("yoyopod.network.models", "ModemState"),
+    "GpsCoordinate": ("yoyopod.integrations.network.models", "GpsCoordinate"),
+    "ModemPhase": ("yoyopod.integrations.network.models", "ModemPhase"),
+    "ModemState": ("yoyopod.integrations.network.models", "ModemState"),
     "NetworkBackend": ("yoyopod.network.backend", "NetworkBackend"),
     "NetworkConfig": ("yoyopod.config.models", "NetworkConfig"),
-    "NetworkManager": ("yoyopod.network.manager", "NetworkManager"),
-    "SignalInfo": ("yoyopod.network.models", "SignalInfo"),
+    "NetworkManager": ("yoyopod.integrations.network.manager", "NetworkManager"),
+    "SignalInfo": ("yoyopod.integrations.network.models", "SignalInfo"),
     "Sim7600Backend": ("yoyopod.network.backend", "Sim7600Backend"),
 }
 

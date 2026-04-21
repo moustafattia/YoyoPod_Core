@@ -6,9 +6,8 @@ GPS belongs to `yoyopod.integrations.location`.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from yoyopod.backends.network import ModemBackend, PPPBackend
 from yoyopod.integrations.network.commands import (
     DisablePppCommand,
     EnablePppCommand,
@@ -21,6 +20,37 @@ from yoyopod.integrations.network.handlers import (
     apply_signal_to_state,
 )
 from yoyopod.integrations.network.poller import NetworkPoller
+
+if TYPE_CHECKING:
+    from yoyopod.backends.network import ModemBackend, PPPBackend
+    from yoyopod.integrations.network.manager import NetworkManager
+    from yoyopod.integrations.network.models import (
+        GpsCoordinate,
+        ModemPhase,
+        ModemState,
+        SignalInfo,
+    )
+
+
+_PUBLIC_EXPORTS = {
+    "GpsCoordinate": ("yoyopod.integrations.network.models", "GpsCoordinate"),
+    "ModemPhase": ("yoyopod.integrations.network.models", "ModemPhase"),
+    "ModemState": ("yoyopod.integrations.network.models", "ModemState"),
+    "NetworkManager": ("yoyopod.integrations.network.manager", "NetworkManager"),
+    "SignalInfo": ("yoyopod.integrations.network.models", "SignalInfo"),
+}
+
+
+def __getattr__(name: str) -> Any:
+    """Load canonical public network exports lazily to avoid backend import cycles."""
+
+    try:
+        module_name, attribute = _PUBLIC_EXPORTS[name]
+    except KeyError as exc:
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}") from exc
+
+    module = __import__(module_name, fromlist=[attribute])
+    return getattr(module, attribute)
 
 
 @dataclass(slots=True)
@@ -195,6 +225,8 @@ class _StatusSnapshot:
 
 
 def _build_backend(config: object) -> _ModemPppAdapter:
+    from yoyopod.backends.network import ModemBackend, PPPBackend
+
     modem = ModemBackend(config)
     ppp = PPPBackend(config)
     return _ModemPppAdapter(config=config, modem=modem, ppp=ppp)
@@ -203,9 +235,14 @@ def _build_backend(config: object) -> _ModemPppAdapter:
 __all__ = [
     "DisablePppCommand",
     "EnablePppCommand",
+    "GpsCoordinate",
+    "ModemPhase",
+    "ModemState",
     "NetworkIntegration",
+    "NetworkManager",
     "RefreshSignalCommand",
     "SetApnCommand",
+    "SignalInfo",
     "setup",
     "teardown",
 ]

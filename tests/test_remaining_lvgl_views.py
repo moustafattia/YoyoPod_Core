@@ -929,7 +929,7 @@ def test_power_screen_one_button_voice_page_wraps_immediately() -> None:
 def test_power_screen_reports_full_network_page_count_through_lvgl() -> None:
     """Network-enabled Setup pages should preserve the full page count in LVGL payloads."""
 
-    from yoyopod.network.models import ModemPhase, ModemState, SignalInfo
+    from yoyopod.integrations.network.models import ModemPhase, ModemState, SignalInfo
     from yoyopod.ui.screens.system.power import (
         build_power_screen_actions,
         build_power_screen_state_provider,

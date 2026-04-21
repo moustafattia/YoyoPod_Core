@@ -36,6 +36,11 @@ from yoyopod.backends.network import PppProcess as BackendPppProcess
 from yoyopod.backends.network import SerialTransport as BackendSerialTransport
 from yoyopod.backends.network import Sim7600Backend as BackendSim7600Backend
 from yoyopod.backends.network import TransportError as BackendTransportError
+from yoyopod.integrations.network import GpsCoordinate as IntegrationGpsCoordinate
+from yoyopod.integrations.network import ModemPhase as IntegrationModemPhase
+from yoyopod.integrations.network import ModemState as IntegrationModemState
+from yoyopod.integrations.network import NetworkManager as IntegrationNetworkManager
+from yoyopod.integrations.network import SignalInfo as IntegrationSignalInfo
 from yoyopod.integrations.contacts.cloud_sync import (
     build_cloud_contact as ContactsBuildCloudContact,
 )
@@ -64,6 +69,11 @@ from yoyopod.cloud import CloudDeviceClient as LegacyCloudDeviceClient
 from yoyopod.cloud import CloudManager as LegacyCloudManager
 from yoyopod.cloud import CloudStatusSnapshot as LegacyCloudStatusSnapshot
 from yoyopod.cloud import DeviceMqttClient as LegacyDeviceMqttClient
+from yoyopod.network import GpsCoordinate as LegacyGpsCoordinate
+from yoyopod.network import ModemPhase as LegacyModemPhase
+from yoyopod.network import ModemState as LegacyModemState
+from yoyopod.network import NetworkManager as LegacyNetworkManager
+from yoyopod.network import SignalInfo as LegacySignalInfo
 from yoyopod.network import Sim7600Backend as LegacySim7600Backend
 from yoyopod.network.at_commands import AtCommandSet as LegacyAtCommandSet
 from yoyopod.network.backend import Sim7600Backend as LegacyBackendSim7600Backend
@@ -140,6 +150,16 @@ def test_legacy_network_backend_import_paths_resolve_to_relocated_symbols() -> N
     assert LegacyGpsReader is BackendGpsReader
     assert LegacyBackendSim7600Backend is BackendSim7600Backend
     assert LegacySim7600Backend is BackendSim7600Backend
+
+
+def test_legacy_network_public_import_paths_resolve_to_relocated_symbols() -> None:
+    """Legacy network manager/model imports should resolve to the canonical integration seam."""
+
+    assert LegacyGpsCoordinate is IntegrationGpsCoordinate
+    assert LegacyModemPhase is IntegrationModemPhase
+    assert LegacyModemState is IntegrationModemState
+    assert LegacyNetworkManager is IntegrationNetworkManager
+    assert LegacySignalInfo is IntegrationSignalInfo
 
 
 def test_demo_entrypoints_keep_importing_legacy_shims(monkeypatch) -> None:

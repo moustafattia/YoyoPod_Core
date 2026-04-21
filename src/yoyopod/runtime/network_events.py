@@ -28,7 +28,7 @@ class NetworkEventHandler:
         if self.app.network_manager is None or not self.app.network_manager.config.enabled:
             return "none"
 
-        from yoyopod.network.models import ModemPhase
+        from yoyopod.integrations.network.models import ModemPhase
 
         state = self.app.network_manager.modem_state
         if state.phase == ModemPhase.OFF:
