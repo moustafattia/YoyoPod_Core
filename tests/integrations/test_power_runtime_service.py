@@ -34,7 +34,7 @@ def test_publish_snapshot_calls_power_handlers_directly() -> None:
     app = SimpleNamespace(
         power_manager=SimpleNamespace(get_snapshot=lambda: snapshot),
         _power_available=None,
-        coordinator_runtime=SimpleNamespace(power_snapshot=None),
+        app_state_runtime=SimpleNamespace(power_snapshot=None),
         power_coordinator=coordinator,
     )
 
@@ -57,7 +57,7 @@ def test_publish_snapshot_skips_duplicate_runtime_state() -> None:
     app = SimpleNamespace(
         power_manager=SimpleNamespace(get_snapshot=lambda: snapshot),
         _power_available=False,
-        coordinator_runtime=SimpleNamespace(power_snapshot=snapshot),
+        app_state_runtime=SimpleNamespace(power_snapshot=snapshot),
         power_coordinator=coordinator,
     )
 
@@ -78,7 +78,7 @@ def test_publish_snapshot_noops_without_runtime_or_power_owner() -> None:
     app = SimpleNamespace(
         power_manager=SimpleNamespace(get_snapshot=lambda: snapshot),
         _power_available=None,
-        coordinator_runtime=None,
+        app_state_runtime=None,
         power_coordinator=None,
     )
 
@@ -99,7 +99,7 @@ def test_publish_cached_snapshot_requires_existing_runtime_snapshot() -> None:
     app = SimpleNamespace(
         power_manager=SimpleNamespace(get_snapshot=lambda: snapshot),
         _power_available=None,
-        coordinator_runtime=SimpleNamespace(power_snapshot=None),
+        app_state_runtime=SimpleNamespace(power_snapshot=None),
         power_coordinator=coordinator,
     )
     service = PowerRuntimeService(app)
@@ -107,7 +107,7 @@ def test_publish_cached_snapshot_requires_existing_runtime_snapshot() -> None:
     service._publish_cached_snapshot_if_ready()
     assert coordinator.snapshot_calls == []
 
-    app.coordinator_runtime.power_snapshot = snapshot
+    app.app_state_runtime.power_snapshot = snapshot
     service._publish_cached_snapshot_if_ready()
 
     assert coordinator.snapshot_calls == [snapshot]

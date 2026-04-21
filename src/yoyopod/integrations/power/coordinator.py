@@ -11,7 +11,7 @@ from loguru import logger
 
 from yoyopod.core import AppContext
 from yoyopod.core import Bus
-from yoyopod.core.ui_state import CoordinatorRuntime
+from yoyopod.core.app_state import AppStateRuntime
 from yoyopod.integrations.power.models import PowerSnapshot
 from yoyopod.integrations.power.policies import PowerSafetyPolicy
 from yoyopod.ui.screens.coordinator import ScreenCoordinator
@@ -27,7 +27,7 @@ class PowerCoordinator:
 
     def __init__(
         self,
-        runtime: CoordinatorRuntime,
+        runtime: AppStateRuntime,
         screen_coordinator: ScreenCoordinator,
         power_manager: "PowerManager | None",
         screen_manager: "ScreenManager | None",

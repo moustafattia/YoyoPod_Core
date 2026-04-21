@@ -1,4 +1,4 @@
-"""Shared coordinator registry state for YoyoPod."""
+"""Shared derived app state for YoyoPod."""
 
 from __future__ import annotations
 
@@ -20,7 +20,7 @@ if TYPE_CHECKING:
 
 
 class AppRuntimeState(Enum):
-    """Derived application state used by the production coordinator path."""
+    """Derived application state used by the production app-runtime path."""
 
     IDLE = "idle"
     HUB = "hub"
@@ -95,8 +95,8 @@ class AppStateChange:
 
 
 @dataclass(slots=True)
-class CoordinatorRuntime:
-    """Shared derived app-state used by coordinator modules."""
+class AppStateRuntime:
+    """Shared derived app-state used by runtime services and integration coordinators."""
 
     music_fsm: MusicFSM
     call_fsm: CallFSM
@@ -155,7 +155,7 @@ class CoordinatorRuntime:
                 self.state_history = self.state_history[-50:]
 
             logger.info(
-                "Coordinator state: {} -> {} (trigger: {})",
+                "App state: {} -> {} (trigger: {})",
                 previous_state.value,
                 current_state.value,
                 trigger,

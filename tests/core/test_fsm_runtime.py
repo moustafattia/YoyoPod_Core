@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import yoyopod.integrations.music.fsm as fsm_module
-from yoyopod.core.ui_state import AppRuntimeState, CoordinatorRuntime
+from yoyopod.core.app_state import AppRuntimeState, AppStateRuntime
 from yoyopod.integrations.call import (
     CallFSM,
     CallInterruptionPolicy,
@@ -12,9 +12,9 @@ from yoyopod.integrations.call import (
 from yoyopod.integrations.music import MusicFSM, MusicState
 
 
-def _build_runtime() -> CoordinatorRuntime:
+def _build_runtime() -> AppStateRuntime:
     """Create a minimal coordinator runtime for state-derivation tests."""
-    return CoordinatorRuntime(
+    return AppStateRuntime(
         music_fsm=MusicFSM(),
         call_fsm=CallFSM(),
         call_interruption_policy=CallInterruptionPolicy(),
@@ -102,7 +102,7 @@ def test_fsm_debug_logs_defer_formatting(monkeypatch) -> None:
 
 
 def test_runtime_state_is_derived_from_split_fsms() -> None:
-    """CoordinatorRuntime should derive app state from music and call FSMs."""
+    """AppStateRuntime should derive app state from music and call FSMs."""
     runtime = _build_runtime()
 
     state_change = runtime.set_ui_state(AppRuntimeState.MENU, trigger="test_menu")
@@ -159,7 +159,7 @@ def test_runtime_returns_to_base_ui_state_when_music_and_calls_are_idle() -> Non
 
 
 def test_app_runtime_state_maps_screen_names_to_base_ui_states() -> None:
-    """Base route-name mapping should live on AppRuntimeState instead of CoordinatorRuntime."""
+    """Base route-name mapping should live on AppRuntimeState instead of AppStateRuntime."""
 
     assert AppRuntimeState.ui_state_for_screen_name("menu") == AppRuntimeState.MENU
     assert AppRuntimeState.ui_state_for_screen_name("hub") == AppRuntimeState.HUB

@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from yoyopod.core import AppContext
-from yoyopod.core.ui_state import CoordinatorRuntime
+from yoyopod.core.app_state import AppStateRuntime
 from yoyopod.integrations.call import (
     CallFSM,
     CallHistoryStore,
@@ -79,10 +79,10 @@ class _VoipManagerStub:
         return action
 
 
-def _build_runtime() -> CoordinatorRuntime:
+def _build_runtime() -> AppStateRuntime:
     """Create the minimal coordinator runtime required by CallCoordinator."""
 
-    return CoordinatorRuntime(
+    return AppStateRuntime(
         music_fsm=MusicFSM(),
         call_fsm=CallFSM(),
         call_interruption_policy=CallInterruptionPolicy(),

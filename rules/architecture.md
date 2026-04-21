@@ -10,7 +10,7 @@ yoyopod.py / src/yoyopod/main.py  (entry points)
     |- ShutdownLifecycleService (core/shutdown.py)
     |- ScreenPowerService (integrations/display/service.py)
     |- music session seam + call session seam -- composed playback and call state machines
-    |- CoordinatorRuntime (core/ui_state.py) -- shared derived app state only
+    |- AppStateRuntime (core/app_state.py) -- shared derived app state only
     |- VoiceRuntimeCoordinator (integrations/voice/runtime.py) -- Ask voice session orchestration
     |- AppContext (core/app_context.py)
     |  |- media / power / network / screen / voip / talk / voice
@@ -39,7 +39,7 @@ yoyopod.py / src/yoyopod/main.py  (entry points)
 
 ## State Orchestration
 
-`MusicFSM` (from `integrations/music/fsm.py`) and `CallFSM` (from `integrations/call/session.py`) stay independent, while `CoordinatorRuntime` (from `core/ui_state.py`) derives combined runtime states such as `PLAYING_WITH_VOIP`, `PAUSED_BY_CALL`, and `CALL_ACTIVE_MUSIC_PAUSED`. It should stay a small derived-state object, not a grab bag for screen, backend, config, or context references. Incoming calls can auto-pause music, and playback can auto-resume after the call ends when enabled.
+`MusicFSM` (from `integrations/music/fsm.py`) and `CallFSM` (from `integrations/call/session.py`) stay independent, while `AppStateRuntime` (from `core/app_state.py`) derives combined runtime states such as `PLAYING_WITH_VOIP`, `PAUSED_BY_CALL`, and `CALL_ACTIVE_MUSIC_PAUSED`. It should stay a small derived-state object, not a grab bag for screen, backend, config, or context references. Incoming calls can auto-pause music, and playback can auto-resume after the call ends when enabled.
 
 ## Key Patterns
 
@@ -66,7 +66,7 @@ yoyopod.py / src/yoyopod/main.py  (entry points)
 
 ### Orchestration
 
-- Shared derived state and runtime references live in `src/yoyopod/core/ui_state.py`.
+- Shared derived state and runtime references live in `src/yoyopod/core/app_state.py`.
 - Cross-domain coordination lives with the owning domain seam:
   - `src/yoyopod/integrations/call/coordinator.py`
   - `src/yoyopod/integrations/music/coordinator.py`

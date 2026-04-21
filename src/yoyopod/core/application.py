@@ -23,7 +23,7 @@ from yoyopod.core.logbuffer import LogBuffer
 from yoyopod.core.scheduler import MainThreadScheduler
 from yoyopod.core.services import Services
 from yoyopod.core.states import States
-from yoyopod.core.ui_state import CoordinatorRuntime
+from yoyopod.core.app_state import AppStateRuntime
 from yoyopod.integrations.call import (
     CallFSM,
     CallHistoryStore,
@@ -177,7 +177,7 @@ class YoyoPodApp:
         self.cloud_manager: Optional[CloudManager] = None
 
         # Extracted coordinators
-        self.coordinator_runtime: Optional[CoordinatorRuntime] = None
+        self.app_state_runtime: Optional[AppStateRuntime] = None
         self.screen_coordinator: Optional[ScreenCoordinator] = None
         self.call_coordinator: Optional[CallCoordinator] = None
         self.playback_coordinator: Optional[PlaybackCoordinator] = None

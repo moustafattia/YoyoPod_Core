@@ -30,7 +30,7 @@ from yoyopod.integrations.music.events import (
     PlaybackStateChangedEvent,
     TrackChangedEvent,
 )
-from yoyopod.core.ui_state import AppRuntimeState, CoordinatorRuntime
+from yoyopod.core.app_state import AppRuntimeState, AppStateRuntime
 from yoyopod.integrations.call import (
     CallFSM,
     CallInterruptionPolicy,
@@ -606,9 +606,9 @@ class OrchestrationHarness:
         )
 
     @property
-    def runtime(self) -> CoordinatorRuntime:
-        assert self.app.coordinator_runtime is not None
-        return self.app.coordinator_runtime
+    def runtime(self) -> AppStateRuntime:
+        assert self.app.app_state_runtime is not None
+        return self.app.app_state_runtime
 
     @property
     def music_fsm(self) -> MusicFSM:
@@ -993,7 +993,7 @@ def test_outgoing_call_does_not_change_idle_or_paused_music(
     """Outgoing call state changes should not mutate paused or idle music state."""
     app, _, screen_manager = _build_app(playback_state=playback_state)
     app.music_fsm.sync(music_state)
-    app.coordinator_runtime.sync_app_state("test_setup")
+    app.app_state_runtime.sync_app_state("test_setup")
 
     worker = threading.Thread(
         target=lambda: app.runtime_loop.queue_main_thread_callback(
@@ -1097,7 +1097,7 @@ def test_background_events_wait_for_drain_before_mutating_state() -> None:
     assert app.runtime_loop.process_pending_main_thread_actions() == 2
     assert app.voip_registered
     assert app.music_fsm.state == MusicState.PLAYING
-    assert app.coordinator_runtime.current_app_state == AppRuntimeState.PLAYING_WITH_VOIP
+    assert app.app_state_runtime.current_app_state == AppRuntimeState.PLAYING_WITH_VOIP
 
 
 def test_track_event_refreshes_now_playing_screen_when_visible() -> None:
@@ -1210,19 +1210,19 @@ def test_navigation_updates_runtime_base_state() -> None:
 
     screen_manager.push_screen("contacts")
     assert app.bus.drain() == 1
-    assert app.coordinator_runtime.current_app_state == AppRuntimeState.CALL_IDLE
+    assert app.app_state_runtime.current_app_state == AppRuntimeState.CALL_IDLE
 
     screen_manager.pop_screen()
     assert app.bus.drain() == 1
-    assert app.coordinator_runtime.current_app_state == AppRuntimeState.MENU
+    assert app.app_state_runtime.current_app_state == AppRuntimeState.MENU
 
     screen_manager.push_screen("playlists")
     assert app.bus.drain() == 1
-    assert app.coordinator_runtime.current_app_state == AppRuntimeState.PLAYLIST_BROWSER
+    assert app.app_state_runtime.current_app_state == AppRuntimeState.PLAYLIST_BROWSER
 
     screen_manager.push_screen("power")
     assert app.bus.drain() == 1
-    assert app.coordinator_runtime.current_app_state == AppRuntimeState.POWER
+    assert app.app_state_runtime.current_app_state == AppRuntimeState.POWER
 
 
 def test_worker_navigation_waits_for_coordinator_drain_before_syncing_state() -> None:
@@ -1232,9 +1232,9 @@ def test_worker_navigation_waits_for_coordinator_drain_before_syncing_state() ->
     _navigate_from_worker(screen_manager, "contacts")
 
     assert screen_manager.current_screen is app.contact_list_screen
-    assert app.coordinator_runtime.current_app_state == AppRuntimeState.MENU
+    assert app.app_state_runtime.current_app_state == AppRuntimeState.MENU
     assert app.runtime_loop.process_pending_main_thread_actions() >= 1
-    assert app.coordinator_runtime.current_app_state == AppRuntimeState.CALL_IDLE
+    assert app.app_state_runtime.current_app_state == AppRuntimeState.CALL_IDLE
 
 
 def test_main_thread_callback_errors_are_contained_and_drain_continues() -> None:
@@ -1265,7 +1265,7 @@ def test_call_end_restores_previous_screen_base_state() -> None:
     assert app.bus.drain() == 1
 
     app.call_fsm.sync(CallSessionState.ACTIVE)
-    app.coordinator_runtime.sync_app_state("call_connected")
+    app.app_state_runtime.sync_app_state("call_connected")
     screen_manager.push_screen("incoming_call")
     assert app.bus.drain() == 1
     screen_manager.push_screen("in_call")
@@ -1281,7 +1281,7 @@ def test_call_end_restores_previous_screen_base_state() -> None:
 
     assert app.runtime_loop.process_pending_main_thread_actions() >= 1
     assert screen_manager.current_screen is app.playlist_screen
-    assert app.coordinator_runtime.current_app_state == AppRuntimeState.PLAYLIST_BROWSER
+    assert app.app_state_runtime.current_app_state == AppRuntimeState.PLAYLIST_BROWSER
 
 
 def test_manager_recovery_schedules_music_reconnect_off_main_thread() -> None:
@@ -1539,9 +1539,9 @@ def test_power_poll_updates_context_runtime_and_visible_screen() -> None:
     assert app.context.power.battery_charging is True
     assert app.context.power.external_power is True
     assert app.context.power.available is True
-    assert app.coordinator_runtime.power_available is True
-    assert app.coordinator_runtime.power_snapshot is not None
-    assert app.coordinator_runtime.power_snapshot.battery.level_percent == 55.4
+    assert app.app_state_runtime.power_available is True
+    assert app.app_state_runtime.power_snapshot is not None
+    assert app.app_state_runtime.power_snapshot.battery.level_percent == 55.4
     assert app.menu_screen.render_calls == 1
 
 
@@ -1598,7 +1598,7 @@ def test_power_poll_honors_interval_and_tracks_unavailable_backend() -> None:
     assert app.context.power.battery_percent == 61
     assert app.context.power.available is False
     assert app.context.power.error == "I2C not connected"
-    assert app.coordinator_runtime.power_available is False
+    assert app.app_state_runtime.power_available is False
     assert app.menu_screen.render_calls == 2
 
 
@@ -1668,7 +1668,7 @@ def test_forced_power_poll_skips_placeholder_snapshot_before_first_refresh() -> 
 
     assert elapsed_seconds < 0.1
     assert app._power_available is None
-    assert app.coordinator_runtime.power_snapshot is None
+    assert app.app_state_runtime.power_snapshot is None
     assert app.menu_screen.render_calls == 0
     assert refresh_started.wait(timeout=1.0) is True
     assert app.get_status()["power_refresh_in_flight"] is True
@@ -1680,7 +1680,7 @@ def test_forced_power_poll_skips_placeholder_snapshot_before_first_refresh() -> 
     assert app.context.power.battery_percent == 52
     assert app.context.power.battery_charging is True
     assert app.context.power.external_power is True
-    assert app.coordinator_runtime.power_snapshot is refreshed_snapshot
+    assert app.app_state_runtime.power_snapshot is refreshed_snapshot
     assert app.menu_screen.render_calls == 1
 
 
@@ -1736,7 +1736,7 @@ def test_forced_power_poll_uses_new_cached_snapshot_while_refresh_callback_is_pe
     assert app.context.power.battery_percent == 52
     assert app.context.power.battery_charging is True
     assert app.context.power.external_power is True
-    assert app.coordinator_runtime.power_snapshot is second_snapshot
+    assert app.app_state_runtime.power_snapshot is second_snapshot
     assert app.menu_screen.render_calls == 2
 
     app.runtime_loop.process_pending_main_thread_actions()

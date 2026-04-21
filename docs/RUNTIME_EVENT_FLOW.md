@@ -48,7 +48,7 @@ Owns:
 
 Owns:
 - boot-time wiring
-- constructing `CoordinatorRuntime`
+- constructing `AppStateRuntime`
 - binding backend callbacks to event publishers
 - binding extracted coordinators to the `Bus`
 
@@ -73,7 +73,7 @@ work keeps the loop on a 10 ms cadence instead of collapsing into a zero-sleep s
 Canonical owner:
 - `src/yoyopod/core/loop.py`
 
-### `CoordinatorRuntime`
+### `AppStateRuntime`
 
 Owns:
 - derived app-state calculation
@@ -88,7 +88,7 @@ Owns:
 - translating VoIP runtime events into call FSM transitions
 - pausing and optionally resuming music around calls
 - call-related screen pushes and cleanup
-- VoIP readiness state in `CoordinatorRuntime`
+- VoIP readiness state in `AppStateRuntime`
 - call-history persistence at call end
 
 ### `PlaybackCoordinator`
@@ -205,11 +205,11 @@ Handlers live in two places today:
    - records an in-progress call session
    - pauses music if playback is active
    - transitions `CallFSM`
-   - re-derives app state through `CoordinatorRuntime.sync_app_state()`
+   - re-derives app state through `AppStateRuntime.sync_app_state()`
    - pushes `IncomingCallScreen`
    - starts the ring tone
 
-Ownership: call behavior belongs to `CallCoordinator`; derived app state belongs to `CoordinatorRuntime`; actual screen stack mutations happen through `ScreenCoordinator`.
+Ownership: call behavior belongs to `CallCoordinator`; derived app state belongs to `AppStateRuntime`; actual screen stack mutations happen through `ScreenCoordinator`.
 
 ### Call state change flow
 
@@ -228,14 +228,14 @@ Notable ownership detail: `CallCoordinator` directly decides music pause/resume 
 4. The coordinator-thread drain calls `PlaybackCoordinator.handle_track_change()` or `handle_playback_state_change()`.
 5. `PlaybackCoordinator` updates the music-domain `MusicFSM`, re-derives app state, records recents, and refreshes the now-playing screen.
 
-Ownership: playback truth comes from the music backend; playback interpretation for app state belongs to `PlaybackCoordinator` plus `CoordinatorRuntime`.
+Ownership: playback truth comes from the music backend; playback interpretation for app state belongs to `PlaybackCoordinator` plus `AppStateRuntime`.
 
 ### Power snapshot flow
 
 1. `PowerRuntimeService.poll_status()` fetches a snapshot from `PowerManager`.
 2. It calls `PowerCoordinator.publish_snapshot()` and, on availability transitions, `publish_availability_change()`.
 3. `PowerCoordinator.handle_snapshot_updated()`:
-   - stores the snapshot in `CoordinatorRuntime`
+   - stores the snapshot in `AppStateRuntime`
    - updates `AppContext`
    - refreshes visible UI when user-visible data changed
    - runs `PowerSafetyPolicy`
@@ -251,12 +251,12 @@ Ownership: power telemetry and safety evaluation are centralized in `PowerCoordi
 4. If navigation changes the visible route, `ScreenManager.on_screen_changed` calls `YoyoPodApp._handle_screen_changed()`.
 5. That method publishes `ScreenChangedEvent`.
 6. `ScreenPowerService.handle_screen_changed_event()`:
-   - syncs base UI state through `YoyoPodApp._sync_screen_changed()` and `CoordinatorRuntime.sync_ui_state_for_screen()`
+   - syncs base UI state through `YoyoPodApp._sync_screen_changed()` and `AppStateRuntime.sync_ui_state_for_screen()`
    - marks user activity so the display stays awake
 
 Input activity separately publishes `UserActivityEvent`, which `ScreenPowerService` uses to track idle time and wake the display.
 
-Ownership: route-change bookkeeping is split. `ScreenManager` knows when the route changed, `YoyoPodApp` republishes it, `ScreenPowerService` handles the event, and `CoordinatorRuntime` owns the resulting base UI state.
+Ownership: route-change bookkeeping is split. `ScreenManager` knows when the route changed, `YoyoPodApp` republishes it, `ScreenPowerService` handles the event, and `AppStateRuntime` owns the resulting base UI state.
 
 ### Network status flow
 
@@ -286,7 +286,7 @@ Owned by:
 
 ### Derived app state
 
-Owned by `CoordinatorRuntime.current_app_state`.
+Owned by `AppStateRuntime.current_app_state`.
 
 This state is derived from:
 - call FSM state
@@ -327,7 +327,7 @@ Route change handling crosses four layers:
 - `ScreenManager`
 - `YoyoPodApp._handle_screen_changed()`
 - `ScreenPowerService.handle_screen_changed_event()`
-- `CoordinatorRuntime.sync_ui_state_for_screen()`
+- `AppStateRuntime.sync_ui_state_for_screen()`
 
 This works, but it is not especially obvious. A future cleanup probably wants either a dedicated navigation/screen-state coordinator or a clearer single owner for route-to-state translation.
 
@@ -360,7 +360,7 @@ If ordering looks inconsistent, check scheduler backlog first and bus backlog se
 - `src/yoyopod/core/bootstrap/`
 - `src/yoyopod/core/loop.py`
 - `src/yoyopod/core/recovery.py`
-- `src/yoyopod/core/ui_state.py`
+- `src/yoyopod/core/app_state.py`
 - `src/yoyopod/integrations/call/coordinator.py`
 - `src/yoyopod/integrations/music/coordinator.py`
 - `src/yoyopod/integrations/power/coordinator.py`
@@ -377,6 +377,6 @@ The current architecture is a partial extraction around a single coordinator-thr
 - Call, playback, and power now have explicit coordinators.
 - Screen refresh and screen-power behavior are split helpers, not one unified screen owner.
 - Network status still routes through `YoyoPodApp` directly.
-- `CoordinatorRuntime` is the derived-state authority, but `AppContext` is still the broad user-facing state sink.
+- `AppStateRuntime` is the derived-state authority, but `AppContext` is still the broad user-facing state sink.
 
 That is the truthful current model contributors should use when making the next small runtime-hardening changes.

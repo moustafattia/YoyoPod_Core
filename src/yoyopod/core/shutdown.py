@@ -107,8 +107,8 @@ class ShutdownLifecycleService:
         payload = {
             "saved_at": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
             "state": (
-                self.app.coordinator_runtime.get_state_name()
-                if self.app.coordinator_runtime
+                self.app.app_state_runtime.get_state_name()
+                if self.app.app_state_runtime
                 else None
             ),
             "current_screen": current_screen,

@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING, Callable
 from loguru import logger
 
 from yoyopod.core import Bus
-from yoyopod.core.ui_state import AppRuntimeState, CoordinatorRuntime
+from yoyopod.core.app_state import AppRuntimeState, AppStateRuntime
 from yoyopod.integrations.call import (
     CallHistoryStore,
     CallRinger,
@@ -32,7 +32,7 @@ class CallCoordinator:
 
     def __init__(
         self,
-        runtime: CoordinatorRuntime,
+        runtime: AppStateRuntime,
         screen_coordinator: ScreenCoordinator,
         auto_resume_after_call: bool,
         config_manager: "ConfigManager | None",

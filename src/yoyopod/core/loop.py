@@ -628,13 +628,13 @@ class RuntimeLoopService:
 
     def log_startup_status(self) -> None:
         """Emit the current runtime snapshot before entering the main loop."""
-        assert self.app.coordinator_runtime is not None
+        assert self.app.app_state_runtime is not None
         logger.info("=" * 60)
         logger.info("YoyoPod Running")
         logger.info("=" * 60)
         logger.info("")
         logger.info("Coordinator Status:")
-        logger.info(f"  Current state: {self.app.coordinator_runtime.get_state_name()}")
+        logger.info(f"  Current state: {self.app.app_state_runtime.get_state_name()}")
         logger.info("")
         logger.info("VoIP Status:")
         if self.app.voip_manager:
@@ -959,13 +959,13 @@ class RuntimeLoopService:
     def _runtime_state_name(self) -> str:
         """Return the current derived app state for diagnostic log context."""
 
-        if self.app.coordinator_runtime is not None:
-            return str(self.app.coordinator_runtime.get_state_name())
+        if self.app.app_state_runtime is not None:
+            return str(self.app.app_state_runtime.get_state_name())
 
         screen_manager = self.app.screen_manager
         current_screen = screen_manager.get_current_screen() if screen_manager is not None else None
         current_route_name = getattr(current_screen, "route_name", None)
-        from yoyopod.core.ui_state import AppRuntimeState
+        from yoyopod.core.app_state import AppRuntimeState
 
         derived_state = AppRuntimeState.ui_state_for_screen_name(current_route_name)
         if derived_state is not None:

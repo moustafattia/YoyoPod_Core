@@ -94,7 +94,7 @@ This is the startup sequence that exists on `main` today.
       - resolves the root route from the active interaction profile
       - pushes `hub` for one-button hardware and `menu` for the standard profile
    5. final runtime wiring
-      - builds `CoordinatorRuntime`, `CallCoordinator`, `PlaybackCoordinator`, `ScreenCoordinator`, and `PowerCoordinator`
+      - builds `AppStateRuntime`, `CallCoordinator`, `PlaybackCoordinator`, `ScreenCoordinator`, and `PowerCoordinator`
       - sets the initial derived UI state
       - binds coordinator subscribers to the typed `Bus`
       - registers VoIP and music backend callbacks
@@ -145,7 +145,7 @@ yoyopod.py / yoyopod.main
         -> music screens
         -> voip screens
      -> music session seam / call-session seam
-      -> CoordinatorRuntime
+      -> AppStateRuntime
       -> CallCoordinator / PlaybackCoordinator / ScreenCoordinator / PowerCoordinator
       -> AppContext
          -> focused runtime state objects (`media`, `power`, `network`, `screen`, `voip`, `talk`, `voice`)
@@ -180,7 +180,7 @@ yoyopod.py / yoyopod.main
 - `src/yoyopod/core/bus.py`, `states.py`, `services.py`, `scheduler.py`: frozen spine primitives
 - `src/yoyopod/core/events.py`: universal state-change and cross-cutting app events only
 - `src/yoyopod/core/focus.py`, `recovery.py`, `status.py`, `diagnostics/`: cross-cutting core modules
-- `src/yoyopod/core/ui_state.py`: derived app runtime state
+- `src/yoyopod/core/app_state.py`: derived app runtime state
 - `src/yoyopod/core/app_context.py`: focused shared runtime state
 - `src/yoyopod/core/runtime_state.py`: focused runtime state objects owned by `AppContext`
 - `src/yoyopod/core/bootstrap/`: boot-time composition and manager wiring
@@ -196,7 +196,7 @@ yoyopod.py / yoyopod.main
 - `src/yoyopod/integrations/music/coordinator.py`: music-flow orchestration
 - `src/yoyopod/integrations/power/coordinator.py`: power and shutdown-related orchestration
 - `src/yoyopod/ui/screens/coordinator.py`: screen refresh and call-screen updates
-- `src/yoyopod/core/ui_state.py`: derived runtime state and shared runtime references
+- `src/yoyopod/core/app_state.py`: derived runtime state and shared runtime references
 
 ### Domains and Backends
 
@@ -291,9 +291,9 @@ Playback and call orchestration use composed models:
 - `MusicFSM` in `src/yoyopod/integrations/music/fsm.py`
 - `CallFSM` in `src/yoyopod/integrations/call/session.py`
 - `CallInterruptionPolicy` in `src/yoyopod/integrations/call/session.py`
-- `CoordinatorRuntime` in `src/yoyopod/core/ui_state.py`
+- `AppStateRuntime` in `src/yoyopod/core/app_state.py`
 
-`CoordinatorRuntime` derives the current application status from those models, including:
+`AppStateRuntime` derives the current application status from those models, including:
 
 - `PLAYING_WITH_VOIP`
 - `PAUSED_BY_CALL`
@@ -355,7 +355,7 @@ For current behavior, trust these files over older notes or demos:
 - `src/yoyopod/core/events.py`
 - `src/yoyopod/core/app_context.py`
 - `src/yoyopod/core/runtime_state.py`
-- `src/yoyopod/core/ui_state.py`
+- `src/yoyopod/core/app_state.py`
 - `src/yoyopod/backends/music/`
 - `src/yoyopod/integrations/music/`
 - `src/yoyopod/backends/voip/`

@@ -11,7 +11,7 @@
 
 ## 1. Goals
 
-The current YoyoPod spine exhibits a pseudo-reactive anti-pattern: 9 of 14 event-bus events are published and subscribed by the **same coordinator class**, so the bus is functioning as a thread-marshaller pretending to be pub/sub. One incoming-call event traverses 7–8 hops (`LiblinphoneBackend → VoIPManager → event_scheduler → callback list → CallCoordinator.publish → EventBus → CallCoordinator.handle`) before any real work runs. Call state lives in 5 places simultaneously — Liblinphone native, `VoIPManager`, `CallFSM`, `CoordinatorRuntime`, and screens — with manual sync bookkeeping in between.
+The current YoyoPod spine exhibits a pseudo-reactive anti-pattern: 9 of 14 event-bus events are published and subscribed by the **same coordinator class**, so the bus is functioning as a thread-marshaller pretending to be pub/sub. One incoming-call event traverses 7–8 hops (`LiblinphoneBackend → VoIPManager → event_scheduler → callback list → CallCoordinator.publish → EventBus → CallCoordinator.handle`) before any real work runs. Call state lives in 5 places simultaneously — Liblinphone native, `VoIPManager`, `CallFSM`, `AppStateRuntime`, and screens — with manual sync bookkeeping in between.
 
 Against Moustafa's maintainability rule ((1) reduce the layers a reader traces, (2) reduce the state a reader holds in their head), both axes are over budget.
 
@@ -26,7 +26,7 @@ Phase A rewrites the spine to a single consistent model inspired by Home Assista
 - `CallState` change path: ≤5 hops, top-down readable.
 - All state transitions recorded to `events.jsonl` as structured JSON for LLM-driven debugging.
 - `app.py` shrinks from ~685 LOC to ~150 LOC.
-- The entire "coordinator" concept (CallCoordinator, PlaybackCoordinator, ScreenCoordinator, PowerCoordinator, CoordinatorRuntime, AppRuntimeState) deleted.
+- The entire "coordinator" concept (CallCoordinator, PlaybackCoordinator, ScreenCoordinator, PowerCoordinator, AppStateRuntime, AppRuntimeState) deleted.
 - No core-owned MusicFSM / CallFSM / CallInterruptionPolicy surface remains; any transitional implementations live under the owning integrations until the state-store cutover finishes.
 - VoIPManager's 4 private callback lists deleted.
 - Adding a new cross-cutting observer (LED status, cloud telemetry, metrics) = one new file, zero changes to existing integrations.
@@ -517,8 +517,8 @@ Retained for human-readable `info`/`warn`/`error` lines. Complementary to the st
 | `MusicFSM` | `src/yoyopod/integrations/music/fsm.py` | Transitional 3-state seam; still planned for removal in favor of `app.states.get("music.state")` |
 | `CallFSM` | `src/yoyopod/integrations/call/session.py` | Replaced by `app.states.get("call.state")` |
 | `CallInterruptionPolicy` | `src/yoyopod/integrations/call/session.py` | Replaced by `core/focus.py` audio-focus arbitration |
-| `AppRuntimeState` enum | `src/yoyopod/core/ui_state.py` | 18 cross-product values become direct state reads per entity |
-| `CoordinatorRuntime` | `src/yoyopod/core/ui_state.py` | Aggregate view replaced by `app.states.all()` + direct reads |
+| `AppRuntimeState` enum | `src/yoyopod/core/app_state.py` | 18 cross-product values become direct state reads per entity |
+| `AppStateRuntime` | `src/yoyopod/core/app_state.py` | Aggregate view replaced by `app.states.all()` + direct reads |
 | `CallCoordinator` | `src/yoyopod/integrations/call/coordinator.py` | Logic into `integrations/call/handlers.py` |
 | `PlaybackCoordinator` | `src/yoyopod/integrations/music/coordinator.py` | Logic into `integrations/music/handlers.py` |
 | `ScreenCoordinator` | `src/yoyopod/ui/screens/coordinator.py` | Push/pop into `ScreenManager`; refresh-if-visible becomes subscription |
@@ -662,7 +662,7 @@ Chosen explicitly by Moustafa over M-Incremental. Main branch frozen for the dur
 
 11. **Screen touch-up.** All 17 screens migrated to new pattern.
 
-12. **Dead-code removal.** Delete FSMs, CoordinatorRuntime, AppRuntimeState, all coordinators, RuntimeBootService, RuntimeLoopService, ShutdownLifecycleService, RuntimeEventWiring, AppContext. `app.py` shrinks.
+12. **Dead-code removal.** Delete FSMs, AppStateRuntime, AppRuntimeState, all coordinators, RuntimeBootService, RuntimeLoopService, ShutdownLifecycleService, RuntimeEventWiring, AppContext. `app.py` shrinks.
 
 13. **Final sweep.** Double-check no `yoyoctl` references, no lingering managers outside integrations/, tests clean, docs updated. `docs/RUNTIME_EVENT_FLOW.md` archived or rewritten.
 

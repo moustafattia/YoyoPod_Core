@@ -50,7 +50,7 @@ YoyoPodApp
   -> integrations.power.PowerCoordinator
      -> Bus
      -> PowerSafetyPolicy
-     -> AppContext / CoordinatorRuntime
+     -> AppContext / AppStateRuntime
      -> current screen refresh
 ```
 

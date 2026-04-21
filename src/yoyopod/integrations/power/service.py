@@ -96,7 +96,7 @@ class PowerRuntimeService:
         if self.app.power_manager is None:
             return
 
-        runtime = self.app.coordinator_runtime
+        runtime = self.app.app_state_runtime
         if runtime is None or self.app.power_coordinator is None:
             return
         if runtime.power_snapshot is None:
@@ -107,7 +107,7 @@ class PowerRuntimeService:
     def _publish_snapshot(self, *, snapshot: "PowerSnapshot") -> None:
         """Publish one power snapshot onto the coordinator thread."""
 
-        runtime = self.app.coordinator_runtime
+        runtime = self.app.app_state_runtime
         power_coordinator = self.app.power_coordinator
         if runtime is None or power_coordinator is None:
             return

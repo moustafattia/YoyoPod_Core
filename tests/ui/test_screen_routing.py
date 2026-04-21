@@ -80,7 +80,7 @@ class FakeLvglPumpApp:
         self._lvgl_input_bridge = None
         self._last_lvgl_pump_at = 0.0
         self._voip_iterate_interval_seconds = 0.02
-        self.coordinator_runtime = None
+        self.app_state_runtime = None
         self.bus = SimpleNamespace(pending_count=lambda: 0)
         self.scheduler = SimpleNamespace(pending_count=lambda: 0)
 

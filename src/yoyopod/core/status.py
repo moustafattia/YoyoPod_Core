@@ -82,7 +82,7 @@ class RuntimeStatusService:
                 self.app._pending_shutdown.execute_at - monotonic_now,
             )
 
-        assert self.app.coordinator_runtime is not None
+        assert self.app.app_state_runtime is not None
         assert self.app.call_interruption_policy is not None
         current_screen = (
             self.app.screen_manager.get_current_screen()
@@ -94,7 +94,7 @@ class RuntimeStatusService:
         )
 
         return {
-            "state": self.app.coordinator_runtime.get_state_name(),
+            "state": self.app.app_state_runtime.get_state_name(),
             "voip_registered": self.app.voip_registered,
             "music_was_playing": self.app.call_interruption_policy.music_interrupted_by_call,
             "auto_resume": self.app.auto_resume_after_call,

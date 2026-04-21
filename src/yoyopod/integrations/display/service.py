@@ -59,7 +59,7 @@ class ScreenPowerService:
 
     def handle_screen_changed_event(self, event: ScreenChangedEvent) -> None:
         """Apply queued screen-change state sync on the coordinator thread."""
-        runtime = self.app.coordinator_runtime
+        runtime = self.app.app_state_runtime
         if runtime is not None:
             runtime.sync_ui_state_for_screen(event.screen_name)
         self.mark_user_activity(now=time.monotonic(), render_on_wake=False)
