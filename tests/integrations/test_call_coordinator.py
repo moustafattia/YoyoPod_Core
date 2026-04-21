@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 from pathlib import Path
 
 from yoyopod.core import AppContext
@@ -80,39 +79,13 @@ class _VoipManagerStub:
         return action
 
 
-@dataclass
-class _ScreenStub:
-    voip_manager: _VoipManagerStub
-
-
-def _build_runtime(
-    *,
-    config_manager: _ConfigManagerStub,
-    context: AppContext,
-    voip_manager: _VoipManagerStub | None = None,
-) -> CoordinatorRuntime:
+def _build_runtime() -> CoordinatorRuntime:
     """Create the minimal coordinator runtime required by CallCoordinator."""
-
-    call_screen = _ScreenStub(voip_manager) if voip_manager is not None else None
-    incoming_call_screen = _ScreenStub(voip_manager) if voip_manager is not None else None
-    outgoing_call_screen = _ScreenStub(voip_manager) if voip_manager is not None else None
-    in_call_screen = _ScreenStub(voip_manager) if voip_manager is not None else None
 
     return CoordinatorRuntime(
         music_fsm=MusicFSM(),
         call_fsm=CallFSM(),
         call_interruption_policy=CallInterruptionPolicy(),
-        screen_manager=None,
-        music_backend=None,
-        power_manager=None,
-        now_playing_screen=None,
-        call_screen=call_screen,
-        power_screen=None,
-        incoming_call_screen=incoming_call_screen,
-        outgoing_call_screen=outgoing_call_screen,
-        in_call_screen=in_call_screen,
-        config_manager=config_manager,
-        context=context,
     )
 
 
@@ -120,15 +93,17 @@ def test_registration_change_uses_config_manager_for_voip_configured_status() ->
     """VoIP status should come from the canonical config manager, not legacy app config dicts."""
 
     context = AppContext()
-    runtime = _build_runtime(
-        config_manager=_ConfigManagerStub(sip_username="kid@example.com"),
-        context=context,
-    )
+    config_manager = _ConfigManagerStub(sip_username="kid@example.com")
+    runtime = _build_runtime()
     screen_coordinator = _ScreenCoordinatorStub()
     coordinator = CallCoordinator(
         runtime=runtime,
         screen_coordinator=screen_coordinator,
         auto_resume_after_call=True,
+        config_manager=config_manager,
+        context=context,
+        music_backend=None,
+        voip_manager_provider=lambda: None,
     )
 
     coordinator.handle_registration_change(RegistrationState.OK)
@@ -145,14 +120,16 @@ def test_availability_change_uses_reported_registration_state() -> None:
     """Availability changes should cache the registration state reported by the backend."""
 
     context = AppContext()
-    runtime = _build_runtime(
-        config_manager=_ConfigManagerStub(sip_username="kid@example.com"),
-        context=context,
-    )
+    config_manager = _ConfigManagerStub(sip_username="kid@example.com")
+    runtime = _build_runtime()
     coordinator = CallCoordinator(
         runtime=runtime,
         screen_coordinator=_ScreenCoordinatorStub(),
         auto_resume_after_call=True,
+        config_manager=config_manager,
+        context=context,
+        music_backend=None,
+        voip_manager_provider=lambda: None,
     )
 
     coordinator.handle_availability_change(False, "backend_stopped", RegistrationState.NONE)
@@ -168,15 +145,16 @@ def test_terminal_call_states_record_rejected_and_failed_history(tmp_path: Path)
 
     context = AppContext()
     voip_manager = _VoipManagerStub()
-    runtime = _build_runtime(
-        config_manager=_ConfigManagerStub(sip_username="kid@example.com"),
-        context=context,
-        voip_manager=voip_manager,
-    )
+    config_manager = _ConfigManagerStub(sip_username="kid@example.com")
+    runtime = _build_runtime()
     coordinator = CallCoordinator(
         runtime=runtime,
         screen_coordinator=_ScreenCoordinatorStub(),
         auto_resume_after_call=True,
+        config_manager=config_manager,
+        context=context,
+        music_backend=None,
+        voip_manager_provider=lambda: voip_manager,
         call_history_store=CallHistoryStore(tmp_path / "call_history.json"),
     )
 

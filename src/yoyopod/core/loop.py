@@ -965,9 +965,9 @@ class RuntimeLoopService:
         screen_manager = self.app.screen_manager
         current_screen = screen_manager.get_current_screen() if screen_manager is not None else None
         current_route_name = getattr(current_screen, "route_name", None)
-        from yoyopod.core.ui_state import CoordinatorRuntime
+        from yoyopod.core.ui_state import AppRuntimeState
 
-        derived_state = CoordinatorRuntime.ui_state_for_screen_name(current_route_name)
+        derived_state = AppRuntimeState.ui_state_for_screen_name(current_route_name)
         if derived_state is not None:
             return str(derived_state.value)
         return "idle"

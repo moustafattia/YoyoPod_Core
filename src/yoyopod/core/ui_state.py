@@ -16,18 +16,7 @@ from yoyopod.integrations.call import (
 from yoyopod.integrations.music import MusicFSM, MusicState
 
 if TYPE_CHECKING:
-    from yoyopod.backends.music import MusicBackend
-    from yoyopod.config import ConfigManager
-    from yoyopod.core import AppContext
-    from yoyopod.integrations.power import PowerManager
     from yoyopod.integrations.power.models import PowerSnapshot
-    from yoyopod.ui.screens.manager import ScreenManager
-    from yoyopod.ui.screens.music.now_playing import NowPlayingScreen
-    from yoyopod.ui.screens.system.power import PowerScreen
-    from yoyopod.ui.screens.voip.in_call import InCallScreen
-    from yoyopod.ui.screens.voip.incoming_call import IncomingCallScreen
-    from yoyopod.ui.screens.voip.outgoing_call import OutgoingCallScreen
-    from yoyopod.ui.screens.voip.quick_call import CallScreen
 
 
 class AppRuntimeState(Enum):
@@ -52,6 +41,40 @@ class AppRuntimeState(Enum):
     PAUSED_BY_CALL = "paused_by_call"
     CALL_ACTIVE_MUSIC_PAUSED = "call_active_music_paused"
 
+    @classmethod
+    def ui_state_for_screen_name(cls, screen_name: str | None) -> AppRuntimeState | None:
+        """Return the base UI state mapped to one concrete route name."""
+
+        if screen_name is None:
+            return None
+        return _STATE_BY_SCREEN_NAME.get(screen_name)
+
+
+_UI_STATES = {
+    AppRuntimeState.IDLE,
+    AppRuntimeState.HUB,
+    AppRuntimeState.MENU,
+    AppRuntimeState.SETTINGS,
+    AppRuntimeState.PLAYLIST,
+    AppRuntimeState.PLAYLIST_BROWSER,
+    AppRuntimeState.POWER,
+    AppRuntimeState.CALL_IDLE,
+    AppRuntimeState.CONNECTING,
+    AppRuntimeState.ERROR,
+}
+
+_STATE_BY_SCREEN_NAME = {
+    "home": AppRuntimeState.IDLE,
+    "hub": AppRuntimeState.HUB,
+    "menu": AppRuntimeState.MENU,
+    "listen": AppRuntimeState.PLAYLIST_BROWSER,
+    "ask": AppRuntimeState.SETTINGS,
+    "playlists": AppRuntimeState.PLAYLIST_BROWSER,
+    "power": AppRuntimeState.POWER,
+    "call": AppRuntimeState.CALL_IDLE,
+    "contacts": AppRuntimeState.CALL_IDLE,
+}
+
 
 @dataclass(frozen=True, slots=True)
 class AppStateChange:
@@ -73,22 +96,11 @@ class AppStateChange:
 
 @dataclass(slots=True)
 class CoordinatorRuntime:
-    """Shared app runtime references used by coordinator modules."""
+    """Shared derived app-state used by coordinator modules."""
 
     music_fsm: MusicFSM
     call_fsm: CallFSM
     call_interruption_policy: CallInterruptionPolicy
-    screen_manager: ScreenManager | None
-    power_manager: PowerManager | None
-    now_playing_screen: NowPlayingScreen | None
-    call_screen: CallScreen | None
-    power_screen: PowerScreen | None
-    incoming_call_screen: IncomingCallScreen | None
-    outgoing_call_screen: OutgoingCallScreen | None
-    in_call_screen: InCallScreen | None
-    config_manager: ConfigManager | None
-    music_backend: MusicBackend | None = None
-    context: AppContext | None = None
     ui_state: AppRuntimeState = AppRuntimeState.IDLE
     voip_ready: bool = False
     power_available: bool = False
@@ -96,30 +108,6 @@ class CoordinatorRuntime:
     current_app_state: AppRuntimeState = field(init=False)
     previous_app_state: AppRuntimeState | None = field(init=False, default=None)
     state_history: list[AppRuntimeState] = field(init=False, default_factory=list)
-
-    _UI_STATES = {
-        AppRuntimeState.IDLE,
-        AppRuntimeState.HUB,
-        AppRuntimeState.MENU,
-        AppRuntimeState.SETTINGS,
-        AppRuntimeState.PLAYLIST,
-        AppRuntimeState.PLAYLIST_BROWSER,
-        AppRuntimeState.POWER,
-        AppRuntimeState.CALL_IDLE,
-        AppRuntimeState.CONNECTING,
-        AppRuntimeState.ERROR,
-    }
-    _STATE_BY_SCREEN_NAME = {
-        "home": AppRuntimeState.IDLE,
-        "hub": AppRuntimeState.HUB,
-        "menu": AppRuntimeState.MENU,
-        "listen": AppRuntimeState.PLAYLIST_BROWSER,
-        "ask": AppRuntimeState.SETTINGS,
-        "playlists": AppRuntimeState.PLAYLIST_BROWSER,
-        "power": AppRuntimeState.POWER,
-        "call": AppRuntimeState.CALL_IDLE,
-        "contacts": AppRuntimeState.CALL_IDLE,
-    }
 
     def __post_init__(self) -> None:
         self.current_app_state = self._derive_state()
@@ -185,7 +173,7 @@ class CoordinatorRuntime:
         trigger: str = "ui_state",
     ) -> AppStateChange:
         """Update the base UI state used when music and calls are idle."""
-        if state not in self._UI_STATES:
+        if state not in _UI_STATES:
             raise ValueError(f"{state.value} is not a base UI state")
 
         self.ui_state = state
@@ -208,49 +196,11 @@ class CoordinatorRuntime:
 
     def sync_ui_state_for_screen(self, screen_name: str | None) -> AppStateChange | None:
         """Update the base UI state for non-call overlay screens."""
-        resolved_state = self.ui_state_for_screen_name(screen_name)
+        resolved_state = AppRuntimeState.ui_state_for_screen_name(screen_name)
         if resolved_state is None:
             return None
 
         return self.set_ui_state(resolved_state, trigger=f"screen:{screen_name}")
-
-    @classmethod
-    def ui_state_for_screen_name(cls, screen_name: str | None) -> AppRuntimeState | None:
-        """Return the base UI state mapped to one concrete route name."""
-
-        if screen_name is None:
-            return None
-        return cls._STATE_BY_SCREEN_NAME.get(screen_name)
-
-    def current_voip_manager(self) -> object | None:
-        """Return the shared VoIP manager exposed by any registered call screen."""
-
-        for screen in (
-            self.call_screen,
-            self.outgoing_call_screen,
-            self.incoming_call_screen,
-            self.in_call_screen,
-        ):
-            voip_manager = getattr(screen, "voip_manager", None)
-            if voip_manager is not None:
-                return voip_manager
-        return None
-
-    def current_caller_info(self) -> dict[str, str]:
-        """Return the current caller/callee metadata from the shared VoIP manager."""
-
-        voip_manager = self.current_voip_manager()
-        if voip_manager is None:
-            return {}
-        return dict(voip_manager.get_caller_info())
-
-    def current_call_duration_seconds(self) -> int:
-        """Return the current call duration reported by the shared VoIP manager."""
-
-        voip_manager = self.current_voip_manager()
-        if voip_manager is None:
-            return 0
-        return int(voip_manager.get_call_duration())
 
     def get_state_name(self) -> str:
         """Return the current derived app-state name."""

@@ -18,6 +18,8 @@ from yoyopod.ui.screens.coordinator import ScreenCoordinator
 
 if TYPE_CHECKING:
     from yoyopod.integrations.cloud.manager import CloudManager
+    from yoyopod.integrations.power import PowerManager
+    from yoyopod.ui.screens.manager import ScreenManager
 
 
 class PowerCoordinator:
@@ -27,15 +29,19 @@ class PowerCoordinator:
         self,
         runtime: CoordinatorRuntime,
         screen_coordinator: ScreenCoordinator,
+        power_manager: "PowerManager | None",
+        screen_manager: "ScreenManager | None",
         context: AppContext,
         now_provider: Callable[[], float] | None = None,
         cloud_manager: "CloudManager | None" = None,
     ) -> None:
         self.runtime = runtime
         self.screen_coordinator = screen_coordinator
+        self.power_manager = power_manager
+        self.screen_manager = screen_manager
         self.context = context
         self.cloud_manager = cloud_manager
-        power_config = runtime.power_manager.config if runtime.power_manager is not None else None
+        power_config = power_manager.config if power_manager is not None else None
         self.policy = PowerSafetyPolicy(power_config) if power_config is not None else None
         self.now_provider = now_provider or time.monotonic
         self._bus: Bus | None = None
@@ -58,8 +64,8 @@ class PowerCoordinator:
         """Apply the latest power telemetry to runtime and UI state."""
         previous_signature = self._snapshot_signature(self.runtime.power_snapshot)
         current_screen = (
-            self.runtime.screen_manager.get_current_screen()
-            if self.runtime.screen_manager is not None
+            self.screen_manager.get_current_screen()
+            if self.screen_manager is not None
             else None
         )
         current_route_name = current_screen.route_name if current_screen is not None else None

@@ -37,33 +37,30 @@ class CoordinatorsBoot:
             else None
         )
         current_route_name = current_screen.route_name if current_screen is not None else None
-        initial_ui_state = (
-            CoordinatorRuntime.ui_state_for_screen_name(current_route_name)
-            or AppRuntimeState.IDLE
-        )
+        initial_ui_state = AppRuntimeState.ui_state_for_screen_name(current_route_name) or AppRuntimeState.IDLE
         self.app.coordinator_runtime = CoordinatorRuntime(
             music_fsm=self.app.music_fsm,
             call_fsm=self.app.call_fsm,
             call_interruption_policy=self.app.call_interruption_policy,
-            screen_manager=self.app.screen_manager,
-            music_backend=self.app.music_backend,
-            power_manager=self.app.power_manager,
-            now_playing_screen=self.app.now_playing_screen,
-            call_screen=self.app.call_screen,
-            power_screen=self.app.power_screen,
-            incoming_call_screen=self.app.incoming_call_screen,
-            outgoing_call_screen=self.app.outgoing_call_screen,
-            in_call_screen=self.app.in_call_screen,
-            config_manager=self.app.config_manager,
-            context=self.app.context,
             ui_state=initial_ui_state,
             voip_ready=self.app._voip_registered,
         )
-        self.app.screen_coordinator = ScreenCoordinator(self.app.coordinator_runtime)
+        self.app.screen_coordinator = ScreenCoordinator(
+            screen_manager=self.app.screen_manager,
+            now_playing_screen=self.app.now_playing_screen,
+            call_screen=self.app.call_screen,
+            incoming_call_screen=self.app.incoming_call_screen,
+            outgoing_call_screen=self.app.outgoing_call_screen,
+            in_call_screen=self.app.in_call_screen,
+        )
         self.app.call_coordinator = CallCoordinator(
             runtime=self.app.coordinator_runtime,
             screen_coordinator=self.app.screen_coordinator,
             auto_resume_after_call=self.app.auto_resume_after_call,
+            config_manager=self.app.config_manager,
+            context=self.app.context,
+            music_backend=self.app.music_backend,
+            voip_manager_provider=lambda: self.app.voip_manager,
             call_history_store=self.app.call_history_store,
             initial_voip_registered=self.app._voip_registered,
         )
@@ -75,6 +72,8 @@ class CoordinatorsBoot:
         self.app.power_coordinator = PowerCoordinator(
             runtime=self.app.coordinator_runtime,
             screen_coordinator=self.app.screen_coordinator,
+            power_manager=self.app.power_manager,
+            screen_manager=self.app.screen_manager,
             context=self.app.context,
             cloud_manager=self.app.cloud_manager,
         )

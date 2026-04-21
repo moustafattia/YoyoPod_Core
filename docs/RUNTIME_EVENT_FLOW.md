@@ -76,11 +76,11 @@ Canonical owner:
 ### `CoordinatorRuntime`
 
 Owns:
-- shared references needed by extracted coordinators
 - derived app-state calculation
 - base UI state vs call/music overlay state
+- shared derived state such as VoIP readiness and the latest power snapshot
 
-It does not listen to events itself. It is the shared state and derived-state authority used by the coordinators.
+It does not listen to events itself. It is the shared derived-state authority used by the coordinators, not a bag of screen/backend/config references.
 
 ### `CallCoordinator`
 

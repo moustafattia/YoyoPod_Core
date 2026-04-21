@@ -299,6 +299,8 @@ Playback and call orchestration use composed models:
 - `PAUSED_BY_CALL`
 - `CALL_ACTIVE_MUSIC_PAUSED`
 
+It also retains the small shared derived-state surface needed by runtime services, specifically the base UI state fallback, VoIP readiness, and the latest power snapshot.
+
 Runtime services and coordinators listen to:
 
 - music-backend playback changes

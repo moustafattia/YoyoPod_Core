@@ -1505,7 +1505,7 @@ def test_standard_profile_starts_on_menu() -> None:
     app.input_manager = InputManager(interaction_profile=InteractionProfile.STANDARD)
 
     assert app.boot_service.get_initial_screen_name() == "menu"
-    assert CoordinatorRuntime.ui_state_for_screen_name("menu") == AppRuntimeState.MENU
+    assert AppRuntimeState.ui_state_for_screen_name("menu") == AppRuntimeState.MENU
 
 
 def test_one_button_profile_starts_on_hub() -> None:
@@ -1515,7 +1515,7 @@ def test_one_button_profile_starts_on_hub() -> None:
     app.input_manager = InputManager(interaction_profile=InteractionProfile.ONE_BUTTON)
 
     assert app.boot_service.get_initial_screen_name() == "hub"
-    assert CoordinatorRuntime.ui_state_for_screen_name("hub") == AppRuntimeState.HUB
+    assert AppRuntimeState.ui_state_for_screen_name("hub") == AppRuntimeState.HUB
 
 
 def test_power_poll_updates_context_runtime_and_visible_screen() -> None:
