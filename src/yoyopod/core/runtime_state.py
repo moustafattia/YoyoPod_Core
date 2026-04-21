@@ -7,7 +7,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
-from yoyopod.audio.music.models import PlaybackQueue, Track
+from yoyopod.backends.music import PlaybackQueue, Track
 
 if TYPE_CHECKING:
     from yoyopod.power.models import PowerSnapshot

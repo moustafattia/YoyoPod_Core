@@ -34,8 +34,8 @@ Responsibilities:
 
 ### Music Layer
 
-- `src/yoyopod/audio/music/backend.py`
-- `src/yoyopod/audio/local_service.py`
+- `src/yoyopod/backends/music/mpv.py`
+- `src/yoyopod/integrations/music/library.py`
 
 Responsibilities:
 

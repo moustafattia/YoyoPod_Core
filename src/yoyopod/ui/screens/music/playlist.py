@@ -6,8 +6,8 @@ from typing import TYPE_CHECKING, Any, Optional
 
 from loguru import logger
 
-from yoyopod.audio.music import LocalMusicService
 from yoyopod.integrations.music import LoadPlaylistCommand
+from yoyopod.integrations.music import LocalMusicService
 from yoyopod.ui.display import Display
 from yoyopod.ui.screens.lvgl_lifecycle import current_retained_view
 from yoyopod.ui.screens.base import Screen

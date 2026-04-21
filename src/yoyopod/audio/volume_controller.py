@@ -9,7 +9,7 @@ from loguru import logger
 from yoyopod.audio.volume import OutputVolumeController
 
 if TYPE_CHECKING:
-    from yoyopod.audio.music.backend import MusicBackend
+    from yoyopod.backends.music import MusicBackend
     from yoyopod.core import AppContext
 
 

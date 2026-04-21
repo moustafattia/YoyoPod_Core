@@ -3,7 +3,7 @@
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
-from yoyopod.audio.music.models import PlaybackQueue, Track
+from yoyopod.backends.music import PlaybackQueue, Track
 from yoyopod.core.runtime_state import (
     ActiveVoiceNoteState,
     MediaRuntimeState,

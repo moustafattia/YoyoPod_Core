@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING
 from loguru import logger
 
 if TYPE_CHECKING:
-    from yoyopod.audio.music.backend import MusicBackend
+    from yoyopod.backends.music import MusicBackend
 
 
 _PERCENT_RE = re.compile(r"\[(\d{1,3})%\]")

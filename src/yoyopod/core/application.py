@@ -12,13 +12,8 @@ from typing import TYPE_CHECKING, Any, Optional
 
 from loguru import logger
 
-from yoyopod.audio import (
-    AudioVolumeController,
-    LocalMusicService,
-    MpvBackend,
-    OutputVolumeController,
-    RecentTrackHistoryStore,
-)
+from yoyopod.audio import AudioVolumeController, OutputVolumeController
+from yoyopod.backends.music import MpvBackend
 from yoyopod.config import ConfigManager, MediaConfig, YoyoPodConfig
 from yoyopod.coordinators import (
     CallCoordinator,
@@ -46,6 +41,7 @@ from yoyopod.integrations.call import (
 )
 from yoyopod.integrations.cloud.manager import CloudManager
 from yoyopod.integrations.contacts.directory import PeopleManager
+from yoyopod.integrations.music import LocalMusicService, RecentTrackHistoryStore
 from yoyopod.integrations.network import NetworkManager
 from yoyopod.integrations.power import PowerManager
 from yoyopod.runtime.boot import RuntimeBootService

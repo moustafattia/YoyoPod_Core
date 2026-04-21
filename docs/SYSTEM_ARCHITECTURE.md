@@ -146,7 +146,7 @@ yoyopod.py / yoyopod.main
       -> CallCoordinator / PlaybackCoordinator / ScreenCoordinator / PowerCoordinator
       -> AppContext
          -> focused runtime state objects (`media`, `power`, `network`, `screen`, `voip`, `talk`, `voice`)
-         -> media state composes with canonical music models from `src/yoyopod/audio/music/models.py`
+         -> media state composes with canonical music models from `src/yoyopod/backends/music/models.py`
       -> LocalMusicService
       -> MpvBackend
         -> MpvProcess
@@ -333,7 +333,7 @@ Use that document when you need:
 - current incoming-call, playback, power, network, and recovery paths
 - known seams where runtime ownership is still split or overloaded
 
-Shared music-domain model ownership still lives in `src/yoyopod/audio/music/models.py`.
+Shared music-domain model ownership now lives in `src/yoyopod/backends/music/models.py`.
 `Track` is the canonical track shape, `Playlist` is the local-library playlist
 summary, and `PlaybackQueue` is the runtime ordered queue used when the app
 needs selected-track state.
@@ -357,7 +357,8 @@ For current behavior, trust these files over older notes or demos:
 - `src/yoyopod/app.py`
 - `src/yoyopod/fsm.py`
 - `src/yoyopod/coordinators/registry.py`
-- `src/yoyopod/audio/`
+- `src/yoyopod/backends/music/`
+- `src/yoyopod/integrations/music/`
 - `src/yoyopod/communication/`
 - `src/yoyopod/integrations/contacts/`
 - `src/yoyopod/integrations/network/`

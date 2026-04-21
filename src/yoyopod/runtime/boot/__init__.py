@@ -7,18 +7,14 @@ from typing import TYPE_CHECKING
 
 from loguru import logger
 
-from yoyopod.audio import (
-    LocalMusicService,
-    MpvBackend,
-    MusicConfig,
-    OutputVolumeController,
-    RecentTrackHistoryStore,
-)
+from yoyopod.audio import OutputVolumeController
+from yoyopod.backends.music import MpvBackend, MusicConfig
 from yoyopod.config import ConfigManager
 from yoyopod.core.hardware import AudioDeviceCatalog
 from yoyopod.integrations.call import CallHistoryStore, VoIPConfig, VoIPManager
 from yoyopod.integrations.cloud.manager import CloudManager
 from yoyopod.integrations.contacts.directory import PeopleManager
+from yoyopod.integrations.music import LocalMusicService, RecentTrackHistoryStore
 from yoyopod.integrations.network import NetworkManager
 from yoyopod.integrations.power import PowerManager
 from yoyopod.ui.display import Display

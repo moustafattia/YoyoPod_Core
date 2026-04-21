@@ -34,7 +34,7 @@ That means the app does not yet have one global audio hardware contract. Device 
 
 ### Music
 
-- `src/yoyopod/audio/music/process.py` launches `mpv` with one ALSA target
+- `src/yoyopod/backends/music/process.py` launches `mpv` with one ALSA target
 - `src/yoyopod/audio/volume.py` owns app-facing output volume and writes selected ALSA output controls
 
 ### Calls
@@ -115,8 +115,8 @@ Add one app-facing facade, for example:
 
 Suggested home:
 
-- `src/yoyopod/audio/devices.py`
-- or `src/yoyopod/audio/hardware.py`
+- `src/yoyopod/core/hardware.py`
+- or a focused `src/yoyopod/core/audio_hardware.py` split if the model grows
 
 Primary responsibilities:
 

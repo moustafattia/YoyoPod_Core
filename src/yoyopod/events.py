@@ -1,6 +1,6 @@
 """Compatibility exports for relocated typed application events."""
 
-from yoyopod.audio.music.models import Track
+from yoyopod.backends.music import Track
 from yoyopod.integrations.call.models import CallState, RegistrationState
 from yoyopod.core.events import (
     AudioFocusGrantedEvent,

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, Optional
 
-from yoyopod.audio.music import LocalLibraryItem, LocalMusicService
+from yoyopod.integrations.music import LocalLibraryItem, LocalMusicService
 from yoyopod.integrations.music import ShuffleAllCommand
 from yoyopod.ui.display import Display
 from yoyopod.ui.screens.base import Screen

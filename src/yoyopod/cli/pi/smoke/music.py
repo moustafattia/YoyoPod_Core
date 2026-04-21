@@ -37,7 +37,8 @@ def _music_check(
     expected_library: "ProvisionedTestMusicLibrary | None" = None,
 ) -> CheckResult:
     """Validate music-backend startup and basic state queries."""
-    from yoyopod.audio import LocalMusicService, MpvBackend, MusicConfig
+    from yoyopod.backends.music import MpvBackend, MusicConfig
+    from yoyopod.integrations.music import LocalMusicService
 
     config = MusicConfig.from_media_settings(media_settings)
     backend = MpvBackend(config)

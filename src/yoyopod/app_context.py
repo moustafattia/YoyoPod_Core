@@ -2,7 +2,7 @@
 
 from loguru import logger
 
-from yoyopod.audio.music.models import PlaybackQueue, Track
+from yoyopod.backends.music import PlaybackQueue, Track
 from yoyopod.core.app_context import (
     ActiveVoiceNoteState,
     AppContext,

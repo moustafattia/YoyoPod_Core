@@ -8,6 +8,13 @@ import types
 from pathlib import Path
 
 from yoyopod.audio.music.models import Track as MusicTrack
+from yoyopod.audio import (
+    LocalMusicService as LegacyLocalMusicService,
+    MockMusicBackend as LegacyMockMusicBackend,
+    MpvBackend as LegacyMpvBackend,
+    MusicConfig as LegacyMusicConfig,
+    RecentTrackHistoryStore as LegacyRecentTrackHistoryStore,
+)
 from yoyopod.app_context import (
     AppContext,
     InteractionProfile as AppContextInteractionProfile,
@@ -28,6 +35,10 @@ from yoyopod.core.setup_contract import (
 from yoyopod.backends.cloud import CloudClientError as BackendCloudClientError
 from yoyopod.backends.cloud import CloudDeviceClient as BackendCloudDeviceClient
 from yoyopod.backends.cloud import DeviceMqttClient as BackendDeviceMqttClient
+from yoyopod.backends.music import MockMusicBackend as BackendMockMusicBackend
+from yoyopod.backends.music import MpvBackend as BackendMpvBackend
+from yoyopod.backends.music import MusicConfig as BackendMusicConfig
+from yoyopod.backends.music import Track as BackendMusicTrack
 from yoyopod.backends.power import PiSugarBackend as BackendPiSugarBackend
 from yoyopod.backends.power import PiSugarWatchdog as BackendPiSugarWatchdog
 from yoyopod.backends.voice import AlsaOutputPlayer as BackendAlsaOutputPlayer
@@ -69,6 +80,8 @@ from yoyopod.integrations.call import VoIPMessageRecord as IntegrationVoIPMessag
 from yoyopod.integrations.call import VoIPMessageStore as IntegrationVoIPMessageStore
 from yoyopod.integrations.call import VoiceNoteDraft as IntegrationVoiceNoteDraft
 from yoyopod.integrations.location.events import NetworkGpsFixEvent as IntegrationNetworkGpsFixEvent
+from yoyopod.integrations.music import LocalMusicService as IntegrationLocalMusicService
+from yoyopod.integrations.music import RecentTrackHistoryStore as IntegrationRecentTrackHistoryStore
 from yoyopod.integrations.music.events import TrackChangedEvent as IntegrationTrackChangedEvent
 from yoyopod.integrations.network.events import NetworkPppUpEvent as IntegrationNetworkPppUpEvent
 from yoyopod.integrations.power import BatteryState as IntegrationBatteryState
@@ -202,6 +215,7 @@ def test_legacy_core_import_paths_resolve_to_relocated_symbols() -> None:
     assert NetworkGpsFixEvent is IntegrationNetworkGpsFixEvent
     assert NetworkPppUpEvent is IntegrationNetworkPppUpEvent
     assert Track is MusicTrack
+    assert MusicTrack is BackendMusicTrack
     assert TrackChangedEvent is CoreTrackChangedEvent
     assert TrackChangedEvent is IntegrationTrackChangedEvent
     assert MusicFSM is CoreMusicFSM
@@ -216,6 +230,16 @@ def test_legacy_core_import_paths_resolve_to_relocated_symbols() -> None:
     assert RootEventBus is EventBus
     assert RootMusicFSM is MusicFSM
     assert RootCallFSM is IntegrationCallFSM
+
+
+def test_legacy_audio_import_paths_resolve_to_relocated_music_symbols() -> None:
+    """Legacy audio imports should point at the canonical music seams."""
+
+    assert LegacyMpvBackend is BackendMpvBackend
+    assert LegacyMockMusicBackend is BackendMockMusicBackend
+    assert LegacyMusicConfig is BackendMusicConfig
+    assert LegacyLocalMusicService is IntegrationLocalMusicService
+    assert LegacyRecentTrackHistoryStore is IntegrationRecentTrackHistoryStore
 
 
 def test_legacy_core_call_state_imports_resolve_to_relocated_symbols() -> None:

@@ -34,7 +34,7 @@ from yoyopod.integrations.music.handlers import (
 )
 from yoyopod.integrations.music.history import RecentTrackHistoryStore
 from yoyopod.integrations.music.history import RecentTrackEntry
-from yoyopod.integrations.music.library import LocalMusicService
+from yoyopod.integrations.music.library import LocalLibraryItem, LocalMusicService
 
 if TYPE_CHECKING:
     from yoyopod.backends.music import MusicBackend, MusicConfig, Track
@@ -52,6 +52,7 @@ class MusicIntegration:
 
 __all__ = [
     "LoadPlaylistCommand",
+    "LocalLibraryItem",
     "LocalMusicService",
     "MusicIntegration",
     "MusicAvailabilityChangedEvent",

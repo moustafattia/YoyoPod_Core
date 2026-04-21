@@ -20,8 +20,8 @@ from yoyopod.ui.screens.theme import (
 
 if TYPE_CHECKING:
     from yoyopod.core import AppContext
-    from yoyopod.audio import LocalMusicService
-    from yoyopod.audio.music.backend import MusicBackend
+    from yoyopod.backends.music import MusicBackend
+    from yoyopod.integrations.music import LocalMusicService
     from yoyopod.integrations.call import VoIPManager
     from yoyopod.ui.screens.view import ScreenView
 
