@@ -1,14 +1,12 @@
 """Compatibility exports for relocated typed application events."""
 
-from dataclasses import dataclass
-from typing import Literal, Optional
-
 from yoyopod.audio.music.models import Track
 from yoyopod.communication.models import CallState, RegistrationState
 from yoyopod.core.events import (
     CallEndedEvent,
     CallStateChangedEvent,
     IncomingCallEvent,
+    LifecycleEvent,
     MusicAvailabilityChangedEvent,
     NetworkGpsFixEvent,
     NetworkGpsNoFixEvent,
@@ -21,6 +19,7 @@ from yoyopod.core.events import (
     RecoveryAttemptCompletedEvent,
     RegistrationChangedEvent,
     ScreenChangedEvent,
+    StateChangedEvent,
     TrackChangedEvent,
     UserActivityEvent,
     VoIPAvailabilityChangedEvent,
@@ -31,6 +30,7 @@ __all__ = [
     "CallEndedEvent",
     "CallStateChangedEvent",
     "IncomingCallEvent",
+    "LifecycleEvent",
     "MusicAvailabilityChangedEvent",
     "NetworkGpsFixEvent",
     "NetworkGpsNoFixEvent",
@@ -44,6 +44,7 @@ __all__ = [
     "RegistrationState",
     "RegistrationChangedEvent",
     "ScreenChangedEvent",
+    "StateChangedEvent",
     "Track",
     "TrackChangedEvent",
     "UserActivityEvent",

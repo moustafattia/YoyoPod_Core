@@ -1,14 +1,31 @@
-"""
-Typed application events for YoyoPod orchestration.
-"""
+"""Typed application events for YoyoPod orchestration and scaffold work."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Literal, Optional
+from typing import Any, Literal, Optional
 
 from yoyopod.audio.music.models import Track
 from yoyopod.communication.models import CallState, RegistrationState
+
+
+@dataclass(frozen=True, slots=True)
+class StateChangedEvent:
+    """Published when one entity changes in the Phase A scaffold state store."""
+
+    entity: str
+    old: Any
+    new: Any
+    attrs: dict[str, Any]
+    last_changed_at: float
+
+
+@dataclass(frozen=True, slots=True)
+class LifecycleEvent:
+    """Published when the scaffold app shell changes lifecycle phase."""
+
+    phase: str
+    detail: str = ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -97,6 +114,7 @@ class MusicAvailabilityChangedEvent:
 @dataclass(frozen=True, slots=True)
 class NetworkModemReadyEvent:
     """Published when the modem is initialized and registered."""
+
     carrier: str = ""
     network_type: str = ""
 
@@ -104,6 +122,7 @@ class NetworkModemReadyEvent:
 @dataclass(frozen=True, slots=True)
 class NetworkRegisteredEvent:
     """Published when the modem attaches to a cellular network."""
+
     carrier: str = ""
     network_type: str = ""
 
@@ -111,18 +130,21 @@ class NetworkRegisteredEvent:
 @dataclass(frozen=True, slots=True)
 class NetworkPppUpEvent:
     """Published when PPP data session is established."""
+
     connection_type: str = "4g"
 
 
 @dataclass(frozen=True, slots=True)
 class NetworkPppDownEvent:
     """Published when PPP data session drops."""
+
     reason: str = ""
 
 
 @dataclass(frozen=True, slots=True)
 class NetworkSignalUpdateEvent:
     """Published when signal strength changes."""
+
     bars: int = 0
     csq: int = 0
 
@@ -130,6 +152,7 @@ class NetworkSignalUpdateEvent:
 @dataclass(frozen=True, slots=True)
 class NetworkGpsFixEvent:
     """Published when a GPS coordinate is obtained."""
+
     lat: float = 0.0
     lng: float = 0.0
     altitude: float = 0.0

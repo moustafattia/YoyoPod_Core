@@ -1,0 +1,31 @@
+"""Tests for the scaffold main-thread scheduler."""
+
+from __future__ import annotations
+
+import threading
+
+from yoyopod.core import MainThreadScheduler
+
+
+def test_scheduler_runs_immediately_on_main_thread() -> None:
+    scheduler = MainThreadScheduler()
+    seen: list[str] = []
+
+    scheduler.run_on_main(lambda: seen.append("inline"))
+
+    assert seen == ["inline"]
+    assert scheduler.pending_count() == 0
+
+
+def test_scheduler_queues_background_work_until_drain() -> None:
+    scheduler = MainThreadScheduler()
+    seen: list[str] = []
+
+    worker = threading.Thread(target=lambda: scheduler.run_on_main(lambda: seen.append("queued")))
+    worker.start()
+    worker.join()
+
+    assert seen == []
+    assert scheduler.pending_count() == 1
+    assert scheduler.drain() == 1
+    assert seen == ["queued"]

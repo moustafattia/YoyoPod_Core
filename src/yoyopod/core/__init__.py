@@ -6,12 +6,15 @@ Legacy top-level modules such as ``yoyopod.app_context``, ``yoyopod.event_bus``,
 these symbols.
 """
 
+from yoyopod.core.app_shell import YoyoPodAppShell
 from yoyopod.core.app_context import AppContext
+from yoyopod.core.bus import Bus
 from yoyopod.core.event_bus import EventBus
 from yoyopod.core.events import (
     CallEndedEvent,
     CallStateChangedEvent,
     IncomingCallEvent,
+    LifecycleEvent,
     MusicAvailabilityChangedEvent,
     NetworkGpsFixEvent,
     NetworkGpsNoFixEvent,
@@ -24,11 +27,13 @@ from yoyopod.core.events import (
     RecoveryAttemptCompletedEvent,
     RegistrationChangedEvent,
     ScreenChangedEvent,
+    StateChangedEvent,
     TrackChangedEvent,
     UserActivityEvent,
     VoIPAvailabilityChangedEvent,
 )
 from yoyopod.core.fsm import CallFSM, CallInterruptionPolicy, CallSessionState, MusicFSM, MusicState
+from yoyopod.core.logbuffer import LogBuffer
 from yoyopod.core.runtime_state import (
     ActiveVoiceNoteState,
     MediaRuntimeState,
@@ -41,14 +46,20 @@ from yoyopod.core.runtime_state import (
     VoiceState,
     VoipRuntimeState,
 )
+from yoyopod.core.scheduler import MainThreadScheduler
+from yoyopod.core.services import Services
 from yoyopod.core.setup_contract import (
     RUNTIME_REQUIRED_CONFIG_FILES,
     SETUP_TRACKED_CONFIG_FILES,
 )
+from yoyopod.core.states import StateValue, States
+from yoyopod.core.testing import assert_events_contain, build_test_app, drain_all
 
 __all__ = [
     "ActiveVoiceNoteState",
     "AppContext",
+    "assert_events_contain",
+    "Bus",
     "CallEndedEvent",
     "CallFSM",
     "CallInterruptionPolicy",
@@ -56,6 +67,9 @@ __all__ = [
     "CallStateChangedEvent",
     "EventBus",
     "IncomingCallEvent",
+    "LifecycleEvent",
+    "LogBuffer",
+    "MainThreadScheduler",
     "MediaRuntimeState",
     "MusicAvailabilityChangedEvent",
     "MusicFSM",
@@ -77,6 +91,10 @@ __all__ = [
     "ScreenChangedEvent",
     "ScreenRuntimeState",
     "SETUP_TRACKED_CONFIG_FILES",
+    "StateChangedEvent",
+    "StateValue",
+    "States",
+    "Services",
     "TalkRuntimeState",
     "TrackChangedEvent",
     "UserActivityEvent",
@@ -84,4 +102,7 @@ __all__ = [
     "VoipRuntimeState",
     "VoiceInteractionState",
     "VoiceState",
+    "build_test_app",
+    "drain_all",
+    "YoyoPodAppShell",
 ]
