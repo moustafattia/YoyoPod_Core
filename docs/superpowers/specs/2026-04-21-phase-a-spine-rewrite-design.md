@@ -3,7 +3,7 @@
 **Date:** 2026-04-21
 **Owner:** Moustafa
 **Status:** Awaiting review
-**Precedes:** Phase B (runtime services cleanup), Phase C (HAL consolidation)
+**Precedes:** Phase B (HAL consolidation, formerly Phase C — renumbered when the original Phase B was absorbed into Phase A)
 **Supersedes:** `docs/RUNTIME_EVENT_FLOW.md` (the old coordinator/FSM event flow becomes historical)
 
 ---
