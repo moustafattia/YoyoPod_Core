@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from importlib import import_module
 from typing import Any, Literal
 
 FocusOwner = Literal["call", "music", "voice"]
@@ -75,27 +74,16 @@ class BackendStoppedEvent:
     reason: str = ""
 
 
-_call_events = import_module("yoyopod.integrations.call.events")
-IncomingCallEvent = _call_events.IncomingCallEvent
-CallStateChangedEvent = _call_events.CallStateChangedEvent
-CallEndedEvent = _call_events.CallEndedEvent
-RegistrationChangedEvent = _call_events.RegistrationChangedEvent
-VoIPAvailabilityChangedEvent = _call_events.VoIPAvailabilityChangedEvent
-
-_music_events = import_module("yoyopod.integrations.music.events")
-TrackChangedEvent = _music_events.TrackChangedEvent
-PlaybackStateChangedEvent = _music_events.PlaybackStateChangedEvent
-MusicAvailabilityChangedEvent = _music_events.MusicAvailabilityChangedEvent
-
-_network_events = import_module("yoyopod.integrations.network.events")
-NetworkModemReadyEvent = _network_events.NetworkModemReadyEvent
-NetworkRegisteredEvent = _network_events.NetworkRegisteredEvent
-NetworkPppUpEvent = _network_events.NetworkPppUpEvent
-NetworkPppDownEvent = _network_events.NetworkPppDownEvent
-NetworkSignalUpdateEvent = _network_events.NetworkSignalUpdateEvent
-
-_location_events = import_module("yoyopod.integrations.location.events")
-NetworkGpsFixEvent = _location_events.NetworkGpsFixEvent
-NetworkGpsNoFixEvent = _location_events.NetworkGpsNoFixEvent
+__all__ = [
+    "AudioFocusGrantedEvent",
+    "AudioFocusLostEvent",
+    "BackendStoppedEvent",
+    "FocusOwner",
+    "LifecycleEvent",
+    "RecoveryAttemptCompletedEvent",
+    "ScreenChangedEvent",
+    "StateChangedEvent",
+    "UserActivityEvent",
+]
 
 

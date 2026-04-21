@@ -4,21 +4,19 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-from yoyopod.core import (
-    NetworkGpsFixEvent,
-    NetworkGpsNoFixEvent,
+from yoyopod.core import ScreenChangedEvent, UserActivityEvent
+from yoyopod.integrations.location.events import NetworkGpsFixEvent, NetworkGpsNoFixEvent
+from yoyopod.integrations.network.events import (
     NetworkPppDownEvent,
     NetworkPppUpEvent,
     NetworkSignalUpdateEvent,
-    ScreenChangedEvent,
-    UserActivityEvent,
 )
+from yoyopod.core.event_subscriptions import RuntimeEventSubscriptions
 from yoyopod.integrations.power.events import (
     GracefulShutdownCancelled,
     GracefulShutdownRequested,
     LowBatteryWarningRaised,
 )
-from yoyopod.core.event_subscriptions import RuntimeEventSubscriptions
 
 
 def test_runtime_event_subscriptions_register_all_runtime_handlers() -> None:

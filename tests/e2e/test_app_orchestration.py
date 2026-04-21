@@ -17,22 +17,24 @@ from yoyopod.app import YoyoPodApp
 from yoyopod.backends.music import MockMusicBackend
 from yoyopod.core import AppContext
 from yoyopod.core.audio_volume import AudioVolumeController
-from yoyopod.integrations.call.models import CallState, RegistrationState
-from yoyopod.core.ui_state import AppRuntimeState, CoordinatorRuntime
-from yoyopod.core import (
+from yoyopod.integrations.call.events import (
     CallEndedEvent,
     CallStateChangedEvent,
     IncomingCallEvent,
-    MusicAvailabilityChangedEvent,
-    PlaybackStateChangedEvent,
     RegistrationChangedEvent,
-    TrackChangedEvent,
-    UserActivityEvent,
     VoIPAvailabilityChangedEvent,
 )
+from yoyopod.integrations.call.models import CallState, RegistrationState
+from yoyopod.integrations.music.events import (
+    MusicAvailabilityChangedEvent,
+    PlaybackStateChangedEvent,
+    TrackChangedEvent,
+)
+from yoyopod.core.ui_state import AppRuntimeState, CoordinatorRuntime
 from yoyopod.core import (
     MusicFSM,
     MusicState,
+    UserActivityEvent,
 )
 from yoyopod.integrations.call import (
     CallFSM,

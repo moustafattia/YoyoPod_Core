@@ -8,14 +8,13 @@ import yaml
 from yoyopod.config import ConfigManager
 from yoyopod.config.models import NetworkConfig, build_config_model
 from yoyopod.core import Bus
-from yoyopod.core import (
-    NetworkGpsFixEvent,
-    NetworkGpsNoFixEvent,
+from yoyopod.integrations.location.events import NetworkGpsFixEvent, NetworkGpsNoFixEvent
+from yoyopod.integrations.network import NetworkManager
+from yoyopod.integrations.network.events import (
     NetworkPppDownEvent,
     NetworkPppUpEvent,
     NetworkRegisteredEvent,
 )
-from yoyopod.integrations.network import NetworkManager
 from yoyopod.integrations.network.models import (
     GpsCoordinate,
     ModemPhase,

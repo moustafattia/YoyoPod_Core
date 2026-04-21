@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
-from yoyopod.core import AppContext, NetworkPppUpEvent
+from yoyopod.core import AppContext
 from yoyopod.config.models import NetworkConfig, build_config_model
+from yoyopod.integrations.network.events import NetworkPppUpEvent
 from yoyopod.integrations.network.models import (
     GpsCoordinate,
-    ModemState,
     ModemPhase,
+    ModemState,
     SignalInfo,
 )
 
@@ -37,6 +38,7 @@ def test_gps_coordinate_fields():
     coord = GpsCoordinate(lat=48.8566, lng=2.3522, altitude=35.0, speed=0.0)
     assert coord.lat == 48.8566
     assert coord.lng == 2.3522
+
 
 def test_network_events_are_frozen():
     """Network events should be immutable frozen dataclasses."""

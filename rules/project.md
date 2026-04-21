@@ -20,7 +20,7 @@ uv run python scripts/quality.py ci
 
 # Tests
 uv run pytest -q
-uv run pytest -q tests/test_fsm_runtime.py
+uv run pytest -q tests/core/test_fsm_runtime.py
 
 # Repo-owned code quality gate
 uv run python scripts/quality.py gate

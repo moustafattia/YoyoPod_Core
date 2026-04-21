@@ -107,6 +107,9 @@ yoyopod.py / src/yoyopod/main.py  (entry points)
 - Only main-thread code should publish typed events onto `Bus`.
 - Do not mutate UI state directly from background threads.
 - Favor typed events and explicit seams over reaching into concrete screen instances.
+- `src/yoyopod/core/events.py` owns only cross-cutting app events.
+- Domain events belong to their owning integration packages and should not be
+  re-exported through `yoyopod.core`.
 
 ## Dependency Direction
 

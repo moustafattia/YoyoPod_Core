@@ -1,7 +1,11 @@
-"""Tests for new scaffold events exported from `yoyopod.core.events`."""
+"""Tests for the core-owned cross-cutting event surface."""
 
 from __future__ import annotations
 
+import pytest
+
+import yoyopod.core as core_module
+import yoyopod.core.events as core_events
 from yoyopod.core import (
     AudioFocusGrantedEvent,
     AudioFocusLostEvent,
@@ -26,3 +30,25 @@ def test_scaffold_events_are_constructible() -> None:
     assert focus_granted.preempted == "music"
     assert focus_lost.preempted_by == "call"
     assert changed.entity == "call.state"
+
+
+def test_domain_events_are_not_reexported_from_core_surface() -> None:
+    """Integration-owned event types should stay on their integration seams."""
+
+    domain_event_names = (
+        "CallEndedEvent",
+        "CallStateChangedEvent",
+        "IncomingCallEvent",
+        "MusicAvailabilityChangedEvent",
+        "NetworkGpsFixEvent",
+        "NetworkPppUpEvent",
+        "PlaybackStateChangedEvent",
+        "RegistrationChangedEvent",
+        "TrackChangedEvent",
+        "VoIPAvailabilityChangedEvent",
+    )
+
+    for event_name in domain_event_names:
+        assert not hasattr(core_events, event_name)
+        with pytest.raises(AttributeError):
+            getattr(core_module, event_name)

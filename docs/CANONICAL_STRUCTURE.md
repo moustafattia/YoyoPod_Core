@@ -154,6 +154,17 @@ The app layer should import from domain seams such as:
 It should not reach arbitrarily into domain internals unless the app is the
 explicit owner of that internal boundary.
 
+Core package exports should follow the same rule:
+
+- `yoyopod.core.events` owns only cross-cutting event types such as
+  `StateChangedEvent`, lifecycle, focus, backend-stop, and display activity events
+- domain events must be imported from their owning packages such as
+  `yoyopod.integrations.call.events`,
+  `yoyopod.integrations.music.events`,
+  `yoyopod.integrations.network.events`, and
+  `yoyopod.integrations.location.events`
+- `yoyopod.core.__init__` should not re-export integration-owned event types
+
 ## Canonical Test Layout
 
 The test tree should mirror the same ownership split as `src/yoyopod/`.
@@ -175,8 +186,8 @@ The test tree should mirror the same ownership split as `src/yoyopod/`.
 - `tests/fixtures/`
   - shared fakes, builders, and reusable test helpers
 
-The remaining flat tests under `tests/` are migration debt and should keep
-moving into these buckets as their ownership becomes clearer.
+Only truly repo-global tests should remain flat under `tests/`. Package-owned
+tests should keep moving into these buckets as their ownership becomes clearer.
 
 ## Exemplar: Call + Contacts
 

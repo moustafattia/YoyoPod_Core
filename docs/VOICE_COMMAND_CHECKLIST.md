@@ -55,17 +55,16 @@ The file references below were captured at the time of writing. Their links have
 
 ### Contact Calling / VoIP
 
-- [src/yoyopod/voip/manager.py](../src/yoyopod/voip/manager.py)
+- [src/yoyopod/integrations/call/manager.py](../src/yoyopod/integrations/call/manager.py)
 - [src/yoyopod/config/manager.py](../src/yoyopod/config/manager.py)
 - [config/contacts.yaml](../config/contacts.yaml)
 
 ### Tests to Extend
 
-- [tests/config/test_config_models.py](../tests/config/test_config_models.py)
-- [tests/config/test_config_manager.py](../tests/config/test_config_manager.py)
+- [tests/config/test_models.py](../tests/config/test_models.py)
 - [tests/ui/test_screen_routing.py](../tests/ui/test_screen_routing.py)
-- [tests/test_output_volume.py](../tests/test_output_volume.py)
-- add new focused voice tests under `tests/`
+- [tests/core/test_output_volume.py](../tests/core/test_output_volume.py)
+- add new focused voice tests under `tests/integrations/` and `tests/ui/`
 
 ## Work Breakdown
 
@@ -196,7 +195,7 @@ Files:
 
 - [src/yoyopod/app.py](../src/yoyopod/app.py)
 - [src/yoyopod/core/output_volume.py](../src/yoyopod/core/output_volume.py)
-- [src/yoyopod/voip/manager.py](../src/yoyopod/voip/manager.py)
+- [src/yoyopod/integrations/call/manager.py](../src/yoyopod/integrations/call/manager.py)
 - [src/yoyopod/core/app_context.py](../src/yoyopod/core/app_context.py)
 
 Checklist:
@@ -296,14 +295,13 @@ Checklist:
 
 Files to add or update:
 
-- [tests/config/test_config_models.py](../tests/config/test_config_models.py)
-- [tests/config/test_config_manager.py](../tests/config/test_config_manager.py)
+- [tests/config/test_models.py](../tests/config/test_models.py)
 - [tests/ui/test_screen_routing.py](../tests/ui/test_screen_routing.py)
-- [tests/test_output_volume.py](../tests/test_output_volume.py)
+- [tests/core/test_output_volume.py](../tests/core/test_output_volume.py)
 - suggested new tests:
-  - `../tests/test_voice_commands.py`
-  - `../tests/test_voice_service.py`
-  - `../tests/test_ask_screen.py`
+  - `../tests/integrations/test_voice_commands.py`
+  - `../tests/integrations/test_voice_service.py`
+  - `../tests/ui/test_ask_screen.py`
 
 Checklist:
 

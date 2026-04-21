@@ -43,8 +43,8 @@ Phase A rewrites the spine to a single consistent model inspired by Home Assista
 - Split VoIPManager into `integrations/call/` (handlers, messaging, voice notes, history).
 - Fold PowerManager, NetworkManager, CloudManager, PeopleDirectory, LocalMusicService, VoiceRuntimeCoordinator, ScreenPowerService into their respective integrations.
 - Separate GPS from network into a new `location` integration.
-- Add an `audio focus` integration (replaces CallInterruptionPolicy; arbiter pattern borrowed from Android's AudioFocus).
-- Add a `diagnostics` integration that owns the structured event log, responsiveness watchdog, and snapshot command.
+- Add a core `focus` module (replaces CallInterruptionPolicy; arbiter pattern borrowed from Android's AudioFocus).
+- Add core `diagnostics` ownership for the structured event log, responsiveness watchdog, and snapshot command.
 - Touch up `ScreenManager` + all 17 screens to read state via `app.states.get(...)` and trigger actions via `app.services.call(...)` instead of holding direct manager references.
 - Validate the merged CLI polish baseline and clean only any remaining post-merge `yoyoctl` stragglers (for example live docs/skills or new regressions caught by `tests/test_no_yoyoctl_references.py`).
 - Rewrite tests for new primitives and integrations; rewrite orchestration tests as state-store + event-trace assertions.
@@ -266,7 +266,7 @@ Rules:
 - Drained once per main-loop tick.
 - Exceptions in a scheduled task are logged; drain continues to remaining tasks.
 
-### 4.5 App shell (`core/app_shell.py`)
+### 4.5 App shell (`core/application.py`)
 
 ```python
 class YoyoPodApp:
@@ -328,8 +328,8 @@ Integrations register their `setup(app)` in a known order (see §11.2). The app 
 | `location.backend_available` | `bool` | `reason` | location |
 | `focus.owner` | `call | music | voice | None` | `preempted_by` | focus |
 | `cloud.mqtt_connected` | `bool` | `reason`, `last_sync_at` | cloud |
-| `screen.awake` | `bool` | — | screen |
-| `screen.brightness_percent` | `int 0..100` | — | screen |
+| `display.awake` | `bool` | — | display |
+| `display.brightness_percent` | `int 0..100` | — | display |
 | `voice.state` | `idle | listening | thinking | responding` | `transcript`, `response` | voice |
 | `contacts.people_count` | `int` | — | contacts |
 | `contacts.unread_voice_notes` | `int` | `by_address` | contacts |
@@ -555,8 +555,8 @@ Analogous splits for:
 - **PeopleDirectory** → `integrations/contacts/`
 - **LocalMusicService** → `integrations/music/library.py` (substantial logic kept as submodule)
 - **VoiceRuntimeCoordinator** → `integrations/voice/`
-- **ScreenPowerService** → `integrations/screen/`
-- **RecoverySupervisor** → `integrations/recovery/`
+- **ScreenPowerService** → `integrations/display/`
+- **RecoverySupervisor** → `core/recovery.py`
 
 ### 9.3 Kept as adapters
 
@@ -642,7 +642,7 @@ Chosen explicitly by Moustafa over M-Incremental. Main branch frozen for the dur
 
 1. **CLI baseline verification.** Confirm the merged CLI polish baseline is still clean (`yoyopod_cli.main:run`, `tests/test_no_yoyoctl_references.py`, live docs/skills/rules). Fix only actual post-merge stragglers; do not replay the pre-merge bulk rename.
 
-2. **Build `core/` scaffold.** `Bus`, `States`, `Services`, `MainThreadScheduler`, `YoyoPodApp` shell, core `events.py`, `core/testing.py`. Unit tests for each primitive. No integrations yet. Old app still runs.
+2. **Build `core/` scaffold.** `Bus`, `States`, `Services`, `MainThreadScheduler`, `YoyoPodApp` shell, core `events.py`, plus focus/recovery/status/diagnostics helpers. Unit tests for each primitive. No integrations yet. Old app still runs.
 
 3. **Migrate `power`.** Pilot. Isolated, well-understood. Delete `PowerManager`, `PowerRuntimeService`, `PowerCoordinator`. Pattern validated end-to-end.
 
@@ -761,7 +761,7 @@ class MockVoIPBackend(VoIPBackend):
         self._publish_event(CallBackendStateEvent(state=state, caller_address=caller))
 ```
 
-`build_test_app()` in `core/testing.py` wires mocks in place of real backends.
+`build_test_app()` lives under `tests/fixtures/` and wires mocks in place of real backends.
 
 ### 12.5 Development cadence: TDD
 
