@@ -221,9 +221,16 @@ class FakeRecoveringMusicBackend(MockMusicBackend):
 class FakeRecoveringNetworkManager:
     """Minimal network-manager double for recovery backoff tests."""
 
-    def __init__(self, recover_results: list[bool]) -> None:
+    def __init__(
+        self,
+        recover_results: list[bool],
+        *,
+        fail_on_online_check: bool = False,
+    ) -> None:
         self._recover_results = recover_results
+        self._fail_on_online_check = fail_on_online_check
         self.recover_calls = 0
+        self.is_online_checks = 0
         self.config = SimpleNamespace(enabled=True)
         self._online = False
         self._state = ModemState(
@@ -243,6 +250,9 @@ class FakeRecoveringNetworkManager:
 
     @property
     def is_online(self) -> bool:
+        self.is_online_checks += 1
+        if self._fail_on_online_check:
+            raise AssertionError("is_online should not be queried while recovery is in flight")
         return self._online
 
     @property
@@ -1188,6 +1198,21 @@ def test_recovery_service_skips_network_recovery_in_simulation_mode() -> None:
 
     assert scheduled_attempts == []
     assert app._network_recovery.in_flight is False
+
+
+def test_recovery_service_skips_online_probe_while_network_recovery_is_in_flight() -> None:
+    """Coordinator ticks should not block on network state checks during background recovery."""
+
+    app = YoyoPodApp(simulate=False)
+    app.network_manager = FakeRecoveringNetworkManager(
+        [True],
+        fail_on_online_check=True,
+    )
+    app._network_recovery.in_flight = True
+
+    app.recovery_service.attempt_network_recovery(0.0)
+
+    assert app.network_manager.is_online_checks == 0
 
 
 def test_music_recovery_backoff_doubles_after_success() -> None:

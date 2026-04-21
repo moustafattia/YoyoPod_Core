@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import threading
 import yaml
 
 from yoyopod.config import ConfigManager
@@ -28,6 +29,7 @@ class FakeBackend:
         self.inited = False
         self.ppp_started = False
         self.ppp_stopped = False
+        self.ppp_wait_calls = 0
         self.gps_query_calls = 0
         self.gps_coord: GpsCoordinate | None = None
         self.health_online = True
@@ -48,8 +50,15 @@ class FakeBackend:
         self.inited = True
         self.state.phase = ModemPhase.REGISTERED
 
-    def start_ppp(self) -> bool:
+    def start_ppp(self, *, wait_for_link: bool = True) -> bool:
         self.ppp_started = True
+        if not wait_for_link:
+            self.state.phase = ModemPhase.PPP_STARTING
+            return True
+        return self.wait_for_ppp_link()
+
+    def wait_for_ppp_link(self, timeout: float = 30.0) -> bool:
+        self.ppp_wait_calls += 1
         self.health_online = True
         self.state.phase = ModemPhase.ONLINE
         return True
@@ -82,6 +91,28 @@ class RecordingLock:
     def __exit__(self, exc_type, exc, tb) -> None:
         self.exit_calls += 1
         return None
+
+
+class BlockingPppBackend(FakeBackend):
+    """Backend double that pauses PPP link-up so stop() can race recover()."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.wait_entered = threading.Event()
+        self.release_wait = threading.Event()
+        self.close_called = threading.Event()
+
+    def wait_for_ppp_link(self, timeout: float = 30.0) -> bool:
+        self.ppp_wait_calls += 1
+        self.wait_entered.set()
+        self.release_wait.wait(timeout=timeout)
+        self.health_online = True
+        self.state.phase = ModemPhase.ONLINE
+        return True
+
+    def close(self) -> None:
+        self.close_called.set()
+        super().close()
 
 
 def test_manager_start_full_sequence():
@@ -157,6 +188,7 @@ def test_manager_recover_retries_full_bringup_after_failed_boot() -> None:
     assert backend.opened is True
     assert backend.inited is True
     assert backend.ppp_started is True
+    assert backend.ppp_wait_calls == 1
 
 
 def test_manager_warms_gps_fix_on_start_when_enabled():
@@ -223,6 +255,32 @@ def test_manager_query_gps_uses_lifecycle_lock() -> None:
     assert backend.gps_query_calls == 1
     assert lock.enter_calls == 1
     assert lock.exit_calls == 1
+
+
+def test_manager_stop_does_not_block_on_recovering_ppp_wait() -> None:
+    """stop() should still acquire the lifecycle lock while PPP wait runs in recover()."""
+
+    config = build_config_model(NetworkConfig, {"enabled": True, "apn": "internet"})
+    backend = BlockingPppBackend()
+    backend.state.phase = ModemPhase.REGISTERING
+    backend.health_online = False
+    manager = NetworkManager(config=config, backend=backend)
+
+    recovery_thread = threading.Thread(target=manager.recover, daemon=True)
+    recovery_thread.start()
+
+    assert backend.wait_entered.wait(timeout=1.0) is True
+
+    stop_thread = threading.Thread(target=manager.stop, daemon=True)
+    stop_thread.start()
+
+    assert backend.close_called.wait(timeout=0.5) is True
+    backend.release_wait.set()
+    recovery_thread.join(timeout=1.0)
+    stop_thread.join(timeout=1.0)
+
+    assert recovery_thread.is_alive() is False
+    assert stop_thread.is_alive() is False
 
 
 def test_manager_from_config_manager_uses_domain_owned_network_settings(tmp_path) -> None:

@@ -40,11 +40,10 @@ class NetworkManager:
 
     def start(self) -> None:
         """Open modem, initialize, and start PPP."""
-        with self._lifecycle_lock:
-            self._start_unlocked()
+        self._start_flow()
 
-    def _start_unlocked(self) -> None:
-        """Run the one-shot modem bring-up flow while the lifecycle lock is held."""
+    def _start_flow(self) -> None:
+        """Run the one-shot modem bring-up flow."""
         from yoyopod.core import (
             NetworkModemReadyEvent,
             NetworkPppUpEvent,
@@ -57,10 +56,11 @@ class NetworkManager:
             return
 
         logger.info("Starting network manager")
-        self.backend.open()
-        self.backend.init_modem()
+        with self._lifecycle_lock:
+            self.backend.open()
+            self.backend.init_modem()
+            state = self.backend.get_state()
 
-        state = self.backend.get_state()
         if state.phase == ModemPhase.REGISTERED:
             self._publish(
                 NetworkModemReadyEvent(
@@ -88,7 +88,7 @@ class NetworkManager:
                 except Exception as exc:
                     logger.debug("Initial GPS query failed: {}", exc)
 
-            if self.backend.start_ppp():
+            if self._start_ppp():
                 self._publish(NetworkPppUpEvent(connection_type="4g"))
         else:
             logger.error("Modem init failed: {}", state.error)
@@ -119,11 +119,11 @@ class NetworkManager:
             except Exception as exc:
                 logger.debug("Ignoring network close error during recovery reset: {}", exc)
 
-            try:
-                self._start_unlocked()
-            except Exception as exc:
-                logger.error("Network recovery failed: {}", exc)
-            return self.is_online
+        try:
+            self._start_flow()
+        except Exception as exc:
+            logger.error("Network recovery failed: {}", exc)
+        return self.is_online
 
     @property
     def is_online(self) -> bool:
@@ -158,6 +158,19 @@ class NetworkManager:
             else:
                 self._publish(NetworkGpsNoFixEvent(reason="no_fix"))
             return coord
+
+    def _start_ppp(self) -> bool:
+        """Spawn PPP under lifecycle lock, then wait for the link without blocking shutdown."""
+
+        wait_for_ppp_link = getattr(self.backend, "wait_for_ppp_link", None)
+        with self._lifecycle_lock:
+            if wait_for_ppp_link is None:
+                return bool(self.backend.start_ppp())
+
+            if not self.backend.start_ppp(wait_for_link=False):
+                return False
+
+        return bool(wait_for_ppp_link(timeout=self.config.ppp_timeout))
 
     def _publish(self, event: object) -> None:
         """Publish an event if the bus is available."""

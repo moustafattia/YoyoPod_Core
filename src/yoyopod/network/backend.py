@@ -118,7 +118,7 @@ class Sim7600Backend:
         if self._config.gps_enabled:
             self._at.enable_gps()
 
-    def start_ppp(self) -> bool:
+    def start_ppp(self, *, wait_for_link: bool = True) -> bool:
         self._state.phase = ModemPhase.PPP_STARTING
         apn = str(self._config.apn or "").strip()
         if apn:
@@ -131,7 +131,16 @@ class Sim7600Backend:
             self._state.error = "PPP failed to start"
             return False
 
-        if not self._ppp.wait_for_link(timeout=self._config.ppp_timeout):
+        if not wait_for_link:
+            return True
+
+        return self.wait_for_ppp_link(timeout=self._config.ppp_timeout)
+
+    def wait_for_ppp_link(self, timeout: float | None = None) -> bool:
+        """Wait for the spawned PPP session to expose ppp0."""
+
+        effective_timeout = self._config.ppp_timeout if timeout is None else timeout
+        if not self._ppp.wait_for_link(timeout=effective_timeout):
             self._ppp.kill()
             self._state.phase = ModemPhase.REGISTERED
             self._state.error = "PPP negotiation timed out"

@@ -143,11 +143,11 @@ class RecoverySupervisor:
         ):
             return
 
-        if self.app.network_manager.is_online:
-            self.app._network_recovery.reset()
+        if self.app._network_recovery.in_flight:
             return
 
-        if self.app._network_recovery.in_flight:
+        if self.app.network_manager.is_online:
+            self.app._network_recovery.reset()
             return
 
         if recovery_now < self.app._network_recovery.next_attempt_at:
