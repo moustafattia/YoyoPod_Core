@@ -7,6 +7,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 
 from yoyopod.core import build_test_app, drain_all
+from yoyopod.integrations.call import CallHistoryStore, setup as setup_call
 from yoyopod.integrations.contacts import (
     LookupByAddressCommand,
     MarkVoiceNotesSeenCommand,
@@ -14,6 +15,7 @@ from yoyopod.integrations.contacts import (
     setup,
     teardown,
 )
+from tests.integrations.test_call import FakeRinger, FakeVoipManager
 
 
 @dataclass(slots=True)
@@ -176,6 +178,57 @@ def test_contacts_voice_note_subscription_refreshes_state_from_background_thread
             "sip:bob@example.com": 2,
         }
     }
+
+
+def test_contacts_auto_bridge_call_voice_note_summary_when_call_integration_exists(
+    tmp_path,
+) -> None:
+    app = build_test_app()
+    manager = FakeVoipManager()
+    setup_call(
+        app,
+        manager=manager,
+        call_history_store=CallHistoryStore(tmp_path / "call_history.json"),
+        ringer=FakeRinger(),
+    )
+    setup(app, directory=FakeDirectory())
+    drain_all(app)
+
+    manager.voice_note_unread_by_address = {
+        "sip:alice@example.com": 2,
+        "sip:bob@example.com": 1,
+    }
+    manager.emit_message_summary(
+        3,
+        {
+            "sip:alice@example.com": {
+                "message_id": "note-1",
+                "direction": "incoming",
+            },
+            "sip:bob@example.com": {
+                "message_id": "note-2",
+                "direction": "incoming",
+            },
+        },
+    )
+    drain_all(app)
+
+    assert app.states.get_value("contacts.unread_voice_notes") == 3
+    assert app.states.get("contacts.unread_voice_notes").attrs == {
+        "by_address": {
+            "sip:alice@example.com": 2,
+            "sip:bob@example.com": 1,
+        }
+    }
+
+    app.services.call(
+        "contacts",
+        "mark_voice_notes_seen",
+        MarkVoiceNotesSeenCommand(address="sip:alice@example.com"),
+    )
+    drain_all(app)
+
+    assert manager.voice_note_unread_by_address == {"sip:bob@example.com": 1}
 
 
 def test_contacts_services_reject_wrong_payload_types() -> None:

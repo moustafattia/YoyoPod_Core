@@ -24,6 +24,7 @@ from yoyopod.integrations.contacts.models import (
     contacts_from_mapping,
     contacts_to_mapping,
 )
+from yoyopod.integrations.call.events import VoiceNoteSummaryChangedEvent
 
 
 @dataclass(slots=True)
@@ -49,10 +50,18 @@ def setup(
 ) -> ContactsIntegration:
     """Register scaffold contacts services and seed contacts state."""
 
+    derived_provider = unread_voice_note_counts_by_address_provider
+    if derived_provider is None:
+        derived_provider = _derive_call_voice_note_counts_provider(app)
+
+    derived_mark_seen_handler = mark_voice_notes_seen_handler
+    if derived_mark_seen_handler is None:
+        derived_mark_seen_handler = _derive_mark_voice_notes_seen_handler(app)
+
     integration = ContactsIntegration(
         directory=directory or _build_directory(app.config),
-        unread_voice_note_counts_by_address_provider=unread_voice_note_counts_by_address_provider,
-        mark_voice_notes_seen_handler=mark_voice_notes_seen_handler,
+        unread_voice_note_counts_by_address_provider=derived_provider,
+        mark_voice_notes_seen_handler=derived_mark_seen_handler,
     )
     app.integrations["contacts"] = integration
     refresh_contacts_state(app, integration)
@@ -60,6 +69,11 @@ def setup(
     if subscribe_to_voice_note_changes is not None:
         integration.unsubscribe_voice_note_changes = subscribe_to_voice_note_changes(
             lambda: app.scheduler.run_on_main(lambda: refresh_contacts_state(app, integration))
+        )
+    elif derived_provider is not None:
+        app.bus.subscribe(
+            VoiceNoteSummaryChangedEvent,
+            lambda event: refresh_contacts_state(app, integration),
         )
 
     app.services.register(
@@ -111,6 +125,32 @@ def _build_directory(config: object | None) -> PeopleManager:
         contacts_file,
         contacts_seed_file=contacts_seed_file or None,
     )
+
+
+def _derive_call_voice_note_counts_provider(
+    app: Any,
+) -> Callable[[], dict[str, int]] | None:
+    call_integration = getattr(app, "integrations", {}).get("call")
+    if call_integration is None:
+        return None
+
+    def _snapshot() -> dict[str, int]:
+        return dict(getattr(call_integration, "last_voice_note_unread_by_address", {}))
+
+    return _snapshot
+
+
+def _derive_mark_voice_notes_seen_handler(
+    app: Any,
+) -> Callable[[str], None] | None:
+    call_integration = getattr(app, "integrations", {}).get("call")
+    if call_integration is None:
+        return None
+    manager = getattr(call_integration, "manager", None)
+    mark_voice_notes_seen = getattr(manager, "mark_voice_notes_seen", None)
+    if not callable(mark_voice_notes_seen):
+        return None
+    return mark_voice_notes_seen
 
 
 __all__ = [
