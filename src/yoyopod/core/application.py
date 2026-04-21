@@ -52,7 +52,7 @@ from yoyopod.runtime.models import PendingShutdown, PowerAlert, RecoveryState
 from yoyopod.runtime.network_events import NetworkEventHandler
 from yoyopod.runtime.power_service import PowerRuntimeService
 from yoyopod.runtime.recovery import RecoverySupervisor
-from yoyopod.runtime.screen_power import ScreenPowerService
+from yoyopod.integrations.display import ScreenPowerService
 from yoyopod.runtime.shutdown import ShutdownLifecycleService
 from yoyopod.runtime.status import RuntimeStatusService
 from yoyopod.runtime.voice_note_events import VoiceNoteEventHandler

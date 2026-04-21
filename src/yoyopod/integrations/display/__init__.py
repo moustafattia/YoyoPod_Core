@@ -1,4 +1,4 @@
-"""Display integration scaffold for the frozen Phase A spine."""
+"""Canonical display integration surface."""
 
 from __future__ import annotations
 
@@ -23,6 +23,7 @@ from yoyopod.integrations.display.handlers import (
     sleep_display,
     wake_display,
 )
+from yoyopod.integrations.display.service import ScreenPowerService
 
 
 @dataclass(slots=True)
@@ -107,6 +108,7 @@ __all__ = [
     "SetIdleTimeoutCommand",
     "SleepDisplayCommand",
     "WakeDisplayCommand",
+    "ScreenPowerService",
     "setup",
     "teardown",
 ]

@@ -120,6 +120,7 @@ from yoyopod.integrations.cloud.models import CloudAccessToken as IntegrationClo
 from yoyopod.integrations.cloud.models import (
     CloudStatusSnapshot as IntegrationCloudStatusSnapshot,
 )
+from yoyopod.integrations.display import ScreenPowerService as IntegrationScreenPowerService
 from yoyopod.integrations.voice import VoiceCaptureRequest as IntegrationVoiceCaptureRequest
 from yoyopod.integrations.voice import VoiceCaptureResult as IntegrationVoiceCaptureResult
 from yoyopod.integrations.voice import VoiceCommandIntent as IntegrationVoiceCommandIntent
@@ -133,6 +134,7 @@ from yoyopod.runtime_state import PlaybackQueue as RuntimeStatePlaybackQueue
 from yoyopod.runtime_state import Track as RuntimeStateTrack
 from yoyopod.runtime import ResponsivenessWatchdogDecision as LegacyResponsivenessWatchdogDecision
 from yoyopod.runtime import evaluate_responsiveness_status as legacy_evaluate_responsiveness_status
+from yoyopod.runtime.screen_power import ScreenPowerService as LegacyScreenPowerService
 from yoyopod.event_bus import EventBus, EventHandler
 from yoyopod.events import CallState, RegistrationState, Track, TrackChangedEvent
 from yoyopod.events import CallStateChangedEvent, NetworkGpsFixEvent, NetworkPppUpEvent
@@ -354,6 +356,12 @@ def test_legacy_power_import_paths_resolve_to_relocated_symbols() -> None:
     assert LegacyGracefulShutdownRequested is IntegrationGracefulShutdownRequested
     assert LegacyGracefulShutdownCancelled is IntegrationGracefulShutdownCancelled
     assert LegacyPowerSafetyPolicy is IntegrationPowerSafetyPolicy
+
+
+def test_legacy_runtime_screen_power_import_path_resolves_to_display_service() -> None:
+    """Legacy runtime screen-power imports should point at the canonical display seam."""
+
+    assert LegacyScreenPowerService is IntegrationScreenPowerService
 
 
 def test_legacy_voice_import_paths_resolve_to_relocated_symbols() -> None:

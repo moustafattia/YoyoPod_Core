@@ -291,7 +291,7 @@ Heartbeat is currently emitted:
 Relevant references:
 
 - [src/yoyopod/integrations/cloud/manager.py](../src/yoyopod/integrations/cloud/manager.py)
-- [src/yoyopod/runtime/screen_power.py](../src/yoyopod/runtime/screen_power.py)
+- [src/yoyopod/integrations/display/service.py](../src/yoyopod/integrations/display/service.py)
 
 ### Connectivity change awareness
 

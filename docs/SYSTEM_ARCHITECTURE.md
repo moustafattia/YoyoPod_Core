@@ -58,7 +58,7 @@ This is the startup sequence that exists on `main` today.
    - `--simulate` is parsed before the app is constructed.
 3. `main()` constructs `YoyoPodApp(config_dir="config", simulate=simulate)`.
    - The constructor does not start hardware or backend processes yet.
-   - It allocates the typed `EventBus`, runtime services (`RuntimeBootService`, `RuntimeLoopService`, `RecoverySupervisor`, `PowerRuntimeService`, `ScreenPowerService`, `ShutdownLifecycleService`), and the long-lived placeholder fields for managers, screens, and shared context.
+   - It allocates the typed `EventBus`, runtime services (`RuntimeBootService`, `RuntimeLoopService`, `RecoverySupervisor`, `PowerRuntimeService`, `ShutdownLifecycleService`), the canonical display-power helper (`ScreenPowerService` from `src/yoyopod/integrations/display/service.py`), and the long-lived placeholder fields for managers, screens, and shared context.
    - `RecoverySupervisor` now keeps VoIP/music recovery while `yoyopod.runtime.power_service.PowerRuntimeService` owns PiSugar polling and watchdog cadence.
    - It also registers app-level event subscriptions on the `EventBus` so later boot stages can publish typed events back onto the coordinator thread.
 4. `main()` calls `app.setup()`, which delegates to `RuntimeBootService.setup()`.
@@ -129,7 +129,7 @@ yoyopod.py / yoyopod.main
      -> RuntimeLoopService
      -> RecoverySupervisor
      -> PowerRuntimeService
-     -> ScreenPowerService
+     -> integrations.display.ScreenPowerService
       -> ShutdownLifecycleService
       -> EventBus
       -> Display facade
@@ -184,7 +184,7 @@ yoyopod.py / yoyopod.main
 - `src/yoyopod/runtime/boot.py`: boot-time composition and manager wiring
 - `src/yoyopod/runtime/loop.py`: coordinator-loop scheduling and queued main-thread work
 - `src/yoyopod/runtime/recovery.py`: backend recovery supervision
-- `src/yoyopod/runtime/screen_power.py`: screen wake/sleep policy and power overlays
+- `src/yoyopod/integrations/display/service.py`: screen wake/sleep policy and power overlays
 - `src/yoyopod/runtime/shutdown.py`: shutdown countdowns, hooks, and lifecycle cleanup
 - `src/yoyopod/runtime/power_service.py`: power polling and watchdog cadence
 
@@ -226,7 +226,7 @@ yoyopod.py / yoyopod.main
 - `src/yoyopod/integrations/voice/`: canonical voice manager, service alias, and typed voice models
 - `src/yoyopod/backends/voice/`: concrete capture, playback, STT, and TTS adapters
 - `src/yoyopod/voice/`: compatibility shims plus the remaining command-matching code
-- `src/yoyopod/integrations/display/`: canonical display awake/sleep/brightness/timeout seam
+- `src/yoyopod/integrations/display/`: canonical display awake/sleep/brightness/timeout seam, including the live screen-power helper
 
 ### UI Layer
 

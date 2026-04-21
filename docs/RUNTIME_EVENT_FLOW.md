@@ -119,6 +119,10 @@ Owns:
 
 It reacts to `ScreenChangedEvent`, `UserActivityEvent`, and low-battery events, but it does not own app navigation.
 
+Canonical owner:
+- `src/yoyopod/integrations/display/service.py`
+- `src/yoyopod/runtime/screen_power.py` is now a compatibility shim only
+
 ### `RecoverySupervisor`
 
 Owns:
