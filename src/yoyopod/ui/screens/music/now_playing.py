@@ -3,7 +3,14 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Callable, Optional
+from typing import TYPE_CHECKING, Any, Callable, Optional
+
+from yoyopod.integrations.music import (
+    NextTrackCommand,
+    PauseCommand,
+    PreviousTrackCommand,
+    ResumeCommand,
+)
 
 from yoyopod.ui.display import Display
 from yoyopod.ui.screens.base import Screen
@@ -49,14 +56,20 @@ class NowPlayingActions:
 
 def build_now_playing_state_provider(
     *,
+    app: Any | None = None,
     context: "AppContext | None" = None,
     music_backend: "MusicBackend | None" = None,
 ) -> Callable[[], NowPlayingState]:
     """Build a narrow prepared-state provider for the now-playing screen."""
 
+    resolved_context = context if context is not None else getattr(app, "context", None)
+    resolved_music_backend = (
+        music_backend if music_backend is not None else getattr(app, "music_backend", None)
+    )
+
     def provider() -> NowPlayingState:
-        if music_backend is not None:
-            if not music_backend.is_connected:
+        if resolved_music_backend is not None:
+            if not resolved_music_backend.is_connected:
                 return NowPlayingState(
                     title="Music Offline",
                     artist="Trying to reconnect",
@@ -65,12 +78,12 @@ def build_now_playing_state_provider(
                     is_playing=False,
                 )
 
-            current_track = music_backend.get_current_track()
-            playback_state = music_backend.get_playback_state()
+            current_track = resolved_music_backend.get_current_track()
+            playback_state = resolved_music_backend.get_playback_state()
             if current_track is not None:
                 progress = 0.0
                 if current_track.length > 0:
-                    progress = music_backend.get_time_position() / current_track.length
+                    progress = resolved_music_backend.get_time_position() / current_track.length
                 state_label = (
                     "PLAYING"
                     if playback_state == "playing"
@@ -92,7 +105,7 @@ def build_now_playing_state_provider(
                 is_playing=False,
             )
 
-        track = context.get_current_track() if context is not None else None
+        track = resolved_context.get_current_track() if resolved_context is not None else None
         if track is None:
             return NowPlayingState(
                 title="No Track Yet",
@@ -105,13 +118,17 @@ def build_now_playing_state_provider(
         return NowPlayingState(
             title=track.name,
             artist=track.get_artist_string(),
-            progress=context.get_playback_progress() if context is not None else 0.0,
+            progress=(
+                resolved_context.get_playback_progress() if resolved_context is not None else 0.0
+            ),
             state_label=(
                 "PLAYING"
-                if context is not None and context.media.playback.is_playing
+                if resolved_context is not None and resolved_context.media.playback.is_playing
                 else "PAUSED"
             ),
-            is_playing=bool(context is not None and context.media.playback.is_playing),
+            is_playing=bool(
+                resolved_context is not None and resolved_context.media.playback.is_playing
+            ),
         )
 
     return provider
@@ -119,38 +136,60 @@ def build_now_playing_state_provider(
 
 def build_now_playing_actions(
     *,
+    app: Any | None = None,
     context: "AppContext | None" = None,
     music_backend: "MusicBackend | None" = None,
 ) -> NowPlayingActions:
     """Build the focused playback actions for the now-playing screen."""
 
+    resolved_context = context if context is not None else getattr(app, "context", None)
+    resolved_music_backend = (
+        music_backend if music_backend is not None else getattr(app, "music_backend", None)
+    )
+
     def toggle_playback() -> None:
-        if music_backend is not None:
-            if not music_backend.is_connected:
-                return
-            if music_backend.get_playback_state() == "playing":
-                music_backend.pause()
+        services = getattr(app, "services", None)
+        states = getattr(app, "states", None)
+        if services is not None and hasattr(services, "call") and states is not None:
+            if states.get_value("music.state") == "playing":
+                services.call("music", "pause", PauseCommand())
             else:
-                music_backend.play()
+                services.call("music", "resume", ResumeCommand())
             return
-        if context is not None:
-            context.toggle_playback()
+        if resolved_music_backend is not None:
+            if not resolved_music_backend.is_connected:
+                return
+            if resolved_music_backend.get_playback_state() == "playing":
+                resolved_music_backend.pause()
+            else:
+                resolved_music_backend.play()
+            return
+        if resolved_context is not None:
+            resolved_context.toggle_playback()
 
     def previous_track() -> None:
-        if music_backend is not None:
-            if music_backend.is_connected:
-                music_backend.previous_track()
+        services = getattr(app, "services", None)
+        if services is not None and hasattr(services, "call"):
+            services.call("music", "previous_track", PreviousTrackCommand())
             return
-        if context is not None:
-            context.previous_track()
+        if resolved_music_backend is not None:
+            if resolved_music_backend.is_connected:
+                resolved_music_backend.previous_track()
+            return
+        if resolved_context is not None:
+            resolved_context.previous_track()
 
     def next_track() -> None:
-        if music_backend is not None:
-            if music_backend.is_connected:
-                music_backend.next_track()
+        services = getattr(app, "services", None)
+        if services is not None and hasattr(services, "call"):
+            services.call("music", "next_track", NextTrackCommand())
             return
-        if context is not None:
-            context.next_track()
+        if resolved_music_backend is not None:
+            if resolved_music_backend.is_connected:
+                resolved_music_backend.next_track()
+            return
+        if resolved_context is not None:
+            resolved_context.next_track()
 
     return NowPlayingActions(
         toggle_playback=toggle_playback,
@@ -167,12 +206,16 @@ class NowPlayingScreen(Screen):
         display: Display,
         context: Optional["AppContext"] = None,
         *,
+        app: Any | None = None,
         state_provider: Callable[[], NowPlayingState] | None = None,
         actions: NowPlayingActions | None = None,
     ) -> None:
-        super().__init__(display, context, "NowPlaying")
-        self._state_provider = state_provider or build_now_playing_state_provider(context=context)
-        self._actions = actions or build_now_playing_actions(context=context)
+        super().__init__(display, context, "NowPlaying", app=app)
+        self._state_provider = state_provider or build_now_playing_state_provider(
+            app=app,
+            context=context,
+        )
+        self._actions = actions or build_now_playing_actions(app=app, context=context)
         self._lvgl_view: "ScreenView | None" = None
 
     def enter(self) -> None:

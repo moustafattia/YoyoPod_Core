@@ -30,8 +30,10 @@ class Screen(ABC):
     def __init__(
         self,
         display: Display,
-        context: Optional['AppContext'] = None,
-        name: str = "Screen"
+        context: Optional["AppContext"] = None,
+        name: str = "Screen",
+        *,
+        app: Any | None = None,
     ) -> None:
         """
         Initialize the screen.
@@ -40,16 +42,18 @@ class Screen(ABC):
             display: Display controller instance
             context: Application context (optional)
             name: Screen name for logging
+            app: Owning application shell or compatibility app (optional)
         """
         self.display = display
-        self.context = context
+        self.app = app
+        self.context = context if context is not None else getattr(app, "context", None)
         self.name = name
-        self.screen_manager: Optional['ScreenManager'] = None
+        self.screen_manager: Optional["ScreenManager"] = None
         self.route_name: Optional[str] = None
         self._pending_navigation: Optional[NavigationRequest] = None
         logger.debug(f"Screen '{name}' initialized")
 
-    def set_screen_manager(self, manager: 'ScreenManager') -> None:
+    def set_screen_manager(self, manager: "ScreenManager") -> None:
         """Set the screen manager for navigation."""
         self.screen_manager = manager
 
@@ -57,9 +61,16 @@ class Screen(ABC):
         """Set the registered route name for this screen."""
         self.route_name = route_name
 
-    def set_context(self, context: 'AppContext') -> None:
+    def set_context(self, context: "AppContext") -> None:
         """Set the application context."""
         self.context = context
+
+    def set_app(self, app: Any) -> None:
+        """Set the owning app and adopt its context when needed."""
+
+        self.app = app
+        if self.context is None:
+            self.context = getattr(app, "context", None)
 
     def request_navigation(self, request: NavigationRequest) -> None:
         """Queue a navigation request for the screen manager to resolve."""

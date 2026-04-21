@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Any, Optional
 
 from yoyopod.ui.display import Display
 from yoyopod.ui.screens.lvgl_lifecycle import current_retained_view
@@ -46,8 +46,10 @@ class HubScreen(Screen):
         music_backend: Optional["MusicBackend"] = None,
         local_music_service: Optional["LocalMusicService"] = None,
         voip_manager: Optional["VoIPManager"] = None,
+        *,
+        app: Any | None = None,
     ) -> None:
-        super().__init__(display, context, "ActionHub")
+        super().__init__(display, context, "ActionHub", app=app)
         self.music_backend = music_backend
         self.local_music_service = local_music_service
         self.voip_manager = voip_manager
@@ -88,12 +90,13 @@ class HubScreen(Screen):
 
     def _refresh_playlist_count(self) -> None:
         """Refresh the cached playlist count for the Listen card."""
-        if self.local_music_service is None or not self.local_music_service.is_available:
+        music_service = self._resolve_music_service()
+        if music_service is None or not music_service.is_available:
             self._playlist_count = None
             return
 
         try:
-            self._playlist_count = self.local_music_service.playlist_count()
+            self._playlist_count = music_service.playlist_count()
         except Exception:
             self._playlist_count = None
 
@@ -108,13 +111,14 @@ class HubScreen(Screen):
 
     def _listen_subtitle(self) -> str:
         """Return the compact Listen card subtitle."""
-        if self.music_backend is None:
+        music_backend = self._resolve_music_backend()
+        if music_backend is None:
             return "Music offline"
-        if not self.music_backend.is_connected:
+        if not music_backend.is_connected:
             return "Reconnect"
 
-        track = self.music_backend.get_current_track()
-        playback_state = self.music_backend.get_playback_state()
+        track = music_backend.get_current_track()
+        playback_state = music_backend.get_playback_state()
         if track is None:
             if self._playlist_count:
                 label = "playlist" if self._playlist_count == 1 else "playlists"
@@ -187,3 +191,33 @@ class HubScreen(Screen):
             if ask_screen is not None and hasattr(ask_screen, "set_quick_command"):
                 ask_screen.set_quick_command(True)
         self.request_route("hold_ask")
+
+    def _resolve_music_backend(self) -> "MusicBackend | None":
+        """Resolve the music backend from the constructor or owning app."""
+
+        if self.music_backend is not None:
+            return self.music_backend
+        if self.app is None:
+            return None
+        backend = getattr(self.app, "music_backend", None)
+        if backend is not None:
+            self.music_backend = backend
+        return self.music_backend
+
+    def _resolve_music_service(self) -> "LocalMusicService | None":
+        """Resolve the local music service from the constructor or owning app."""
+
+        if self.local_music_service is not None:
+            return self.local_music_service
+        if self.app is None:
+            return None
+        getter = getattr(self.app, "get_music_library", None)
+        if callable(getter):
+            resolved = getter()
+            if resolved is not None:
+                self.local_music_service = resolved
+                return resolved
+        service = getattr(self.app, "local_music_service", None)
+        if service is not None:
+            self.local_music_service = service
+        return self.local_music_service

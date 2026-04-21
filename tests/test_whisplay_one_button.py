@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 import pytest
 
 from yoyopod.core import AppContext
@@ -298,6 +300,36 @@ def test_listen_screen_select_opens_recent_tracks(
     assert screen.consume_navigation_request() == NavigationRequest.route("open_recent")
 
 
+def test_listen_screen_can_resolve_music_service_and_shuffle_via_app(
+    display: Display,
+    one_button_context: AppContext,
+) -> None:
+    """Listen should use the app seam for library reads and shuffle actions when available."""
+
+    backend = FakeMusicBackend()
+    music_service = LocalMusicService(backend)
+    service_calls: list[tuple[str, str, object]] = []
+    app = SimpleNamespace(
+        context=one_button_context,
+        get_music_library=lambda: music_service,
+        services=SimpleNamespace(
+            call=lambda domain, service, data=None: service_calls.append((domain, service, data))
+            or True
+        ),
+    )
+    screen = ListenScreen(display, app=app)
+
+    screen.enter()
+    assert [item.key for item in screen.items] == ["playlists", "recent", "shuffle"]
+
+    screen.selected_index = 2
+    screen.on_select()
+
+    assert len(service_calls) == 1
+    assert service_calls[0][0:2] == ("music", "shuffle_all")
+    assert screen.consume_navigation_request() == NavigationRequest.route("shuffle_started")
+
+
 def test_hub_select_requests_setup_route_for_setup_card(
     display: Display,
     one_button_context: AppContext,
@@ -366,6 +398,32 @@ def test_hub_listen_subtitle_handles_active_track_without_crashing(
     assert hub._listen_subtitle().startswith("Playing ")
 
 
+def test_hub_can_resolve_music_dependencies_from_app(
+    display: Display,
+    one_button_context: AppContext,
+) -> None:
+    """The Hub should derive music summaries from the owning app when no managers are passed."""
+
+    backend = FakeMusicBackend()
+    backend.current_track = Track(
+        uri="/music/golden-hour.mp3",
+        name="Golden Hour",
+        artists=["Kacey Musgraves"],
+        length=214000,
+    )
+    backend.play()
+    app = SimpleNamespace(
+        context=one_button_context,
+        music_backend=backend,
+        get_music_library=lambda: LocalMusicService(FakeMusicBackend()),
+    )
+    hub = HubScreen(display, app=app)
+
+    hub.enter()
+
+    assert hub._listen_subtitle().startswith("Playing ")
+
+
 def test_hub_talk_subtitle_uses_cached_context_status_without_polling_voip_manager(
     display: Display,
     one_button_context: AppContext,
@@ -423,6 +481,34 @@ def test_now_playing_advance_and_select_follow_one_button_mapping(
     assert screen.consume_navigation_request() == NavigationRequest.route("back")
 
 
+def test_now_playing_actions_can_use_music_services_from_app(
+    display: Display,
+    one_button_context: AppContext,
+) -> None:
+    """Now Playing should prefer the app music services when they exist."""
+
+    service_calls: list[tuple[str, str, object]] = []
+    app = SimpleNamespace(
+        context=one_button_context,
+        states=SimpleNamespace(get_value=lambda entity, default=None: "paused"),
+        services=SimpleNamespace(
+            call=lambda domain, service, data=None: service_calls.append((domain, service, data))
+            or True
+        ),
+    )
+    screen = NowPlayingScreen(display, app=app)
+
+    screen.on_select()
+    screen.on_advance()
+    screen.on_up()
+
+    assert [call[:2] for call in service_calls] == [
+        ("music", "resume"),
+        ("music", "next_track"),
+        ("music", "previous_track"),
+    ]
+
+
 def test_playlist_advance_wraps_and_select_loads_playlist(
     display: Display,
     one_button_context: AppContext,
@@ -438,6 +524,33 @@ def test_playlist_advance_wraps_and_select_loads_playlist(
 
     assert screen.selected_index == 0
     assert backend.loaded_playlists == ["m3u:alpha"]
+    assert screen.consume_navigation_request() == NavigationRequest.route("playlist_loaded")
+
+
+def test_playlist_screen_can_use_app_music_services(
+    display: Display,
+    one_button_context: AppContext,
+) -> None:
+    """Playlists should resolve library data and load commands through the app seam."""
+
+    backend = FakeMusicBackend()
+    music_service = LocalMusicService(backend)
+    service_calls: list[tuple[str, str, object]] = []
+    app = SimpleNamespace(
+        context=one_button_context,
+        get_music_library=lambda: music_service,
+        services=SimpleNamespace(
+            call=lambda domain, service, data=None: service_calls.append((domain, service, data))
+            or True
+        ),
+    )
+    screen = PlaylistScreen(display, app=app)
+
+    screen.enter()
+    screen.on_select()
+
+    assert screen.playlists
+    assert [call[:2] for call in service_calls] == [("music", "load_playlist")]
     assert screen.consume_navigation_request() == NavigationRequest.route("playlist_loaded")
 
 

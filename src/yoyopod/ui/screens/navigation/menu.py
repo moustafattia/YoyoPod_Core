@@ -2,13 +2,20 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, List, Optional
+from typing import TYPE_CHECKING, Any, List, Optional
 
 from loguru import logger
 
 from yoyopod.ui.display import Display
 from yoyopod.ui.screens.base import Screen
-from yoyopod.ui.screens.theme import MUTED, draw_icon, draw_list_item, render_footer, render_header, rounded_panel
+from yoyopod.ui.screens.theme import (
+    MUTED,
+    draw_icon,
+    draw_list_item,
+    render_footer,
+    render_header,
+    rounded_panel,
+)
 
 if TYPE_CHECKING:
     from yoyopod.core import AppContext
@@ -31,15 +38,19 @@ class MenuScreen(Screen):
         context: Optional["AppContext"] = None,
         items: Optional[List[str]] = None,
         selected_index: int = 0,
+        *,
+        app: Any | None = None,
     ) -> None:
-        super().__init__(display, context, "Menu")
+        super().__init__(display, context, "Menu", app=app)
         self.items = items or ["Listen", "Talk", "Ask", "Setup"]
         self.selected_index = selected_index
 
     def render(self) -> None:
         """Render the standard menu with the new branded list treatment."""
         selected_item = self.get_selected()
-        selected_mode, selected_icon, _ = ITEM_MODES.get(selected_item, ("setup", "setup", "Browse the device"))
+        selected_mode, selected_icon, _ = ITEM_MODES.get(
+            selected_item, ("setup", "setup", "Browse the device")
+        )
         content_top = render_header(
             self.display,
             self.context,
@@ -69,7 +80,9 @@ class MenuScreen(Screen):
         # Compute how many rows can fit and scroll so the selected row is visible.
         max_visible = (row_bottom - row_top - 44) // item_height + 1
         max_visible = max(1, min(len(self.items), max_visible))
-        start_index = max(0, min(self.selected_index - (max_visible // 2), len(self.items) - max_visible))
+        start_index = max(
+            0, min(self.selected_index - (max_visible // 2), len(self.items) - max_visible)
+        )
 
         for offset in range(max_visible):
             index = start_index + offset
@@ -89,7 +102,14 @@ class MenuScreen(Screen):
                 mode=mode,
                 selected=index == self.selected_index,
             )
-            draw_icon(self.display, icon, self.display.WIDTH - 58, y1 + 7, 24, MUTED if index != self.selected_index else (245, 247, 250))
+            draw_icon(
+                self.display,
+                icon,
+                self.display.WIDTH - 58,
+                y1 + 7,
+                24,
+                MUTED if index != self.selected_index else (245, 247, 250),
+            )
 
         render_footer(self.display, "A open | B back | X/Y move", mode=selected_mode)
         self.display.update()

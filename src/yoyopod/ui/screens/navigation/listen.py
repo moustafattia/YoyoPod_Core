@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Any, Optional
 
 from yoyopod.audio.music import LocalLibraryItem, LocalMusicService
+from yoyopod.integrations.music import ShuffleAllCommand
 from yoyopod.ui.display import Display
 from yoyopod.ui.screens.base import Screen
 from yoyopod.ui.screens.lvgl_lifecycle import current_retained_view
@@ -24,9 +25,10 @@ class ListenScreen(Screen):
         display: Display,
         context: Optional["AppContext"] = None,
         *,
+        app: Any | None = None,
         music_service: Optional[LocalMusicService] = None,
     ) -> None:
-        super().__init__(display, context, "Listen")
+        super().__init__(display, context, "Listen", app=app)
         self.music_service = music_service
         self.items: list[LocalLibraryItem] = []
         self.selected_index = 0
@@ -65,8 +67,9 @@ class ListenScreen(Screen):
 
     def _load_items(self) -> None:
         """Load the fixed local-first Listen menu items."""
-        if self.music_service is not None:
-            self.items = self.music_service.menu_items()
+        music_service = self._resolve_music_service()
+        if music_service is not None:
+            self.items = music_service.menu_items()
         else:
             self.items = [
                 LocalLibraryItem("playlists", "Playlists", "Saved mixes"),
@@ -108,10 +111,50 @@ class ListenScreen(Screen):
         if selected.key == "recent":
             self.request_route("open_recent")
             return
-        if selected.key == "shuffle" and self.music_service is not None:
-            if self.music_service.shuffle_all():
-                self.request_route("shuffle_started")
+        if selected.key == "shuffle" and self._shuffle_all():
+            self.request_route("shuffle_started")
             return
+
+    def _resolve_music_service(self) -> LocalMusicService | None:
+        """Resolve the local music service from the constructor or owning app."""
+
+        if self.music_service is not None:
+            return self.music_service
+        if self.app is None:
+            return None
+        getter = getattr(self.app, "get_music_library", None)
+        if callable(getter):
+            resolved = getter()
+            if isinstance(resolved, LocalMusicService):
+                self.music_service = resolved
+                return resolved
+        fallback = getattr(self.app, "local_music_service", None)
+        if isinstance(fallback, LocalMusicService):
+            self.music_service = fallback
+            return fallback
+        return None
+
+    def _shuffle_all(self) -> bool:
+        """Start shuffle playback through services when the app seam is available."""
+
+        if self.app is not None:
+            services = getattr(self.app, "services", None)
+            if services is not None and hasattr(services, "call"):
+                try:
+                    return bool(
+                        services.call(
+                            "music",
+                            "shuffle_all",
+                            ShuffleAllCommand(),
+                        )
+                    )
+                except Exception:
+                    return False
+        music_service = self._resolve_music_service()
+        if music_service is not None:
+            if music_service.shuffle_all():
+                return True
+        return False
 
     def on_back(self, data=None) -> None:
         """Return to the previous screen."""

@@ -69,20 +69,10 @@ class ScreensBoot:
             if volume_controller is None:
                 raise RuntimeError("Audio volume controller is not initialized")
             menu_items = ["Listen", "Talk", "Ask", "Setup"]
-            self.app.hub_screen = HubScreen(
-                display,
-                context,
-                music_backend=self.app.music_backend,
-                local_music_service=self.app.local_music_service,
-                voip_manager=self.app.voip_manager,
-            )
-            self.app.menu_screen = MenuScreen(display, context, items=menu_items)
-            self.app.home_screen = HomeScreen(display, context)
-            self.app.listen_screen = ListenScreen(
-                display,
-                context,
-                music_service=self.app.local_music_service,
-            )
+            self.app.hub_screen = HubScreen(display, context, app=self.app)
+            self.app.menu_screen = MenuScreen(display, context, items=menu_items, app=self.app)
+            self.app.home_screen = HomeScreen(display, context, app=self.app)
+            self.app.listen_screen = ListenScreen(display, context, app=self.app)
             voice_cfg = (
                 self.app.config_manager.get_voice_settings()
                 if self.app.config_manager is not None
@@ -269,25 +259,12 @@ class ScreensBoot:
             self.app.now_playing_screen = NowPlayingScreen(
                 display,
                 context,
-                state_provider=build_now_playing_state_provider(
-                    context=context,
-                    music_backend=self.app.music_backend,
-                ),
-                actions=build_now_playing_actions(
-                    context=context,
-                    music_backend=self.app.music_backend,
-                ),
+                app=self.app,
+                state_provider=build_now_playing_state_provider(app=self.app, context=context),
+                actions=build_now_playing_actions(app=self.app, context=context),
             )
-            self.app.playlist_screen = PlaylistScreen(
-                display,
-                context,
-                music_service=self.app.local_music_service,
-            )
-            self.app.recent_tracks_screen = RecentTracksScreen(
-                display,
-                context,
-                music_service=self.app.local_music_service,
-            )
+            self.app.playlist_screen = PlaylistScreen(display, context, app=self.app)
+            self.app.recent_tracks_screen = RecentTracksScreen(display, context, app=self.app)
             self.app.call_screen = CallScreen(
                 display,
                 context,

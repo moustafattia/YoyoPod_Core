@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Any, Optional
 
 from loguru import logger
 
 from yoyopod.audio.music import LocalMusicService
+from yoyopod.integrations.music import LoadPlaylistCommand
 from yoyopod.ui.display import Display
 from yoyopod.ui.screens.lvgl_lifecycle import current_retained_view
 from yoyopod.ui.screens.base import Screen
@@ -26,9 +27,10 @@ class PlaylistScreen(Screen):
         display: Display,
         context: Optional["AppContext"] = None,
         *,
+        app: Any | None = None,
         music_service: Optional[LocalMusicService] = None,
     ) -> None:
-        super().__init__(display, context, "PlaylistBrowser")
+        super().__init__(display, context, "PlaylistBrowser", app=app)
         self.music_service = music_service
         self.playlists = []
         self.selected_index = 0
@@ -54,7 +56,9 @@ class PlaylistScreen(Screen):
             self._lvgl_view = None
             return None
 
-        ui_backend = self.display.get_ui_backend() if hasattr(self.display, "get_ui_backend") else None
+        ui_backend = (
+            self.display.get_ui_backend() if hasattr(self.display, "get_ui_backend") else None
+        )
         if ui_backend is None or not getattr(ui_backend, "initialized", False):
             self._lvgl_view = None
             return None
@@ -133,12 +137,13 @@ class PlaylistScreen(Screen):
 
     def fetch_playlists(self) -> None:
         """Fetch local playlists from the app-facing local music service."""
-        if self.music_service is None:
+        music_service = self._resolve_music_service()
+        if music_service is None:
             self.error_message = "No music backend"
             logger.error("Cannot fetch playlists: no local music service")
             return
 
-        if not self.music_service.is_available:
+        if not music_service.is_available:
             self.error_message = "Music offline"
             logger.error("Cannot fetch playlists: music backend is offline")
             return
@@ -147,7 +152,7 @@ class PlaylistScreen(Screen):
         self.render()
 
         try:
-            self.playlists = self.music_service.list_playlists(fetch_track_counts=True)
+            self.playlists = music_service.list_playlists(fetch_track_counts=True)
             self.error_message = None
             logger.info(f"Fetched {len(self.playlists)} local playlists")
         except Exception as exc:
@@ -187,7 +192,8 @@ class PlaylistScreen(Screen):
             logger.warning("No playlist selected")
             return
 
-        if self.music_service is None:
+        music_service = self._resolve_music_service()
+        if music_service is None:
             logger.error("Cannot load playlist: no local music service")
             return
 
@@ -195,7 +201,7 @@ class PlaylistScreen(Screen):
         logger.info(f"Loading local playlist: {playlist.name}")
 
         try:
-            if self.music_service.load_playlist(playlist.uri):
+            if self._load_playlist(playlist.uri, music_service=music_service):
                 self.request_route("playlist_loaded")
             else:
                 self.error_message = "Load failed"
@@ -224,3 +230,44 @@ class PlaylistScreen(Screen):
     def on_down(self, data=None) -> None:
         """Move selection down."""
         self.select_next()
+
+    def _resolve_music_service(self) -> LocalMusicService | None:
+        """Resolve the local music service from the constructor or owning app."""
+
+        if self.music_service is not None:
+            return self.music_service
+        if self.app is None:
+            return None
+        getter = getattr(self.app, "get_music_library", None)
+        if callable(getter):
+            resolved = getter()
+            if isinstance(resolved, LocalMusicService):
+                self.music_service = resolved
+                return resolved
+        fallback = getattr(self.app, "local_music_service", None)
+        if isinstance(fallback, LocalMusicService):
+            self.music_service = fallback
+            return fallback
+        return None
+
+    def _load_playlist(
+        self,
+        playlist_uri: str,
+        *,
+        music_service: LocalMusicService,
+    ) -> bool:
+        """Load one playlist through services when available."""
+
+        services = getattr(self.app, "services", None)
+        if services is not None and hasattr(services, "call"):
+            try:
+                return bool(
+                    services.call(
+                        "music",
+                        "load_playlist",
+                        LoadPlaylistCommand(playlist_uri=playlist_uri),
+                    )
+                )
+            except Exception:
+                return False
+        return bool(music_service.load_playlist(playlist_uri))

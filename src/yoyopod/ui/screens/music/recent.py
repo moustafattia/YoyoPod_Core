@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Any, Optional
 
 from loguru import logger
 
 from yoyopod.audio import LocalMusicService, RecentTrackEntry
+from yoyopod.integrations.music import PlayRecentTrackCommand
 from yoyopod.ui.display import Display
 from yoyopod.ui.screens.base import Screen
 from yoyopod.ui.screens.lvgl_lifecycle import current_retained_view
@@ -26,9 +27,10 @@ class RecentTracksScreen(Screen):
         display: Display,
         context: Optional["AppContext"] = None,
         *,
+        app: Any | None = None,
         music_service: Optional[LocalMusicService] = None,
     ) -> None:
-        super().__init__(display, context, "RecentTracks")
+        super().__init__(display, context, "RecentTracks", app=app)
         self.music_service = music_service
         self.tracks: list[RecentTrackEntry] = []
         self.selected_index = 0
@@ -95,12 +97,13 @@ class RecentTracksScreen(Screen):
 
     def refresh_tracks(self) -> None:
         """Refresh recent tracks from the persistent history store."""
-        if self.music_service is None:
+        music_service = self._resolve_music_service()
+        if music_service is None:
             self.error_message = "No music backend"
             self.tracks = []
             return
 
-        self.tracks = self.music_service.list_recent_tracks()
+        self.tracks = music_service.list_recent_tracks()
         self.error_message = None
         if self.tracks:
             self.selected_index = min(self.selected_index, len(self.tracks) - 1)
@@ -162,12 +165,13 @@ class RecentTracksScreen(Screen):
 
     def on_select(self, data=None) -> None:
         """Load and play the selected recent track."""
-        if not self.tracks or self.music_service is None:
+        music_service = self._resolve_music_service()
+        if not self.tracks or music_service is None:
             return
 
         track = self.tracks[self.selected_index]
         logger.info(f"Loading recent local track: {track.title}")
-        if self.music_service.play_recent_track(track.uri):
+        if self._play_recent_track(track.uri, music_service=music_service):
             self.request_route("track_loaded")
 
     def on_back(self, data=None) -> None:
@@ -189,3 +193,44 @@ class RecentTracksScreen(Screen):
     def on_down(self, data=None) -> None:
         """Move selection down."""
         self.on_advance()
+
+    def _resolve_music_service(self) -> LocalMusicService | None:
+        """Resolve the local music service from the constructor or owning app."""
+
+        if self.music_service is not None:
+            return self.music_service
+        if self.app is None:
+            return None
+        getter = getattr(self.app, "get_music_library", None)
+        if callable(getter):
+            resolved = getter()
+            if isinstance(resolved, LocalMusicService):
+                self.music_service = resolved
+                return resolved
+        fallback = getattr(self.app, "local_music_service", None)
+        if isinstance(fallback, LocalMusicService):
+            self.music_service = fallback
+            return fallback
+        return None
+
+    def _play_recent_track(
+        self,
+        track_uri: str,
+        *,
+        music_service: LocalMusicService,
+    ) -> bool:
+        """Replay one recent track through services when available."""
+
+        services = getattr(self.app, "services", None)
+        if services is not None and hasattr(services, "call"):
+            try:
+                return bool(
+                    services.call(
+                        "music",
+                        "play_recent_track",
+                        PlayRecentTrackCommand(track_uri=track_uri),
+                    )
+                )
+            except Exception:
+                return False
+        return bool(music_service.play_recent_track(track_uri))
