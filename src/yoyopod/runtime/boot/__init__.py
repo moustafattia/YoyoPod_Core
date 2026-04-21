@@ -15,16 +15,7 @@ from yoyopod.audio import (
     RecentTrackHistoryStore,
 )
 from yoyopod.config import ConfigManager
-from yoyopod.coordinators import (
-    AppRuntimeState,
-    CallCoordinator,
-    CoordinatorRuntime,
-    PlaybackCoordinator,
-    PowerCoordinator,
-    ScreenCoordinator,
-)
 from yoyopod.device import AudioDeviceCatalog
-from yoyopod.core import ScreenChangedEvent
 from yoyopod.integrations.call import CallHistoryStore, VoIPConfig, VoIPManager
 from yoyopod.integrations.cloud.manager import CloudManager
 from yoyopod.integrations.contacts.directory import PeopleManager
@@ -41,6 +32,7 @@ from yoyopod.ui.screens.manager import ScreenManager
 
 from .components_boot import ComponentsBoot
 from .config_boot import ConfigBoot
+from .coordinators_boot import CoordinatorsBoot
 from .managers_boot import ManagersBoot
 from .screens_boot import ScreensBoot
 
@@ -86,6 +78,7 @@ class RuntimeBootService:
             cloud_manager_cls=CloudManager,
         )
         self._screens_boot = ScreensBoot(app, logger=logger)
+        self._coordinators_boot = CoordinatorsBoot(app)
 
     def setup(self) -> bool:
         """Initialize all components and register callbacks."""
@@ -237,68 +230,7 @@ class RuntimeBootService:
 
     def ensure_coordinators(self) -> None:
         """Build coordinator helpers around the initialized runtime."""
-
-        if self.app.coordinator_runtime is not None:
-            return
-
-        assert self.app.music_fsm is not None
-        assert self.app.call_fsm is not None
-        assert self.app.call_interruption_policy is not None
-        assert self.app.context is not None
-        current_screen = (
-            self.app.screen_manager.get_current_screen()
-            if self.app.screen_manager is not None
-            else None
-        )
-        current_route_name = current_screen.route_name if current_screen is not None else None
-        initial_ui_state = (
-            CoordinatorRuntime.ui_state_for_screen_name(current_route_name)
-            or AppRuntimeState.IDLE
-        )
-        self.app.coordinator_runtime = CoordinatorRuntime(
-            music_fsm=self.app.music_fsm,
-            call_fsm=self.app.call_fsm,
-            call_interruption_policy=self.app.call_interruption_policy,
-            screen_manager=self.app.screen_manager,
-            music_backend=self.app.music_backend,
-            power_manager=self.app.power_manager,
-            now_playing_screen=self.app.now_playing_screen,
-            call_screen=self.app.call_screen,
-            power_screen=self.app.power_screen,
-            incoming_call_screen=self.app.incoming_call_screen,
-            outgoing_call_screen=self.app.outgoing_call_screen,
-            in_call_screen=self.app.in_call_screen,
-            config_manager=self.app.config_manager,
-            context=self.app.context,
-            ui_state=initial_ui_state,
-            voip_ready=self.app._voip_registered,
-        )
-        self.app.screen_coordinator = ScreenCoordinator(self.app.coordinator_runtime)
-        self.app.call_coordinator = CallCoordinator(
-            runtime=self.app.coordinator_runtime,
-            screen_coordinator=self.app.screen_coordinator,
-            auto_resume_after_call=self.app.auto_resume_after_call,
-            call_history_store=self.app.call_history_store,
-            initial_voip_registered=self.app._voip_registered,
-        )
-        self.app.playback_coordinator = PlaybackCoordinator(
-            runtime=self.app.coordinator_runtime,
-            screen_coordinator=self.app.screen_coordinator,
-            local_music_service=self.app.local_music_service,
-        )
-        self.app.power_coordinator = PowerCoordinator(
-            runtime=self.app.coordinator_runtime,
-            screen_coordinator=self.app.screen_coordinator,
-            context=self.app.context,
-            cloud_manager=self.app.cloud_manager,
-        )
-        if self.app.screen_manager is not None:
-            self.app.screen_manager.on_screen_changed = (
-                lambda screen_name: self.app.event_bus.publish(
-                    ScreenChangedEvent(screen_name=screen_name)
-                )
-            )
-            self.app.event_bus.publish(ScreenChangedEvent(screen_name=current_route_name))
+        self._coordinators_boot.ensure_coordinators()
 
 
 __all__ = ["RuntimeBootService"]
