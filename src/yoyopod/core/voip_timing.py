@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from yoyopod.utils.logger import get_subsystem_logger
+from yoyopod.core.logging import get_subsystem_logger
 
 if TYPE_CHECKING:
     from yoyopod.core.loop import RuntimeLoopService

@@ -1,10 +1,10 @@
 # Logging
 
-Applies to: `src/yoyopod/utils/logger.py`, `src/yoyopod/main.py`
+Applies to: `src/yoyopod/core/logging.py`, `src/yoyopod/main.py`
 
 ## Overview
 
-All logging via `loguru` (never stdlib `logging`). Centralized configuration in `src/yoyopod/utils/logger.py`. Stdlib logging is intercepted and routed through loguru.
+All logging via `loguru` (never stdlib `logging`). Centralized configuration in `src/yoyopod/core/logging.py`. Stdlib logging is intercepted and routed through loguru.
 
 ## Subsystem Tags
 

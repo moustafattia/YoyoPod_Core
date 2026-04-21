@@ -23,7 +23,7 @@ from yoyopod.core.diagnostics.watchdog import (
     _uninstall_traceback_dump_handlers,
 )
 from yoyopod.ui.display.screenshot import _request_screenshot_capture
-from yoyopod.utils.logger import (
+from yoyopod.core.logging import (
     LoggingRuntimeConfig,
     build_logging_runtime_config,
     get_subsystem_logger,

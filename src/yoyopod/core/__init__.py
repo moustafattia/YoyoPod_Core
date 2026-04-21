@@ -27,6 +27,7 @@ _PUBLIC_EXPORTS = {
     "FocusController": ("yoyopod.core.focus", "FocusController"),
     "IncomingCallEvent": ("yoyopod.core.events", "IncomingCallEvent"),
     "LifecycleEvent": ("yoyopod.core.events", "LifecycleEvent"),
+    "LoggingRuntimeConfig": ("yoyopod.core.logging", "LoggingRuntimeConfig"),
     "LogBuffer": ("yoyopod.core.logbuffer", "LogBuffer"),
     "MainThreadScheduler": ("yoyopod.core.scheduler", "MainThreadScheduler"),
     "MediaRuntimeState": ("yoyopod.core.runtime_state", "MediaRuntimeState"),
@@ -87,7 +88,14 @@ _PUBLIC_EXPORTS = {
     "VoiceInteractionState": ("yoyopod.core.runtime_state", "VoiceInteractionState"),
     "VoiceState": ("yoyopod.core.runtime_state", "VoiceState"),
     "YoyoPodApp": ("yoyopod.core.application", "YoyoPodApp"),
+    "build_logging_runtime_config": ("yoyopod.core.logging", "build_logging_runtime_config"),
     "format_device_label": ("yoyopod.core.hardware", "format_device_label"),
+    "get_subsystem_logger": ("yoyopod.core.logging", "get_subsystem_logger"),
+    "init_logger": ("yoyopod.core.logging", "init_logger"),
+    "log_shutdown": ("yoyopod.core.logging", "log_shutdown"),
+    "log_startup": ("yoyopod.core.logging", "log_startup"),
+    "remove_pid_file": ("yoyopod.core.logging", "remove_pid_file"),
+    "write_pid_file": ("yoyopod.core.logging", "write_pid_file"),
 }
 
 

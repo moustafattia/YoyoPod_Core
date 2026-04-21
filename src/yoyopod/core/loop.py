@@ -33,7 +33,7 @@ from yoyopod.core.voip_timing import (
     _sync_background_voip_timing_sample as _sync_background_voip_timing_sample_impl,
 )
 
-from yoyopod.utils.logger import get_subsystem_logger
+from yoyopod.core.logging import get_subsystem_logger
 
 if TYPE_CHECKING:
     from yoyopod.core.application import YoyoPodApp

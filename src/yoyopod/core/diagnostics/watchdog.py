@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Any, Callable, Mapping, TextIO
 
 from yoyopod.core import RUNTIME_REQUIRED_CONFIG_FILES
-from yoyopod.utils.logger import get_subsystem_logger
+from yoyopod.core.logging import get_subsystem_logger
 
 app_logger = get_subsystem_logger("app")
 

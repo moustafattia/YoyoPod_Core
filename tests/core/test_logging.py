@@ -7,7 +7,7 @@ from pathlib import Path
 from loguru import logger
 
 from yoyopod.config.models import AppLoggingConfig
-from yoyopod.utils.logger import (
+from yoyopod.core.logging import (
     LoggingRuntimeConfig,
     build_logging_runtime_config,
     get_subsystem_logger,

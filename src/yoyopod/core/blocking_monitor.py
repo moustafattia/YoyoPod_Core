@@ -7,7 +7,7 @@ import time
 from loguru import logger
 from typing import TYPE_CHECKING, TypeVar
 
-from yoyopod.utils.logger import get_subsystem_logger
+from yoyopod.core.logging import get_subsystem_logger
 
 if TYPE_CHECKING:
     from yoyopod.core.loop import RuntimeLoopService

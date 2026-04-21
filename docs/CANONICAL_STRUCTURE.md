@@ -105,6 +105,7 @@ Frozen canonical package homes:
   - framework and cross-cutting primitives
   - `application.py`: canonical scaffold app object
   - `bus.py`, `states.py`, `services.py`, `scheduler.py`: shared Home Assistant-style spine
+  - `logging.py`: centralized loguru configuration and runtime logging helpers
   - `events.py`: universal `StateChangedEvent` plus cross-cutting app events only
   - `focus.py`, `recovery.py`, `status.py`: cross-domain mechanics and runtime status
   - `diagnostics/`: event log, snapshots, watchdog helpers
