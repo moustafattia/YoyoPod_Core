@@ -37,6 +37,14 @@ _PUBLIC_EXPORTS = {
     "ModemPhase": ("yoyopod.integrations.network.models", "ModemPhase"),
     "ModemState": ("yoyopod.integrations.network.models", "ModemState"),
     "NetworkManager": ("yoyopod.integrations.network.manager", "NetworkManager"),
+    "NetworkModemReadyEvent": ("yoyopod.integrations.network.events", "NetworkModemReadyEvent"),
+    "NetworkPppDownEvent": ("yoyopod.integrations.network.events", "NetworkPppDownEvent"),
+    "NetworkPppUpEvent": ("yoyopod.integrations.network.events", "NetworkPppUpEvent"),
+    "NetworkRegisteredEvent": ("yoyopod.integrations.network.events", "NetworkRegisteredEvent"),
+    "NetworkSignalUpdateEvent": (
+        "yoyopod.integrations.network.events",
+        "NetworkSignalUpdateEvent",
+    ),
     "SignalInfo": ("yoyopod.integrations.network.models", "SignalInfo"),
 }
 
@@ -240,6 +248,11 @@ __all__ = [
     "ModemState",
     "NetworkIntegration",
     "NetworkManager",
+    "NetworkModemReadyEvent",
+    "NetworkPppDownEvent",
+    "NetworkPppUpEvent",
+    "NetworkRegisteredEvent",
+    "NetworkSignalUpdateEvent",
     "RefreshSignalCommand",
     "SetApnCommand",
     "SignalInfo",

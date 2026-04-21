@@ -4,14 +4,15 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from yoyopod.core import (
+from yoyopod.core import ScreenChangedEvent, UserActivityEvent
+from yoyopod.integrations.location.events import (
     NetworkGpsFixEvent,
     NetworkGpsNoFixEvent,
+)
+from yoyopod.integrations.network.events import (
     NetworkPppDownEvent,
     NetworkPppUpEvent,
     NetworkSignalUpdateEvent,
-    ScreenChangedEvent,
-    UserActivityEvent,
 )
 from yoyopod.power.events import (
     GracefulShutdownCancelled,

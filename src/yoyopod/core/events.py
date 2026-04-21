@@ -3,10 +3,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Literal, Optional
-
-from yoyopod.audio.music.models import Track
-from yoyopod.integrations.call.models import CallState, RegistrationState
+from importlib import import_module
+from typing import Any, Literal
 
 FocusOwner = Literal["call", "music", "voice"]
 
@@ -28,35 +26,6 @@ class LifecycleEvent:
 
     phase: str
     detail: str = ""
-
-
-@dataclass(frozen=True, slots=True)
-class IncomingCallEvent:
-    """Published when the VoIP stack reports an incoming call."""
-
-    caller_address: str
-    caller_name: str
-
-
-@dataclass(frozen=True, slots=True)
-class CallStateChangedEvent:
-    """Published when the VoIP call state changes."""
-
-    state: CallState
-
-
-@dataclass(frozen=True, slots=True)
-class CallEndedEvent:
-    """Published when a call is released."""
-
-    reason: str = "released"
-
-
-@dataclass(frozen=True, slots=True)
-class RegistrationChangedEvent:
-    """Published when SIP registration changes."""
-
-    state: RegistrationState
 
 
 @dataclass(frozen=True, slots=True)
@@ -106,87 +75,27 @@ class BackendStoppedEvent:
     reason: str = ""
 
 
-@dataclass(frozen=True, slots=True)
-class VoIPAvailabilityChangedEvent:
-    """Published when VoIP backend availability changes."""
+_call_events = import_module("yoyopod.integrations.call.events")
+IncomingCallEvent = _call_events.IncomingCallEvent
+CallStateChangedEvent = _call_events.CallStateChangedEvent
+CallEndedEvent = _call_events.CallEndedEvent
+RegistrationChangedEvent = _call_events.RegistrationChangedEvent
+VoIPAvailabilityChangedEvent = _call_events.VoIPAvailabilityChangedEvent
 
-    available: bool
-    reason: str = ""
-    registration_state: RegistrationState = RegistrationState.NONE
+_music_events = import_module("yoyopod.integrations.music.events")
+TrackChangedEvent = _music_events.TrackChangedEvent
+PlaybackStateChangedEvent = _music_events.PlaybackStateChangedEvent
+MusicAvailabilityChangedEvent = _music_events.MusicAvailabilityChangedEvent
 
+_network_events = import_module("yoyopod.integrations.network.events")
+NetworkModemReadyEvent = _network_events.NetworkModemReadyEvent
+NetworkRegisteredEvent = _network_events.NetworkRegisteredEvent
+NetworkPppUpEvent = _network_events.NetworkPppUpEvent
+NetworkPppDownEvent = _network_events.NetworkPppDownEvent
+NetworkSignalUpdateEvent = _network_events.NetworkSignalUpdateEvent
 
-@dataclass(frozen=True, slots=True)
-class TrackChangedEvent:
-    """Published when the current track changes."""
-
-    track: Optional[Track]
-
-
-@dataclass(frozen=True, slots=True)
-class PlaybackStateChangedEvent:
-    """Published when playback changes state."""
-
-    state: str
-
-
-@dataclass(frozen=True, slots=True)
-class MusicAvailabilityChangedEvent:
-    """Published when music-backend connectivity changes."""
-
-    available: bool
-    reason: str = ""
+_location_events = import_module("yoyopod.integrations.location.events")
+NetworkGpsFixEvent = _location_events.NetworkGpsFixEvent
+NetworkGpsNoFixEvent = _location_events.NetworkGpsNoFixEvent
 
 
-@dataclass(frozen=True, slots=True)
-class NetworkModemReadyEvent:
-    """Published when the modem is initialized and registered."""
-
-    carrier: str = ""
-    network_type: str = ""
-
-
-@dataclass(frozen=True, slots=True)
-class NetworkRegisteredEvent:
-    """Published when the modem attaches to a cellular network."""
-
-    carrier: str = ""
-    network_type: str = ""
-
-
-@dataclass(frozen=True, slots=True)
-class NetworkPppUpEvent:
-    """Published when PPP data session is established."""
-
-    connection_type: str = "4g"
-
-
-@dataclass(frozen=True, slots=True)
-class NetworkPppDownEvent:
-    """Published when PPP data session drops."""
-
-    reason: str = ""
-
-
-@dataclass(frozen=True, slots=True)
-class NetworkSignalUpdateEvent:
-    """Published when signal strength changes."""
-
-    bars: int = 0
-    csq: int = 0
-
-
-@dataclass(frozen=True, slots=True)
-class NetworkGpsFixEvent:
-    """Published when a GPS coordinate is obtained."""
-
-    lat: float = 0.0
-    lng: float = 0.0
-    altitude: float = 0.0
-    speed: float = 0.0
-
-
-@dataclass(frozen=True, slots=True)
-class NetworkGpsNoFixEvent:
-    """Published when a GPS query completes without an active fix."""
-
-    reason: str = ""

@@ -57,6 +57,9 @@ from yoyopod.integrations.call import CallSessionState as IntegrationCallSession
 from yoyopod.integrations.call import CallState as IntegrationCallState
 from yoyopod.integrations.call import CallHistoryEntry as IntegrationCallHistoryEntry
 from yoyopod.integrations.call import CallHistoryStore as IntegrationCallHistoryStore
+from yoyopod.integrations.call.events import (
+    CallStateChangedEvent as IntegrationCallStateChangedEvent,
+)
 from yoyopod.integrations.call import MessagingService as IntegrationMessagingService
 from yoyopod.integrations.call import MessageDeliveryState as IntegrationMessageDeliveryState
 from yoyopod.integrations.call import RegistrationState as IntegrationRegistrationState
@@ -65,6 +68,9 @@ from yoyopod.integrations.call import VoIPManager as IntegrationVoIPManager
 from yoyopod.integrations.call import VoIPMessageRecord as IntegrationVoIPMessageRecord
 from yoyopod.integrations.call import VoIPMessageStore as IntegrationVoIPMessageStore
 from yoyopod.integrations.call import VoiceNoteDraft as IntegrationVoiceNoteDraft
+from yoyopod.integrations.location.events import NetworkGpsFixEvent as IntegrationNetworkGpsFixEvent
+from yoyopod.integrations.music.events import TrackChangedEvent as IntegrationTrackChangedEvent
+from yoyopod.integrations.network.events import NetworkPppUpEvent as IntegrationNetworkPppUpEvent
 from yoyopod.integrations.power import BatteryState as IntegrationBatteryState
 from yoyopod.integrations.power import PowerManager as IntegrationPowerManager
 from yoyopod.integrations.power import PowerSnapshot as IntegrationPowerSnapshot
@@ -101,6 +107,7 @@ from yoyopod.runtime_state import PlaybackQueue as RuntimeStatePlaybackQueue
 from yoyopod.runtime_state import Track as RuntimeStateTrack
 from yoyopod.event_bus import EventBus, EventHandler
 from yoyopod.events import CallState, RegistrationState, Track, TrackChangedEvent
+from yoyopod.events import CallStateChangedEvent, NetworkGpsFixEvent, NetworkPppUpEvent
 from yoyopod.fsm import MusicFSM
 from yoyopod.cloud import CloudAccessToken as LegacyCloudAccessToken
 from yoyopod.cloud import CloudClientError as LegacyCloudClientError
@@ -190,9 +197,13 @@ def test_legacy_core_import_paths_resolve_to_relocated_symbols() -> None:
     assert EventBus is CoreEventBus
     assert EventHandler is CoreEventHandler
     assert CallState is IntegrationCallState
+    assert CallStateChangedEvent is IntegrationCallStateChangedEvent
     assert RegistrationState is IntegrationRegistrationState
+    assert NetworkGpsFixEvent is IntegrationNetworkGpsFixEvent
+    assert NetworkPppUpEvent is IntegrationNetworkPppUpEvent
     assert Track is MusicTrack
     assert TrackChangedEvent is CoreTrackChangedEvent
+    assert TrackChangedEvent is IntegrationTrackChangedEvent
     assert MusicFSM is CoreMusicFSM
     assert VoiceState is CoreVoiceState
     assert CoreCallFSM is IntegrationCallFSM

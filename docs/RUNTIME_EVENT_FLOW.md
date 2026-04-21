@@ -202,7 +202,7 @@ Ownership: call behavior belongs to `CallCoordinator`; derived app state belongs
 ### Call state change flow
 
 1. `VoIPManager` reports `CallState`.
-2. `CallCoordinator.publish_call_state_events()` publishes `CallStateChangedEvent`, and `CallEndedEvent` for `RELEASED`.
+2. `CallCoordinator.publish_call_state_events()` publishes the call-domain events now owned by `src/yoyopod/integrations/call/events.py`: `CallStateChangedEvent`, and `CallEndedEvent` for `RELEASED`.
 3. The coordinator-thread drain calls `CallCoordinator.handle_call_state_change()` or `handle_call_ended()`.
 4. Those methods update the call FSM, derived app state, call screens, call history, and optional music resume.
 
@@ -211,7 +211,7 @@ Notable ownership detail: `CallCoordinator` directly decides music pause/resume 
 ### Playback change flow
 
 1. `MpvBackend` invokes callbacks registered in `RuntimeBootService.setup_music_callbacks()`.
-2. `PlaybackCoordinator.publish_track_change()` or `publish_playback_state_change()` publishes typed events.
+2. `PlaybackCoordinator.publish_track_change()` or `publish_playback_state_change()` publishes the music-domain events now owned by `src/yoyopod/integrations/music/events.py`.
 3. Those callbacks arrive from the mpv IPC dispatch thread, so the `EventBus` queues them for the coordinator thread.
 4. The coordinator-thread drain calls `PlaybackCoordinator.handle_track_change()` or `handle_playback_state_change()`.
 5. `PlaybackCoordinator` updates `MusicFSM`, re-derives app state, records recents, and refreshes the now-playing screen.
@@ -248,7 +248,7 @@ Ownership: route-change bookkeeping is split. `ScreenManager` knows when the rou
 
 ### Network status flow
 
-1. `NetworkManager` publishes network events directly to `EventBus`.
+1. `NetworkManager` publishes the typed network/location events from `src/yoyopod/integrations/network/events.py` and `src/yoyopod/integrations/location/events.py` directly to `EventBus`.
 2. `YoyoPodApp` subscribes to those events in its constructor.
 3. App handlers call `_sync_network_context_from_manager()` or update `AppContext` directly.
 

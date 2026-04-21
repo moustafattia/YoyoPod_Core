@@ -13,6 +13,7 @@ from yoyopod.integrations.location.commands import (
     EnableGpsCommand,
     RequestFixCommand,
 )
+from yoyopod.integrations.location.events import NetworkGpsFixEvent, NetworkGpsNoFixEvent
 from yoyopod.integrations.location.handlers import (
     apply_availability_to_state,
     apply_fix_to_state,
@@ -122,6 +123,8 @@ __all__ = [
     "DisableGpsCommand",
     "EnableGpsCommand",
     "LocationIntegration",
+    "NetworkGpsFixEvent",
+    "NetworkGpsNoFixEvent",
     "RequestFixCommand",
     "setup",
     "teardown",

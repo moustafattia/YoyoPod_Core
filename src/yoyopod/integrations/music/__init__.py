@@ -7,6 +7,11 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from yoyopod.core import AudioFocusLostEvent
+from yoyopod.integrations.music.events import (
+    MusicAvailabilityChangedEvent,
+    PlaybackStateChangedEvent,
+    TrackChangedEvent,
+)
 from yoyopod.core.focus import ReleaseFocusCommand, RequestFocusCommand
 from yoyopod.integrations.music.commands import (
     LoadPlaylistCommand,
@@ -49,8 +54,10 @@ __all__ = [
     "LoadPlaylistCommand",
     "LocalMusicService",
     "MusicIntegration",
+    "MusicAvailabilityChangedEvent",
     "NextTrackCommand",
     "PauseCommand",
+    "PlaybackStateChangedEvent",
     "PlayCommand",
     "PlayRecentTrackCommand",
     "PreviousTrackCommand",
@@ -60,6 +67,7 @@ __all__ = [
     "SetVolumeCommand",
     "ShuffleAllCommand",
     "StopCommand",
+    "TrackChangedEvent",
     "setup",
     "teardown",
 ]

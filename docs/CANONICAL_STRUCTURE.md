@@ -105,19 +105,24 @@ Frozen canonical package homes:
   - framework and cross-cutting primitives
   - `application.py`: canonical scaffold app object
   - `bus.py`, `states.py`, `services.py`, `scheduler.py`: shared Home Assistant-style spine
+  - `events.py`: universal `StateChangedEvent` plus cross-cutting app events only
   - `focus.py`, `recovery.py`, `status.py`: cross-domain mechanics and runtime status
   - `diagnostics/`: event log, snapshots, watchdog helpers
   - `hardware.py`: only shared hardware metadata/helpers that do not belong to one domain
 - `src/yoyopod/integrations/call/`
   - canonical call-domain seam: calls, registration, messaging, history, and voice notes
+  - owns call-domain typed events in `events.py`
 - `src/yoyopod/integrations/music/`
   - canonical music-domain seam
+  - owns music-domain typed events in `events.py`
 - `src/yoyopod/integrations/power/`
   - canonical power-domain seam
 - `src/yoyopod/integrations/network/`
   - canonical cellular/network seam
+  - owns modem / PPP / signal events in `events.py`
 - `src/yoyopod/integrations/location/`
   - canonical GPS/location seam split from network
+  - owns GPS fix/no-fix events in `events.py`
 - `src/yoyopod/integrations/cloud/`
   - canonical cloud-sync and telemetry seam
 - `src/yoyopod/integrations/contacts/`

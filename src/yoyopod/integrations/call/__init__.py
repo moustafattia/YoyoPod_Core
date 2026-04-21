@@ -23,8 +23,13 @@ if TYPE_CHECKING:
         UnmuteCommand,
     )
     from yoyopod.integrations.call.events import (
+        CallEndedEvent,
         CallHistoryUpdatedEvent,
+        CallStateChangedEvent,
+        IncomingCallEvent,
+        RegistrationChangedEvent,
         VoiceNoteSummaryChangedEvent,
+        VoIPAvailabilityChangedEvent,
     )
     from yoyopod.integrations.call.history import CallHistoryEntry, CallHistoryStore
     from yoyopod.integrations.call.lifecycle import ActiveCallSession, CallSessionTracker
@@ -67,8 +72,10 @@ _PUBLIC_EXPORTS = {
         "CancelVoiceNoteRecordingCommand",
     ),
     "CallFSM": ("yoyopod.integrations.call.session", "CallFSM"),
+    "CallEndedEvent": ("yoyopod.integrations.call.events", "CallEndedEvent"),
     "CallHistoryUpdatedEvent": ("yoyopod.integrations.call.events", "CallHistoryUpdatedEvent"),
     "CallInterruptionPolicy": ("yoyopod.integrations.call.session", "CallInterruptionPolicy"),
+    "CallStateChangedEvent": ("yoyopod.integrations.call.events", "CallStateChangedEvent"),
     "CallSessionState": ("yoyopod.integrations.call.session", "CallSessionState"),
     "CallSessionTracker": ("yoyopod.integrations.call.lifecycle", "CallSessionTracker"),
     "CallHistoryEntry": ("yoyopod.integrations.call.history", "CallHistoryEntry"),
@@ -76,6 +83,7 @@ _PUBLIC_EXPORTS = {
     "CallRinger": ("yoyopod.integrations.call.ringer", "CallRinger"),
     "DialCommand": ("yoyopod.integrations.call.commands", "DialCommand"),
     "HangupCommand": ("yoyopod.integrations.call.commands", "HangupCommand"),
+    "IncomingCallEvent": ("yoyopod.integrations.call.events", "IncomingCallEvent"),
     "is_voip_configured": ("yoyopod.integrations.call.status", "is_voip_configured"),
     "MarkHistorySeenCommand": ("yoyopod.integrations.call.commands", "MarkHistorySeenCommand"),
     "MuteCommand": ("yoyopod.integrations.call.commands", "MuteCommand"),
@@ -108,6 +116,10 @@ _PUBLIC_EXPORTS = {
     "MessageDeliveryState": ("yoyopod.integrations.call.models", "MessageDeliveryState"),
     "VoIPConfig": ("yoyopod.integrations.call.models", "VoIPConfig"),
     "VoIPMessageRecord": ("yoyopod.integrations.call.models", "VoIPMessageRecord"),
+    "RegistrationChangedEvent": (
+        "yoyopod.integrations.call.events",
+        "RegistrationChangedEvent",
+    ),
     "RegistrationStateChanged": (
         "yoyopod.integrations.call.models",
         "RegistrationStateChanged",
@@ -130,6 +142,10 @@ _PUBLIC_EXPORTS = {
     "VoIPMessageStore": ("yoyopod.integrations.call.message_store", "VoIPMessageStore"),
     "VoIPIterateMetrics": ("yoyopod.backends.voip.protocol", "VoIPIterateMetrics"),
     "VoIPManager": ("yoyopod.integrations.call.manager", "VoIPManager"),
+    "VoIPAvailabilityChangedEvent": (
+        "yoyopod.integrations.call.events",
+        "VoIPAvailabilityChangedEvent",
+    ),
     "VoiceNoteDraft": ("yoyopod.integrations.call.voice_notes", "VoiceNoteDraft"),
     "VoiceNoteService": ("yoyopod.integrations.call.voice_notes", "VoiceNoteService"),
     "VoiceNoteSummaryChangedEvent": (
@@ -168,10 +184,12 @@ def setup(
 ) -> CallIntegration:
     """Register scaffold call services, state mirroring, and recovery hooks."""
 
-    from yoyopod.core.events import (
+    from yoyopod.integrations.call.events import (
+        CallHistoryUpdatedEvent,
         CallStateChangedEvent,
         IncomingCallEvent,
         RegistrationChangedEvent,
+        VoiceNoteSummaryChangedEvent,
         VoIPAvailabilityChangedEvent,
     )
     from yoyopod.integrations.call.handlers import (
@@ -195,10 +213,6 @@ def setup(
         start_voice_note_recording,
         stop_voice_note_recording,
         unmute,
-    )
-    from yoyopod.integrations.call.events import (
-        CallHistoryUpdatedEvent,
-        VoiceNoteSummaryChangedEvent,
     )
     from yoyopod.integrations.call.history import CallHistoryStore
     from yoyopod.integrations.call.lifecycle import CallSessionTracker
@@ -523,9 +537,11 @@ __all__ = [
     "AnswerCommand",
     "ActiveCallSession",
     "CallIntegration",
+    "CallEndedEvent",
     "CallFSM",
     "CallHistoryUpdatedEvent",
     "CallInterruptionPolicy",
+    "CallStateChangedEvent",
     "CallSessionState",
     "CallSessionTracker",
     "CancelVoiceNoteRecordingCommand",
@@ -534,6 +550,7 @@ __all__ = [
     "CallRinger",
     "DialCommand",
     "HangupCommand",
+    "IncomingCallEvent",
     "is_voip_configured",
     "MarkHistorySeenCommand",
     "MuteCommand",
@@ -551,6 +568,7 @@ __all__ = [
     "MessageDeliveryState",
     "VoIPConfig",
     "VoIPMessageRecord",
+    "RegistrationChangedEvent",
     "RegistrationStateChanged",
     "CallStateChanged",
     "IncomingCallDetected",
@@ -564,6 +582,7 @@ __all__ = [
     "VoIPMessageStore",
     "VoIPIterateMetrics",
     "VoIPManager",
+    "VoIPAvailabilityChangedEvent",
     "VoiceNoteDraft",
     "VoiceNoteService",
     "VoiceNoteSummaryChangedEvent",

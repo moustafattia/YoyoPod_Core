@@ -48,7 +48,7 @@ class NetworkManager:
     def _start_flow(self, *, expected_generation: int | None = None) -> bool:
         """Run the one-shot modem bring-up flow."""
 
-        from yoyopod.core import (
+        from yoyopod.integrations.network.events import (
             NetworkModemReadyEvent,
             NetworkPppUpEvent,
             NetworkRegisteredEvent,
@@ -115,7 +115,7 @@ class NetworkManager:
     def stop(self) -> None:
         """Stop PPP and close the modem."""
 
-        from yoyopod.core import NetworkPppDownEvent
+        from yoyopod.integrations.network.events import NetworkPppDownEvent
 
         with self._lifecycle_lock:
             self._lifecycle_generation += 1
@@ -168,7 +168,10 @@ class NetworkManager:
     def query_gps(self) -> GpsCoordinate | None:
         """Query GPS coordinates (may briefly interrupt PPP)."""
 
-        from yoyopod.core import NetworkGpsFixEvent, NetworkGpsNoFixEvent
+        from yoyopod.integrations.location.events import (
+            NetworkGpsFixEvent,
+            NetworkGpsNoFixEvent,
+        )
 
         with self._lifecycle_lock:
             coord = self.backend.query_gps()

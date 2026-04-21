@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from yoyopod.core.events import (
-    BackendStoppedEvent,
+from yoyopod.core.events import BackendStoppedEvent
+from yoyopod.integrations.call.events import (
     CallStateChangedEvent,
     IncomingCallEvent,
     RegistrationChangedEvent,

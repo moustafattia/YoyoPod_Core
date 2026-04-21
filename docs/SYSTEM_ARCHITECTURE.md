@@ -175,6 +175,7 @@ yoyopod.py / yoyopod.main
 - `src/yoyopod/main.py`: package entry point
 - `src/yoyopod/core/application.py`: canonical scaffold app object
 - `src/yoyopod/core/bus.py`, `states.py`, `services.py`, `scheduler.py`: frozen spine primitives
+- `src/yoyopod/core/events.py`: universal state-change and cross-cutting app events only
 - `src/yoyopod/core/focus.py`, `recovery.py`, `status.py`, `diagnostics/`: cross-cutting core modules
 - `src/yoyopod/fsm.py`: compatibility wrapper over relocated FSM primitives
 - `src/yoyopod/coordinators/registry.py`: derived app runtime state
@@ -198,9 +199,11 @@ yoyopod.py / yoyopod.main
 ### Domains and Backends
 
 - `src/yoyopod/integrations/music/`: canonical music seam
+- `src/yoyopod/integrations/music/events.py`: music-domain typed events
 - `src/yoyopod/backends/music/`: concrete mpv adapters
 - `src/yoyopod/communication/__init__.py`: compatibility facade for historical communication imports
 - `src/yoyopod/integrations/call/`: canonical public call manager, session FSM/policy, lifecycle tracker, messaging service, models, message store, history, and voice-note seam
+- `src/yoyopod/integrations/call/events.py`: call-domain typed events
 - `src/yoyopod/backends/voip/`: canonical Liblinphone adapter, protocol types, mock backend, and native shim binding
 - `src/yoyopod/communication/calling/`: legacy compatibility shims plus remaining call helper modules
 - `src/yoyopod/communication/messaging/`: compatibility shim for the historical message-store path
@@ -216,8 +219,10 @@ yoyopod.py / yoyopod.main
 - `src/yoyopod/integrations/power/`: canonical power manager, models, and scaffold integration ownership
 - `src/yoyopod/power/`: compatibility shims plus the remaining power-specific events and safety policy code
 - `src/yoyopod/integrations/network/`: canonical network manager, modem models, and scaffold integration ownership
+- `src/yoyopod/integrations/network/events.py`: modem / PPP / signal events
 - `src/yoyopod/network/`: compatibility shims for the historical network import path
 - `src/yoyopod/integrations/location/`: canonical GPS/location seam
+- `src/yoyopod/integrations/location/events.py`: GPS fix/no-fix events
 - `src/yoyopod/integrations/voice/`: canonical voice manager, service alias, and typed voice models
 - `src/yoyopod/backends/voice/`: concrete capture, playback, STT, and TTS adapters
 - `src/yoyopod/voice/`: compatibility shims plus the remaining command-matching code
