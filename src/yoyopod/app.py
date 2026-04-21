@@ -7,7 +7,6 @@ Thin application shell that composes focused runtime services.
 from __future__ import annotations
 
 import threading
-import time
 from queue import SimpleQueue
 from typing import TYPE_CHECKING, Any, Callable, Optional
 
@@ -45,6 +44,7 @@ from yoyopod.integrations.network import NetworkManager
 from yoyopod.runtime.boot import RuntimeBootService
 from yoyopod.runtime.event_subscriptions import RuntimeEventSubscriptions
 from yoyopod.runtime.loop import RuntimeLoopService
+from yoyopod.runtime.metrics import RuntimeMetricsStore
 from yoyopod.runtime.models import PendingShutdown, PowerAlert, RecoveryState
 from yoyopod.runtime.network_events import NetworkEventHandler
 from yoyopod.runtime.power_service import PowerRuntimeService
@@ -77,21 +77,6 @@ if TYPE_CHECKING:
     from yoyopod.ui.screens.voip.quick_call import CallScreen
     from yoyopod.ui.screens.voip.talk_contact import TalkContactScreen
     from yoyopod.ui.screens.voip.voice_note import VoiceNoteScreen
-
-
-def _queue_depth(queue_obj: object) -> int | None:
-    """Return a best-effort queue depth for runtime diagnostics."""
-
-    qsize = getattr(queue_obj, "qsize", None)
-    if not callable(qsize):
-        return None
-
-    try:
-        return int(qsize())
-    except (NotImplementedError, TypeError, ValueError):
-        return None
-
-
 class YoyoPodApp:
     """
     Main YoyoPod application coordinator.
@@ -181,10 +166,6 @@ class YoyoPodApp:
         self._stopping = False
         self._app_started_at = 0.0
         self._last_user_activity_at = 0.0
-        self._last_input_activity_at = 0.0
-        self._last_input_activity_action_name: str | None = None
-        self._last_input_handled_at = 0.0
-        self._last_input_handled_action_name: str | None = None
         self._screen_on_started_at: float | None = 0.0
         self._screen_on_accumulated_seconds = 0.0
         self._screen_timeout_seconds = 0.0
@@ -200,11 +181,6 @@ class YoyoPodApp:
         self._lvgl_input_bridge: Optional[LvglInputBridge] = None
         self._last_lvgl_pump_at = 0.0
         self._last_loop_heartbeat_at = 0.0
-        self._last_responsiveness_capture_at = 0.0
-        self._last_responsiveness_capture_reason: str | None = None
-        self._last_responsiveness_capture_scope: str | None = None
-        self._last_responsiveness_capture_summary: str | None = None
-        self._last_responsiveness_capture_artifacts: dict[str, str] = {}
         self._next_voip_iterate_at = 0.0
         self._voip_iterate_interval_seconds = 0.02
 
@@ -213,6 +189,7 @@ class YoyoPodApp:
         self.event_bus = EventBus(main_thread_id=self._main_thread_id)
         self._pending_main_thread_callbacks: SimpleQueue[Callable[[], None]] = SimpleQueue()
         self._pending_safety_main_thread_callbacks: SimpleQueue[Callable[[], None]] = SimpleQueue()
+        self.runtime_metrics = RuntimeMetricsStore()
 
         # Runtime services
         self.screen_power_service = ScreenPowerService(self)
@@ -249,20 +226,119 @@ class YoyoPodApp:
         """Initialize all components and register callbacks."""
         return self.boot_service.setup()
 
+    @property
+    def _last_input_activity_at(self) -> float:
+        """Expose the latest raw input timestamp through the legacy app field."""
+
+        return self.runtime_metrics.last_input_activity_at
+
+    @_last_input_activity_at.setter
+    def _last_input_activity_at(self, value: float) -> None:
+        self.runtime_metrics.last_input_activity_at = value
+
+    @property
+    def _last_input_activity_action_name(self) -> str | None:
+        """Expose the latest raw input action through the legacy app field."""
+
+        return self.runtime_metrics.last_input_activity_action_name
+
+    @_last_input_activity_action_name.setter
+    def _last_input_activity_action_name(self, value: str | None) -> None:
+        self.runtime_metrics.last_input_activity_action_name = value
+
+    @property
+    def _last_input_handled_at(self) -> float:
+        """Expose the latest handled input timestamp through the legacy app field."""
+
+        return self.runtime_metrics.last_input_handled_at
+
+    @_last_input_handled_at.setter
+    def _last_input_handled_at(self, value: float) -> None:
+        self.runtime_metrics.last_input_handled_at = value
+
+    @property
+    def _last_input_handled_action_name(self) -> str | None:
+        """Expose the latest handled input action through the legacy app field."""
+
+        return self.runtime_metrics.last_input_handled_action_name
+
+    @_last_input_handled_action_name.setter
+    def _last_input_handled_action_name(self, value: str | None) -> None:
+        self.runtime_metrics.last_input_handled_action_name = value
+
+    @property
+    def _last_responsiveness_capture_at(self) -> float:
+        """Expose the latest responsiveness capture timestamp through the legacy field."""
+
+        return self.runtime_metrics.last_responsiveness_capture_at
+
+    @_last_responsiveness_capture_at.setter
+    def _last_responsiveness_capture_at(self, value: float) -> None:
+        self.runtime_metrics.last_responsiveness_capture_at = value
+
+    @property
+    def _last_responsiveness_capture_reason(self) -> str | None:
+        """Expose the latest responsiveness capture reason through the legacy field."""
+
+        return self.runtime_metrics.last_responsiveness_capture_reason
+
+    @_last_responsiveness_capture_reason.setter
+    def _last_responsiveness_capture_reason(self, value: str | None) -> None:
+        self.runtime_metrics.last_responsiveness_capture_reason = value
+
+    @property
+    def _last_responsiveness_capture_scope(self) -> str | None:
+        """Expose the latest responsiveness capture scope through the legacy field."""
+
+        return self.runtime_metrics.last_responsiveness_capture_scope
+
+    @_last_responsiveness_capture_scope.setter
+    def _last_responsiveness_capture_scope(self, value: str | None) -> None:
+        self.runtime_metrics.last_responsiveness_capture_scope = value
+
+    @property
+    def _last_responsiveness_capture_summary(self) -> str | None:
+        """Expose the latest responsiveness capture summary through the legacy field."""
+
+        return self.runtime_metrics.last_responsiveness_capture_summary
+
+    @_last_responsiveness_capture_summary.setter
+    def _last_responsiveness_capture_summary(self, value: str | None) -> None:
+        self.runtime_metrics.last_responsiveness_capture_summary = value
+
+    @property
+    def _last_responsiveness_capture_artifacts(self) -> dict[str, str]:
+        """Expose the latest responsiveness capture artifacts through the legacy field."""
+
+        return self.runtime_metrics.last_responsiveness_capture_artifacts
+
+    @_last_responsiveness_capture_artifacts.setter
+    def _last_responsiveness_capture_artifacts(self, value: dict[str, str]) -> None:
+        self.runtime_metrics.last_responsiveness_capture_artifacts = dict(value)
+
     def _pending_main_thread_callback_count(self) -> int | None:
         """Return the combined generic and safety callback backlog."""
-
-        callback_backlog = _queue_depth(self._pending_main_thread_callbacks)
-        safety_backlog = _queue_depth(self._pending_safety_main_thread_callbacks)
-        if callback_backlog is None and safety_backlog is None:
-            return None
-        return max(0, callback_backlog or 0) + max(0, safety_backlog or 0)
+        return self.runtime_metrics.pending_main_thread_callback_count(
+            self._pending_main_thread_callbacks,
+            self._pending_safety_main_thread_callbacks,
+        )
 
     def note_input_activity(self, action: object, _data: Any | None = None) -> None:
         """Record raw or semantic input activity before the coordinator drains it."""
+        self.runtime_metrics.note_input_activity(action, _data)
 
-        self._last_input_activity_at = time.monotonic()
-        self._last_input_activity_action_name = getattr(action, "value", None)
+    def note_handled_input(
+        self,
+        *,
+        action_name: str | None,
+        handled_at: float,
+    ) -> None:
+        """Record semantic user activity after the coordinator handles it."""
+
+        self.runtime_metrics.note_handled_input(
+            action_name=action_name,
+            handled_at=handled_at,
+        )
 
     def record_responsiveness_capture(
         self,
@@ -274,12 +350,13 @@ class YoyoPodApp:
         artifacts: dict[str, str] | None = None,
     ) -> None:
         """Persist the latest automatic hang-evidence capture metadata."""
-
-        self._last_responsiveness_capture_at = captured_at
-        self._last_responsiveness_capture_reason = reason
-        self._last_responsiveness_capture_scope = suspected_scope
-        self._last_responsiveness_capture_summary = summary
-        self._last_responsiveness_capture_artifacts = dict(artifacts or {})
+        self.runtime_metrics.record_responsiveness_capture(
+            captured_at=captured_at,
+            reason=reason,
+            suspected_scope=suspected_scope,
+            summary=summary,
+            artifacts=artifacts,
+        )
 
     def run(self) -> None:
         """Run the main application loop until interrupted."""

@@ -31,6 +31,12 @@ def _select_loop_cadence(
 ) -> _LoopCadenceDecision:
     """Choose the next runtime cadence from current state and queued work."""
 
+    runtime_metrics = getattr(runtime_loop.app, "runtime_metrics", None)
+    last_input_activity_at = (
+        runtime_metrics.last_input_activity_at
+        if runtime_metrics is not None
+        else getattr(runtime_loop.app, "_last_input_activity_at", 0.0)
+    )
     configured_voip_interval_seconds = max(
         0.01,
         float(runtime_loop.app._voip_iterate_interval_seconds),
@@ -66,8 +72,8 @@ def _select_loop_cadence(
         )
 
     recent_input_age_seconds = (
-        max(0.0, monotonic_now - runtime_loop.app._last_input_activity_at)
-        if runtime_loop.app._last_input_activity_at > 0.0
+        max(0.0, monotonic_now - last_input_activity_at)
+        if last_input_activity_at > 0.0
         else None
     )
     if (

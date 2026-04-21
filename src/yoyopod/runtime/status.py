@@ -19,6 +19,7 @@ class RuntimeStatusService:
         """Return the current application status."""
 
         monotonic_now = time.monotonic()
+        runtime_metrics = self.app.runtime_metrics
         pending_shutdown_in_seconds = None
         if self.app._pending_shutdown is not None:
             pending_shutdown_in_seconds = max(
@@ -72,17 +73,17 @@ class RuntimeStatusService:
             "pending_main_thread_callbacks": self.app._pending_main_thread_callback_count(),
             "pending_event_bus_events": self.app.event_bus.pending_count(),
             "input_activity_age_seconds": (
-                max(0.0, monotonic_now - self.app._last_input_activity_at)
-                if self.app._last_input_activity_at > 0.0
+                max(0.0, monotonic_now - runtime_metrics.last_input_activity_at)
+                if runtime_metrics.last_input_activity_at > 0.0
                 else None
             ),
-            "last_input_action": self.app._last_input_activity_action_name,
+            "last_input_action": runtime_metrics.last_input_activity_action_name,
             "handled_input_activity_age_seconds": (
-                max(0.0, monotonic_now - self.app._last_input_handled_at)
-                if self.app._last_input_handled_at > 0.0
+                max(0.0, monotonic_now - runtime_metrics.last_input_handled_at)
+                if runtime_metrics.last_input_handled_at > 0.0
                 else None
             ),
-            "last_handled_input_action": self.app._last_input_handled_action_name,
+            "last_handled_input_action": runtime_metrics.last_input_handled_action_name,
             "battery_percent": self.app.context.power.battery_percent if self.app.context else None,
             "battery_charging": (
                 self.app.context.power.battery_charging if self.app.context else None
@@ -202,15 +203,19 @@ class RuntimeStatusService:
                 )
             ),
             "responsiveness_last_capture_age_seconds": (
-                max(0.0, monotonic_now - self.app._last_responsiveness_capture_at)
-                if self.app._last_responsiveness_capture_at > 0.0
+                max(0.0, monotonic_now - runtime_metrics.last_responsiveness_capture_at)
+                if runtime_metrics.last_responsiveness_capture_at > 0.0
                 else None
             ),
-            "responsiveness_last_capture_reason": self.app._last_responsiveness_capture_reason,
-            "responsiveness_last_capture_scope": self.app._last_responsiveness_capture_scope,
-            "responsiveness_last_capture_summary": self.app._last_responsiveness_capture_summary,
+            "responsiveness_last_capture_reason": (
+                runtime_metrics.last_responsiveness_capture_reason
+            ),
+            "responsiveness_last_capture_scope": runtime_metrics.last_responsiveness_capture_scope,
+            "responsiveness_last_capture_summary": (
+                runtime_metrics.last_responsiveness_capture_summary
+            ),
             "responsiveness_last_capture_artifacts": dict(
-                self.app._last_responsiveness_capture_artifacts
+                runtime_metrics.last_responsiveness_capture_artifacts
             ),
             **self.app.runtime_loop.timing_snapshot(now=monotonic_now),
         }
