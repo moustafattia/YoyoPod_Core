@@ -17,7 +17,7 @@ from yoyopod.backends.voip.binding import (
     LiblinphoneBinding,
     LiblinphoneNativeEvent,
 )
-from yoyopod.communication.models import (
+from yoyopod.integrations.call.models import (
     BackendStopped,
     CallState,
     CallStateChanged,

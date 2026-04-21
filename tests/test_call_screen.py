@@ -6,7 +6,7 @@ import pytest
 
 from yoyopod.core import AppContext
 from yoyopod.integrations.call import VoiceNoteDraft
-from yoyopod.communication.models import (
+from yoyopod.integrations.call.models import (
     MessageDeliveryState,
     MessageDirection,
     MessageKind,

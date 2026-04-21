@@ -14,7 +14,7 @@ from typer.testing import CliRunner
 
 import yoyopod_cli.pi_validate as voip_cli
 import yoyopod_cli.pi_voip as voip_check_cli
-from yoyopod.communication.models import CallState, RegistrationState
+from yoyopod.integrations.call.models import CallState, RegistrationState
 
 runner = CliRunner()
 

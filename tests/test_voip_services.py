@@ -9,8 +9,8 @@ from pathlib import Path
 
 from yoyopod.backends.voip import MockVoIPBackend
 from yoyopod.communication.calling.messaging import MessagingService
-from yoyopod.communication.messaging import VoIPMessageStore
-from yoyopod.communication.models import (
+from yoyopod.integrations.call.message_store import VoIPMessageStore
+from yoyopod.integrations.call.models import (
     MessageDeliveryChanged,
     MessageDeliveryState,
     MessageDirection,

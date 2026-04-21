@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from typing import Any, Literal, Optional
 
 from yoyopod.audio.music.models import Track
-from yoyopod.communication.models import CallState, RegistrationState
+from yoyopod.integrations.call.models import CallState, RegistrationState
 
 FocusOwner = Literal["call", "music", "voice"]
 

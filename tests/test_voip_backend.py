@@ -16,7 +16,7 @@ import pytest
 from cffi import FFI
 
 from yoyopod.backends.voip import LiblinphoneBackend, LiblinphoneBinding, MockVoIPBackend
-from yoyopod.communication.models import (
+from yoyopod.integrations.call.models import (
     BackendStopped,
     CallState,
     CallStateChanged,

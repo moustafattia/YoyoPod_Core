@@ -109,7 +109,7 @@ Current exemplar package homes:
   - `integrations/`
   - `__init__.py` is the app-facing seam
 - `src/yoyopod/integrations/call/`
-  - canonical call manager, call-history store, and voice-note models/services
+  - canonical call manager, models, message store, call-history store, and voice-note services
   - `__init__.py` is the app-facing seam
 - `src/yoyopod/backends/voip/`
   - canonical Liblinphone adapter, mock backend, protocol types, and native shim binding
@@ -169,11 +169,11 @@ The call migration follows the same cutover shape:
 - communication policy remains under `config/communication/calling.yaml` and
   `config/communication/messaging.yaml`
 - `src/yoyopod/integrations/call/` is the canonical owner of the public
-  call manager, call-history, and voice-note seam
+  call manager, models, message store, call-history, and voice-note seam
 - `src/yoyopod/backends/voip/` is the canonical owner of the concrete
   Liblinphone and mock backend adapters plus protocol/binding types
-- `src/yoyopod/communication/calling/` is retained for low-level backend
-  compatibility imports plus the remaining messaging helpers
+- `src/yoyopod/communication/calling/`, `src/yoyopod/communication/messaging/`,
+  and `src/yoyopod/communication/models.py` are retained as compatibility shims
 - app/runtime composition depends on `yoyopod.integrations.call` instead of
   reaching through `yoyopod.communication.calling.*` for public call services
 

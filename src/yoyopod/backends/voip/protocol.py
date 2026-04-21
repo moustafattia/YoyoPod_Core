@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Callable, Protocol
 
-from yoyopod.communication.models import VoIPEvent
+from yoyopod.integrations.call.models import VoIPEvent
 
 
 class VoIPBackend(Protocol):

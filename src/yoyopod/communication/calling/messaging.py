@@ -10,8 +10,8 @@ from typing import Callable
 from loguru import logger
 
 from yoyopod.backends.voip.protocol import VoIPBackend
-from yoyopod.communication.messaging import VoIPMessageStore
-from yoyopod.communication.models import (
+from yoyopod.integrations.call.message_store import VoIPMessageStore
+from yoyopod.integrations.call.models import (
     MessageDeliveryChanged,
     MessageDeliveryState,
     MessageDirection,

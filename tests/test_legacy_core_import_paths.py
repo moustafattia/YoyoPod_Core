@@ -15,8 +15,6 @@ from yoyopod.app_context import (
     Track as AppContextTrack,
 )
 from yoyopod.core import AppContext as CoreAppContext
-from yoyopod.communication.models import CallState as CommunicationCallState
-from yoyopod.communication.models import RegistrationState as CommunicationRegistrationState
 from yoyopod.core.event_bus import EventBus as CoreEventBus
 from yoyopod.core.event_bus import EventHandler as CoreEventHandler
 from yoyopod.core.events import TrackChangedEvent as CoreTrackChangedEvent
@@ -53,9 +51,15 @@ from yoyopod.backends.voip import LiblinphoneBinding as BackendLiblinphoneBindin
 from yoyopod.backends.voip import MockVoIPBackend as BackendMockVoIPBackend
 from yoyopod.backends.voip import VoIPBackend as BackendVoIPBackend
 from yoyopod.backends.voip import VoIPIterateMetrics as BackendVoIPIterateMetrics
+from yoyopod.integrations.call import CallState as IntegrationCallState
 from yoyopod.integrations.call import CallHistoryEntry as IntegrationCallHistoryEntry
 from yoyopod.integrations.call import CallHistoryStore as IntegrationCallHistoryStore
+from yoyopod.integrations.call import MessageDeliveryState as IntegrationMessageDeliveryState
+from yoyopod.integrations.call import RegistrationState as IntegrationRegistrationState
+from yoyopod.integrations.call import VoIPConfig as IntegrationVoIPConfig
 from yoyopod.integrations.call import VoIPManager as IntegrationVoIPManager
+from yoyopod.integrations.call import VoIPMessageRecord as IntegrationVoIPMessageRecord
+from yoyopod.integrations.call import VoIPMessageStore as IntegrationVoIPMessageStore
 from yoyopod.integrations.call import VoiceNoteDraft as IntegrationVoiceNoteDraft
 from yoyopod.integrations.power import BatteryState as IntegrationBatteryState
 from yoyopod.integrations.power import PowerManager as IntegrationPowerManager
@@ -163,6 +167,12 @@ from yoyopod.communication.integrations.liblinphone import (
 from yoyopod.communication.integrations.liblinphone_binding import (
     LiblinphoneBinding as LegacyCompatLiblinphoneBinding,
 )
+from yoyopod.communication.messaging import VoIPMessageStore as LegacyVoIPMessageStore
+from yoyopod.communication.models import CallState as LegacyCommunicationCallState
+from yoyopod.communication.models import MessageDeliveryState as LegacyMessageDeliveryState
+from yoyopod.communication.models import RegistrationState as LegacyCommunicationRegistrationState
+from yoyopod.communication.models import VoIPConfig as LegacyVoIPConfig
+from yoyopod.communication.models import VoIPMessageRecord as LegacyVoIPMessageRecord
 from yoyopod import EventBus as RootEventBus
 from yoyopod import CallFSM as RootCallFSM
 from yoyopod import MusicFSM as RootMusicFSM
@@ -174,8 +184,8 @@ def test_legacy_core_import_paths_resolve_to_relocated_symbols() -> None:
     assert AppContext is CoreAppContext
     assert EventBus is CoreEventBus
     assert EventHandler is CoreEventHandler
-    assert CallState is CommunicationCallState
-    assert RegistrationState is CommunicationRegistrationState
+    assert CallState is IntegrationCallState
+    assert RegistrationState is IntegrationRegistrationState
     assert Track is MusicTrack
     assert TrackChangedEvent is CoreTrackChangedEvent
     assert MusicFSM is CoreMusicFSM
@@ -204,9 +214,15 @@ def test_legacy_people_import_paths_resolve_to_relocated_contacts_symbols() -> N
 def test_legacy_call_import_paths_resolve_to_relocated_symbols() -> None:
     """Legacy call imports should keep pointing at the canonical call seam."""
 
+    assert LegacyCommunicationCallState is IntegrationCallState
     assert LegacyCallHistoryEntry is IntegrationCallHistoryEntry
     assert LegacyCallHistoryStore is IntegrationCallHistoryStore
+    assert LegacyMessageDeliveryState is IntegrationMessageDeliveryState
+    assert LegacyCommunicationRegistrationState is IntegrationRegistrationState
+    assert LegacyVoIPConfig is IntegrationVoIPConfig
     assert LegacyVoIPManager is IntegrationVoIPManager
+    assert LegacyVoIPMessageRecord is IntegrationVoIPMessageRecord
+    assert LegacyVoIPMessageStore is IntegrationVoIPMessageStore
     assert LegacyVoiceNoteDraft is IntegrationVoiceNoteDraft
 
 

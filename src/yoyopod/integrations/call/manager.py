@@ -13,8 +13,8 @@ from loguru import logger
 from yoyopod.backends.voip.protocol import VoIPBackend
 from yoyopod.communication.calling.messaging import MessagingService
 from yoyopod.backends.voip import LiblinphoneBackend
-from yoyopod.communication.messaging import VoIPMessageStore
-from yoyopod.communication.models import (
+from yoyopod.integrations.call.message_store import VoIPMessageStore
+from yoyopod.integrations.call.models import (
     BackendStopped,
     CallState,
     CallStateChanged,

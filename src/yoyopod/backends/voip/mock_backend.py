@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Callable
 
 from yoyopod.backends.voip.protocol import VoIPIterateMetrics
-from yoyopod.communication.models import VoIPEvent
+from yoyopod.integrations.call.models import VoIPEvent
 
 
 class MockVoIPBackend:
