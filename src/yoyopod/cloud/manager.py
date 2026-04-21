@@ -1199,7 +1199,7 @@ class CloudManager:
         if session is None:
             return
 
-        if state == "stopped" and session.get("activation_pending"):
+        if state == "stopped" and session.get("activation_pending") and not session.get("cached_path"):
             return
 
         position_ms = self._current_playback_position_ms()
@@ -1568,7 +1568,12 @@ class CloudManager:
     def _safe_media_filename(value: str, *, default_stem: str, suffix: str) -> str:
         stem = Path(value).stem if value else default_stem
         normalized = "".join(char if char.isalnum() or char in {"-", "_"} else "-" for char in stem)
-        normalized = normalized.strip(".-_") or default_stem
+        normalized = normalized.strip(".-_")
+        if not normalized:
+            fallback = "".join(
+                char if char.isalnum() or char in {"-", "_"} else "-" for char in default_stem
+            ).strip(".-_")
+            normalized = fallback or "track"
         safe_suffix = suffix if suffix.startswith(".") else f".{suffix}"
         return f"{normalized}{safe_suffix[:16]}"
 
