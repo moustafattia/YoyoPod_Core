@@ -45,7 +45,7 @@ class RemotePlaybackCache:
         if target_path.exists():
             os.utime(target_path, None)
             logger.info("Remote playback cache hit for {}", track_id)
-            self._prune()
+            self._prune(protected_paths={target_path})
             return CachedPlaybackAsset(path=str(target_path), cache_hit=True)
 
         logger.info("Remote playback cache miss for {}, downloading asset", track_id)
@@ -54,7 +54,7 @@ class RemotePlaybackCache:
             target_path=target_path,
             checksum_sha256=checksum_sha256,
         )
-        self._prune()
+        self._prune(protected_paths={downloaded_path})
         return CachedPlaybackAsset(path=str(downloaded_path), cache_hit=False)
 
     def _download(
@@ -92,14 +92,17 @@ class RemotePlaybackCache:
             tmp_path.unlink(missing_ok=True)
             raise
 
-    def _prune(self) -> None:
+    def _prune(self, *, protected_paths: set[Path] | None = None) -> None:
         files = [entry for entry in self.root.glob("*") if entry.is_file()]
         files.sort(key=lambda entry: entry.stat().st_mtime)
+        protected = {path.resolve(strict=False) for path in (protected_paths or set())}
 
         total_size = sum(entry.stat().st_size for entry in files)
         for entry in files:
             if total_size <= self.max_bytes:
                 break
+            if entry.resolve(strict=False) in protected:
+                continue
             size = entry.stat().st_size
             entry.unlink(missing_ok=True)
             total_size -= size

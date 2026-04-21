@@ -73,6 +73,7 @@ Remote playback uses a bounded local cache before mpv starts playback.
 - checksum is verified when provided
 - cache downloads run off the coordinator thread before mpv load starts
 - least-recently-used pruning uses file mtime and evicts oldest files first
+- the just-fetched asset is protected from immediate self-eviction even when it exceeds the nominal cache cap
 - playback runs from the cached local file, not the signed backend URL
 
 Relevant config fields:
@@ -93,7 +94,7 @@ Dashboard upload now supports device-local persistence through the backend-media
 Current import behavior:
 
 1. backend finalizes the uploaded household track
-2. backend sends `store_media` to the selected device
+2. backend sends `store_media` to the selected device over the same MQTT command dispatcher used for playback commands
 3. device downloads the authorized asset through the same cache path used by remote playback
 4. device persists the file under `YOYOPOD_MUSIC_DIR/dashboard_uploads/`
 5. device updates `YOYOPOD_MUSIC_DIR/Dashboard Uploads.m3u`
@@ -106,6 +107,7 @@ This keeps backend as the policy authority while making the resulting media avai
 - only one active remote playback session is tracked
 - a new valid `play_track` interrupts the current remote playback
 - pending downloads are correlated by `commandId` and activation generation so stale stop callbacks do not clear the next session
+- if `stop` arrives while a remote asset is still buffering, the pending asset is discarded and playback does not start after the stop ACK
 - `pause` and `resume` run through the current mpv backend path
 - duplicate `commandId` values are ACKed as duplicates and are not replayed
 - `store_media` also participates in duplicate command suppression

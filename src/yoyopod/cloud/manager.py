@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import shutil
 import threading
 import time
 from collections import deque
@@ -1011,6 +1012,8 @@ class CloudManager:
             logger.info("MQTT: backend requested immediate config fetch")
         elif cmd_type in {"play_track", "stop", "pause", "resume"}:
             self._apply_playback_command(command)
+        elif cmd_type == "store_media":
+            self._apply_store_media_command(command)
         else:
             logger.info("MQTT: unhandled command type {}", cmd_type)
 
@@ -1277,6 +1280,26 @@ class CloudManager:
         }
         self._mqtt.publish_playback_event(event_payload)
 
+    def _publish_media_library_event(
+        self,
+        event_type: str,
+        *,
+        command_id: str,
+        payload: dict[str, Any] | None = None,
+    ) -> None:
+        if self._mqtt is None or not self._mqtt.is_connected:
+            return
+
+        event_payload: dict[str, Any] = {
+            "messageType": "media_library.event",
+            "commandId": command_id,
+            "deviceId": self.config_manager.get_cloud_device_id().strip(),
+            "eventType": event_type,
+            "occurredAt": self._utc_now(),
+            "payload": payload or {},
+        }
+        self._mqtt.publish_event("media_library", event_payload)
+
     def _run_prepare_remote_playback_asset(
         self,
         *,
@@ -1358,6 +1381,19 @@ class CloudManager:
             )
             return
 
+        if session.get("stop_requested"):
+            self._remote_playback_session = None
+            self._last_remote_playback_state = None
+            self._publish_playback_event(
+                "stopped",
+                command_id=command_id,
+                payload={
+                    "trackId": track_id,
+                    "positionMs": 0,
+                },
+            )
+            return
+
         session["cached_path"] = cached_asset.path
         if not music_backend.load_tracks([cached_asset.path]):
             self._remote_playback_session = None
@@ -1370,6 +1406,171 @@ class CloudManager:
                     "reason": "decode_failed",
                 },
             )
+
+    def _apply_store_media_command(self, command: dict[str, Any]) -> None:
+        mqtt = self._mqtt
+        command_id = str(command.get("commandId") or command.get("command_id") or "").strip()
+        payload = command.get("payload")
+        payload = payload if isinstance(payload, dict) else {}
+
+        if not command_id or mqtt is None or not mqtt.is_connected:
+            return
+
+        if command_id in self._recent_remote_command_ids:
+            mqtt.publish_ack(command_id=command_id, ok=True, payload={"duplicate": True})
+            return
+
+        media_url = str(payload.get("mediaUrl") or payload.get("media_url") or "").strip()
+        track_id = str(payload.get("trackId") or payload.get("track_id") or "").strip()
+        if not media_url or not track_id:
+            mqtt.publish_ack(command_id=command_id, ok=False, reason="invalid_command")
+            return
+
+        self._recent_remote_command_ids.append(command_id)
+        mqtt.publish_ack(command_id=command_id, ok=True, payload={"command": "store_media"})
+
+        checksum_sha256 = (
+            str(payload.get("checksumSha256") or payload.get("checksum_sha256") or "").strip()
+            or None
+        )
+        self._start_worker(
+            name=f"cloud-store-media-{command_id[:8]}",
+            work=lambda: self._run_store_media_command(
+                command_id=command_id,
+                track_id=track_id,
+                media_url=media_url,
+                checksum_sha256=checksum_sha256,
+                payload=payload,
+            ),
+        )
+
+    def _run_store_media_command(
+        self,
+        *,
+        command_id: str,
+        track_id: str,
+        media_url: str,
+        checksum_sha256: str | None,
+        payload: dict[str, Any],
+    ) -> None:
+        try:
+            cached_asset = self._remote_playback_cache.prepare(
+                track_id=track_id,
+                media_url=media_url,
+                checksum_sha256=checksum_sha256,
+            )
+            target_path = self._persist_device_media_asset(
+                track_id=track_id,
+                cached_path=Path(cached_asset.path),
+                payload=payload,
+            )
+        except Exception as exc:
+            logger.warning("Device media import failed for {}: {}", track_id, exc)
+            self._queue_main_thread_callback(
+                lambda exc=exc: self._complete_store_media_command(
+                    command_id=command_id,
+                    track_id=track_id,
+                    error=exc,
+                )
+            )
+            return
+
+        self._queue_main_thread_callback(
+            lambda target_path=target_path: self._complete_store_media_command(
+                command_id=command_id,
+                track_id=track_id,
+                target_path=target_path,
+            )
+        )
+
+    def _complete_store_media_command(
+        self,
+        *,
+        command_id: str,
+        track_id: str,
+        target_path: Path | None = None,
+        error: Exception | None = None,
+    ) -> None:
+        if error is not None or target_path is None:
+            self._publish_media_library_event(
+                "failed",
+                command_id=command_id,
+                payload={
+                    "trackId": track_id,
+                    "reason": "media_fetch_failed",
+                },
+            )
+            return
+
+        self._publish_media_library_event(
+            "imported",
+            command_id=command_id,
+            payload={
+                "trackId": track_id,
+                "path": str(target_path),
+            },
+        )
+
+    def _persist_device_media_asset(
+        self,
+        *,
+        track_id: str,
+        cached_path: Path,
+        payload: dict[str, Any],
+    ) -> Path:
+        music_dir = self._device_music_dir()
+        uploads_dir = music_dir / "dashboard_uploads"
+        uploads_dir.mkdir(parents=True, exist_ok=True)
+
+        preferred_name = (
+            str(payload.get("filename") or payload.get("originalFilename") or payload.get("title") or "").strip()
+        )
+        source_suffix = cached_path.suffix or ".mp3"
+        safe_name = self._safe_media_filename(preferred_name, default_stem=track_id, suffix=source_suffix)
+        target_path = uploads_dir / safe_name
+
+        shutil.copy2(cached_path, target_path)
+        self._append_dashboard_uploads_playlist(target_path)
+        return target_path
+
+    def _append_dashboard_uploads_playlist(self, target_path: Path) -> None:
+        playlist_path = self._device_music_dir() / "Dashboard Uploads.m3u"
+        playlist_path.parent.mkdir(parents=True, exist_ok=True)
+        existing_entries: set[str] = set()
+        if playlist_path.exists():
+            try:
+                existing_entries = {
+                    line.strip()
+                    for line in playlist_path.read_text(encoding="utf-8").splitlines()
+                    if line.strip()
+                }
+            except Exception:
+                existing_entries = set()
+
+        entry = str(target_path)
+        if entry in existing_entries:
+            return
+
+        with playlist_path.open("a", encoding="utf-8") as handle:
+            if playlist_path.stat().st_size > 0:
+                handle.write("\n")
+            handle.write(entry)
+
+    def _device_music_dir(self) -> Path:
+        get_media_settings = getattr(self.config_manager, "get_media_settings", None)
+        if callable(get_media_settings):
+            music_dir = get_media_settings().music.music_dir
+        else:
+            music_dir = "/home/pi/Music"
+        return Path(self.config_manager.resolve_runtime_path(music_dir)).expanduser()
+
+    @staticmethod
+    def _safe_media_filename(value: str, *, default_stem: str, suffix: str) -> str:
+        stem = Path(value).stem if value else default_stem
+        normalized = "".join(char if char.isalnum() or char in {"-", "_"} else "-" for char in stem)
+        normalized = normalized.strip(".-_") or default_stem
+        safe_suffix = suffix if suffix.startswith(".") else f".{suffix}"
+        return f"{normalized}{safe_suffix[:16]}"
 
     def _is_backend_configured(self) -> bool:
         return bool(self.config_manager.get_cloud_settings().backend.api_base_url.strip())

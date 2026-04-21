@@ -19,6 +19,10 @@ class _FakeMqttClient:
         self.events.append(payload)
         return True
 
+    def publish_event(self, event_type: str, payload: dict[str, object]) -> bool:
+        self.events.append({"type": event_type, "payload": payload})
+        return True
+
 
 class _FakeMusicBackend:
     def __init__(self) -> None:
@@ -258,3 +262,90 @@ def test_stopped_callback_during_pending_remote_fetch_does_not_clear_session() -
     assert manager._remote_playback_session is not None
     assert music_backend.loaded == []
     assert len(queued_work) == 1
+
+
+def test_stop_during_buffering_prevents_late_load_after_fetch_completes() -> None:
+    music_backend = _FakeMusicBackend()
+    manager = CloudManager(
+        app=_FakeApp(music_backend),
+        config_manager=_FakeConfigManager(),
+        client=SimpleNamespace(),
+    )
+    manager._mqtt = _FakeMqttClient()
+    manager._bind_playback_callbacks()
+
+    queued_work: list[object] = []
+    manager._start_worker = lambda *, name, work: queued_work.append(work)  # type: ignore[method-assign]
+    manager._remote_playback_cache = _FakePlaybackCache()
+
+    manager._apply_mqtt_command(
+        {
+            "commandId": "cmd-5",
+            "command": "play_track",
+            "payload": {
+                "trackId": "track-5",
+                "mediaUrl": "https://media.example.test/file.mp3",
+            },
+        }
+    )
+    manager._apply_mqtt_command(
+        {
+            "commandId": "cmd-6",
+            "command": "stop",
+            "payload": {"trackId": "track-5"},
+        }
+    )
+
+    assert manager._remote_playback_session is not None
+    assert manager._remote_playback_session["stop_requested"] is True
+
+    queued_work[0]()
+
+    assert music_backend.loaded == []
+    assert manager._remote_playback_session is None
+    assert manager._mqtt.events[-1]["eventType"] == "stopped"
+
+
+def test_store_media_command_acks_and_publishes_imported_event(tmp_path) -> None:
+    music_backend = _FakeMusicBackend()
+    config_manager = _FakeConfigManager()
+    config_manager.get_media_settings = lambda: SimpleNamespace(  # type: ignore[method-assign]
+        music=SimpleNamespace(
+            remote_cache_dir=str(tmp_path / "cache"),
+            remote_cache_max_bytes=64 * 1024 * 1024,
+            music_dir=str(tmp_path / "Music"),
+        )
+    )
+    manager = CloudManager(
+        app=_FakeApp(music_backend),
+        config_manager=config_manager,
+        client=SimpleNamespace(),
+    )
+    manager._mqtt = _FakeMqttClient()
+    cached_path = tmp_path / "cache-track.mp3"
+    cached_path.write_bytes(b"audio")
+    manager._remote_playback_cache = SimpleNamespace(
+        prepare=lambda **kwargs: SimpleNamespace(path=str(cached_path), cache_hit=False)
+    )
+    manager._start_worker = lambda *, name, work: work()  # type: ignore[method-assign]
+
+    manager._apply_mqtt_command(
+        {
+            "commandId": "cmd-7",
+            "command": "store_media",
+            "payload": {
+                "trackId": "track-7",
+                "mediaUrl": "https://media.example.test/file.mp3",
+                "title": "Track Seven",
+            },
+        }
+    )
+
+    assert manager._mqtt.acks[-1] == {
+        "command_id": "cmd-7",
+        "ok": True,
+        "payload": {"command": "store_media"},
+    }
+    assert manager._mqtt.events[-1]["type"] == "media_library"
+    assert manager._mqtt.events[-1]["payload"]["eventType"] == "imported"
+    assert (tmp_path / "Music" / "Dashboard Uploads.m3u").exists()

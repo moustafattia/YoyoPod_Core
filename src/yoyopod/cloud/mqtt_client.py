@@ -132,6 +132,10 @@ class DeviceMqttClient:
         """Publish one remote-playback event through the normal device event topic."""
         return self._publish("playback", payload)
 
+    def publish_event(self, event_type: str, payload: dict[str, Any]) -> bool:
+        """Publish one typed event envelope through the device event topic."""
+        return self._publish(event_type, payload)
+
     def publish_ack(
         self,
         *,

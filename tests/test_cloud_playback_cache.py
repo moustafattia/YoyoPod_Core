@@ -45,3 +45,21 @@ def test_prune_removes_oldest_files_first(tmp_path: Path) -> None:
 
     assert not oldest.exists()
     assert newest.exists()
+
+
+def test_prepare_keeps_new_download_when_it_exceeds_cache_limit(tmp_path: Path) -> None:
+    cache = RemotePlaybackCache(tmp_path, 32 * 1024 * 1024)
+    cache.max_bytes = 4
+
+    def fake_download(*, media_url: str, target_path: Path, checksum_sha256: str | None) -> Path:
+        target_path.write_bytes(b"12345")
+        return target_path
+
+    cache._download = fake_download  # type: ignore[method-assign]
+
+    asset = cache.prepare(
+        track_id="oversized-track",
+        media_url="https://media.example.test/file.mp3",
+    )
+
+    assert Path(asset.path).exists()
