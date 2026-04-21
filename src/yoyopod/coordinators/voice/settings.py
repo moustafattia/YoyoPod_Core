@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, Callable
 
-from yoyopod.voice.models import VoiceSettings
+from yoyopod.integrations.voice import VoiceSettings
 
 if TYPE_CHECKING:
     from yoyopod.core import AppContext

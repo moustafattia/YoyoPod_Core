@@ -64,6 +64,12 @@ from yoyopod.integrations.cloud.models import CloudAccessToken as IntegrationClo
 from yoyopod.integrations.cloud.models import (
     CloudStatusSnapshot as IntegrationCloudStatusSnapshot,
 )
+from yoyopod.integrations.voice import VoiceCaptureRequest as IntegrationVoiceCaptureRequest
+from yoyopod.integrations.voice import VoiceCaptureResult as IntegrationVoiceCaptureResult
+from yoyopod.integrations.voice import VoiceManager as IntegrationVoiceManager
+from yoyopod.integrations.voice import VoiceService as IntegrationVoiceService
+from yoyopod.integrations.voice import VoiceSettings as IntegrationVoiceSettings
+from yoyopod.integrations.voice import VoiceTranscript as IntegrationVoiceTranscript
 from yoyopod.runtime_state import PlaybackQueue as RuntimeStatePlaybackQueue
 from yoyopod.runtime_state import Track as RuntimeStateTrack
 from yoyopod.event_bus import EventBus, EventHandler
@@ -103,6 +109,12 @@ from yoyopod.runtime_state import VoiceState
 from yoyopod.setup_contract import Path as SetupContractPath
 from yoyopod.setup_contract import RUNTIME_REQUIRED_CONFIG_FILES
 from yoyopod.ui.input.hal import InteractionProfile
+from yoyopod.voice import VoiceManager as LegacyVoiceManager
+from yoyopod.voice import VoiceService as LegacyVoiceService
+from yoyopod.voice import VoiceSettings as LegacyVoiceSettings
+from yoyopod.voice.models import VoiceCaptureRequest as LegacyVoiceCaptureRequest
+from yoyopod.voice.models import VoiceCaptureResult as LegacyVoiceCaptureResult
+from yoyopod.voice.models import VoiceTranscript as LegacyVoiceTranscript
 from yoyopod import EventBus as RootEventBus
 from yoyopod import CallFSM as RootCallFSM
 from yoyopod import MusicFSM as RootMusicFSM
@@ -161,6 +173,17 @@ def test_legacy_power_import_paths_resolve_to_relocated_symbols() -> None:
     assert LegacyRTCState is IntegrationRTCState
     assert LegacyPiSugarBackend is BackendPiSugarBackend
     assert LegacyPiSugarWatchdog is BackendPiSugarWatchdog
+
+
+def test_legacy_voice_import_paths_resolve_to_relocated_symbols() -> None:
+    """Legacy voice imports should keep pointing at the canonical voice seam."""
+
+    assert LegacyVoiceCaptureRequest is IntegrationVoiceCaptureRequest
+    assert LegacyVoiceCaptureResult is IntegrationVoiceCaptureResult
+    assert LegacyVoiceManager is IntegrationVoiceManager
+    assert LegacyVoiceService is IntegrationVoiceService
+    assert LegacyVoiceSettings is IntegrationVoiceSettings
+    assert LegacyVoiceTranscript is IntegrationVoiceTranscript
 
 
 def test_legacy_network_backend_import_paths_resolve_to_relocated_symbols() -> None:

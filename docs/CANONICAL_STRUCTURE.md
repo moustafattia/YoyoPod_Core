@@ -120,8 +120,11 @@ Current exemplar package homes:
   - `__init__.py` is the app-facing seam
 - `src/yoyopod/power/`
   - compatibility shims plus the remaining power-specific events and policies
+- `src/yoyopod/integrations/voice/`
+  - canonical voice manager, service alias, and typed voice models
+  - `__init__.py` is the app-facing seam
 - `src/yoyopod/voice/`
-  - local voice behavior, models, and backends
+  - compatibility shims plus local capture, STT, TTS, and command helpers
   - device inventory/helpers live outside this package
 - `src/yoyopod/runtime/`, `src/yoyopod/coordinators/`, `src/yoyopod/app.py`
   - app/runtime composition
@@ -158,8 +161,12 @@ The voice migration adds the next reusable slice:
 - local voice capture and prompt selectors under `config/device/hardware.yaml`
   as `voice_audio.*`
 - device listing and label helpers under `src/yoyopod/device/`
+- `src/yoyopod/integrations/voice/` as the canonical owner of the public
+  manager/models seam
+- `src/yoyopod/voice/` retained for compatibility shims plus capture/STT/TTS
+  helpers during the rewrite
 - voice runtime and services consuming `ConfigManager.get_voice_settings()`
-  instead of reading app-shell config directly
+  and `yoyopod.integrations.voice` instead of reading app-shell config directly
 
 ## Network Migration Pattern
 

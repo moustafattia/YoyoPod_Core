@@ -10,8 +10,8 @@ from yoyopod.coordinators.voice import (
     VoiceRuntimeCoordinator,
     VoiceSettingsResolver,
 )
+from yoyopod.integrations.voice import VoiceSettings
 from yoyopod.ui.input import InteractionProfile
-from yoyopod.voice.models import VoiceSettings
 
 if TYPE_CHECKING:
     from yoyopod.app import YoyoPodApp

@@ -13,8 +13,7 @@ from typing import TYPE_CHECKING, Callable
 from loguru import logger
 
 from yoyopod.core import VoiceInteractionState
-from yoyopod.voice.manager import VoiceManager
-from yoyopod.voice.models import VoiceCaptureRequest, VoiceSettings
+from yoyopod.integrations.voice import VoiceCaptureRequest, VoiceManager, VoiceSettings
 from yoyopod.voice.output import AlsaOutputPlayer
 
 from .executor import VoiceCommandExecutor

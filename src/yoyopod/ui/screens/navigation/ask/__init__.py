@@ -27,8 +27,7 @@ from yoyopod.ui.screens.theme import (
     text_fit,
     wrap_text,
 )
-from yoyopod.voice.manager import VoiceManager
-from yoyopod.voice.models import VoiceSettings
+from yoyopod.integrations.voice import VoiceManager, VoiceSettings
 
 if TYPE_CHECKING:
     from yoyopod.core import AppContext

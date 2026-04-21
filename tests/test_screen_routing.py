@@ -22,7 +22,11 @@ from yoyopod.ui.screens.navigation.home import HomeScreen
 from yoyopod.ui.screens.navigation.hub import HubScreen
 from yoyopod.ui.screens.navigation.menu import MenuScreen
 from yoyopod.ui.screens.router import NavigationRequest, ScreenRouter
-from yoyopod.voice.models import VoiceCaptureResult, VoiceSettings, VoiceTranscript
+from yoyopod.integrations.voice import (
+    VoiceCaptureResult,
+    VoiceSettings,
+    VoiceTranscript,
+)
 
 
 class RoutableStubScreen(Screen):

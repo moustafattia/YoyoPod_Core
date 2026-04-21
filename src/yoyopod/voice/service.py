@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from yoyopod.voice.manager import VoiceManager
-
-VoiceService = VoiceManager
+from yoyopod.integrations.voice import VoiceManager, VoiceService
 
 __all__ = ["VoiceService", "VoiceManager"]

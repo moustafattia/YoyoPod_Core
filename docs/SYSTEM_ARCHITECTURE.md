@@ -205,7 +205,8 @@ yoyopod.py / yoyopod.main
 - `src/yoyopod/power/`: compatibility shims plus the remaining power-specific events and safety policy code
 - `src/yoyopod/integrations/network/`: canonical network manager, modem models, and scaffold integration ownership
 - `src/yoyopod/network/`: compatibility shims for the historical network import path
-- `src/yoyopod/voice/`: local capture, STT, TTS, and command-matching code
+- `src/yoyopod/integrations/voice/`: canonical voice manager, service alias, and typed voice models
+- `src/yoyopod/voice/`: compatibility shims plus local capture, STT, TTS, and command-matching code
 
 ### UI Layer
 
@@ -340,6 +341,7 @@ For current behavior, trust these files over older notes or demos:
 - `src/yoyopod/communication/`
 - `src/yoyopod/integrations/contacts/`
 - `src/yoyopod/integrations/network/`
+- `src/yoyopod/integrations/voice/`
 - `src/yoyopod/ui/display/`
 - `src/yoyopod/ui/input/`
 - `src/yoyopod/ui/screens/`

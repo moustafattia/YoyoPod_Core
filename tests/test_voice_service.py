@@ -11,15 +11,19 @@ import sys
 import threading
 import types
 
+from yoyopod.integrations.voice import (
+    VoiceCaptureRequest,
+    VoiceService,
+    VoiceSettings,
+    VoiceTranscript,
+)
 from yoyopod.voice.capture import SubprocessAudioCaptureBackend
 from yoyopod.voice.commands import (
     VOICE_COMMAND_GRAMMAR,
     VoiceCommandIntent,
     match_voice_command,
 )
-from yoyopod.voice.models import VoiceCaptureRequest, VoiceSettings, VoiceTranscript
 from yoyopod.voice.output import AlsaOutputPlayer
-from yoyopod.voice.service import VoiceService
 from yoyopod.voice.stt import VoskSpeechToTextBackend
 from yoyopod.voice.tts import EspeakNgTextToSpeechBackend
 
@@ -67,7 +71,7 @@ class FakeCaptureBackend:
         return settings.stt_enabled and not settings.mic_muted
 
     def capture(self, request: VoiceCaptureRequest, settings: VoiceSettings):
-        from yoyopod.voice.models import VoiceCaptureResult
+        from yoyopod.integrations.voice import VoiceCaptureResult
 
         self.calls.append((request, settings))
         return VoiceCaptureResult(audio_path=self.path, recorded=True)
