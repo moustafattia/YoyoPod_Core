@@ -41,7 +41,7 @@ Runtime flow:
 
 ```text
 YoyoPodApp
-  -> PowerRuntimeService
+  -> integrations.power.PowerRuntimeService
      -> PowerManager
      -> PiSugarBackend
         -> Unix socket or TCP PiSugar server transport
@@ -54,7 +54,7 @@ YoyoPodApp
      -> current screen refresh
 ```
 
-The app schedules PiSugar polling and watchdog work through `PowerRuntimeService`,
+The app schedules PiSugar polling and watchdog work through `integrations.power.PowerRuntimeService`,
 publishes typed power events, updates shared runtime state, and then applies safety
 or UI behavior from those events.
 
@@ -236,7 +236,7 @@ yoyopod remote rtc status --host rpi-zero
 The watchdog implementation is intentionally power-domain-owned but app-scheduled.
 
 Current model:
-- the coordinator loop in `src/yoyopod/core/loop.py` enables the PiSugar software watchdog through `PowerRuntimeService`
+- the coordinator loop in `src/yoyopod/core/loop.py` enables the PiSugar software watchdog through `integrations.power.PowerRuntimeService`
 - the app feeds it at a configured interval while healthy
 - ordinary app shutdown disables the watchdog
 - battery-driven emergency shutdown suppresses feeding without disabling it

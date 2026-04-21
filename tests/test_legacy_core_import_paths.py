@@ -29,6 +29,8 @@ from yoyopod.core.event_bus import EventBus as CoreEventBus
 from yoyopod.core.event_bus import EventHandler as CoreEventHandler
 from yoyopod.core.bootstrap.managers_boot import ManagersBoot as CoreManagersBoot
 from yoyopod.core.recovery import RecoveryState as CoreRecoveryState
+from yoyopod.core.recovery import RuntimeRecoveryService as CoreRuntimeRecoveryService
+from yoyopod.core.shutdown import ShutdownLifecycleService as CoreShutdownLifecycleService
 from yoyopod.core.status import RuntimeMetricsStore as CoreRuntimeMetricsStore
 from yoyopod.core.status import RuntimeStatusService as CoreRuntimeStatusService
 from yoyopod.core.diagnostics.watchdog import (
@@ -103,6 +105,7 @@ from yoyopod.integrations.power import GracefulShutdownCancelled as IntegrationG
 from yoyopod.integrations.power import GracefulShutdownRequested as IntegrationGracefulShutdownRequested
 from yoyopod.integrations.power import LowBatteryWarningRaised as IntegrationLowBatteryWarningRaised
 from yoyopod.integrations.power import PowerManager as IntegrationPowerManager
+from yoyopod.integrations.power import PowerRuntimeService as IntegrationPowerRuntimeService
 from yoyopod.integrations.power import PendingShutdown as IntegrationPendingShutdown
 from yoyopod.integrations.power import PowerAlert as IntegrationPowerAlert
 from yoyopod.integrations.power import PowerSafetyPolicy as IntegrationPowerSafetyPolicy
@@ -153,7 +156,10 @@ from yoyopod.runtime.models import PowerAlert as LegacyPowerAlert
 from yoyopod.runtime.models import RecoveryState as LegacyRecoveryState
 from yoyopod.runtime.metrics import RuntimeMetricsStore as LegacyRuntimeMetricsStore
 from yoyopod.runtime.network_events import NetworkEventHandler as LegacyNetworkEventHandler
+from yoyopod.runtime.power_service import PowerRuntimeService as LegacyPowerRuntimeService
+from yoyopod.runtime.recovery import RecoverySupervisor as LegacyRuntimeRecoveryService
 from yoyopod.runtime.event_subscriptions import RuntimeEventSubscriptions as LegacyRuntimeEventSubscriptions
+from yoyopod.runtime.shutdown import ShutdownLifecycleService as LegacyShutdownLifecycleService
 from yoyopod.runtime.status import RuntimeStatusService as LegacyRuntimeStatusService
 from yoyopod.runtime.voice_note_events import VoiceNoteEventHandler as LegacyVoiceNoteEventHandler
 from yoyopod.runtime.screen_power import ScreenPowerService as LegacyScreenPowerService
@@ -423,6 +429,24 @@ def test_legacy_runtime_loop_import_paths_resolve_to_core_loop() -> None:
     """Legacy runtime loop imports should point at the canonical core loop seam."""
 
     assert LegacyRuntimeLoopService is CoreRuntimeLoopService
+
+
+def test_legacy_runtime_recovery_import_path_resolves_to_core_service() -> None:
+    """Legacy runtime recovery imports should point at the canonical core seam."""
+
+    assert LegacyRuntimeRecoveryService is CoreRuntimeRecoveryService
+
+
+def test_legacy_runtime_power_service_import_path_resolves_to_power_owner() -> None:
+    """Legacy runtime power-service imports should point at the canonical power seam."""
+
+    assert LegacyPowerRuntimeService is IntegrationPowerRuntimeService
+
+
+def test_legacy_runtime_shutdown_import_path_resolves_to_core_service() -> None:
+    """Legacy runtime shutdown imports should point at the canonical core seam."""
+
+    assert LegacyShutdownLifecycleService is CoreShutdownLifecycleService
 
 
 def test_legacy_runtime_network_event_import_path_resolves_to_network_owner() -> None:

@@ -58,8 +58,8 @@ This is the startup sequence that exists on `main` today.
    - `--simulate` is parsed before the app is constructed.
 3. `main()` constructs `YoyoPodApp(config_dir="config", simulate=simulate)`.
    - The constructor does not start hardware or backend processes yet.
-   - It allocates the typed `EventBus`, the core bootstrap service (`RuntimeBootService` from `src/yoyopod/core/bootstrap/`), the canonical coordinator-thread loop (`RuntimeLoopService` from `src/yoyopod/core/loop.py`), the remaining runtime services (`RecoverySupervisor`, `PowerRuntimeService`, `ShutdownLifecycleService`), the canonical display-power helper (`ScreenPowerService` from `src/yoyopod/integrations/display/service.py`), and the long-lived placeholder fields for managers, screens, and shared context.
-   - `RecoverySupervisor` now keeps VoIP/music recovery while `yoyopod.runtime.power_service.PowerRuntimeService` owns PiSugar polling and watchdog cadence.
+- It allocates the typed `EventBus`, the core bootstrap service (`RuntimeBootService` from `src/yoyopod/core/bootstrap/`), the canonical coordinator-thread loop (`RuntimeLoopService` from `src/yoyopod/core/loop.py`), the remaining live services (`RuntimeRecoveryService` from `src/yoyopod/core/recovery.py`, `PowerRuntimeService` from `src/yoyopod/integrations/power/service.py`, `ShutdownLifecycleService` from `src/yoyopod/core/shutdown.py`), the canonical display-power helper (`ScreenPowerService` from `src/yoyopod/integrations/display/service.py`), and the long-lived placeholder fields for managers, screens, and shared context.
+- `RuntimeRecoveryService` now keeps VoIP/music/network recovery while `yoyopod.integrations.power.service.PowerRuntimeService` owns PiSugar polling and watchdog cadence.
    - It also registers app-level event subscriptions on the `EventBus` so later boot stages can publish typed events back onto the coordinator thread.
 4. `main()` calls `app.setup()`, which delegates to `RuntimeBootService.setup()` in `src/yoyopod/core/bootstrap/`.
 5. `RuntimeBootService.setup()` currently executes boot in this order:
@@ -107,7 +107,7 @@ This is the startup sequence that exists on `main` today.
    - It starts the watchdog cadence.
    - Each loop iteration drains queued main-thread callbacks and typed events, pumps LVGL timers and queued input, iterates the Liblinphone backend on the coordinator thread, polls recovery and power services, and refreshes active screens on the configured cadence.
    - The outer loop adapts its next wake based on runtime state: call / recent-input paths stay fast, awake idle relaxes, and screen-off idle can relax further while still honoring the next VoIP, watchdog, power-poll, shutdown, or screen-refresh deadline.
-9. Shutdown runs through `app.stop()` and `ShutdownLifecycleService.stop()`.
+9. Shutdown runs through `app.stop()` and `yoyopod.core.shutdown.ShutdownLifecycleService.stop()`.
    - network, VoIP, music, and input managers are stopped
    - queued main-thread work is drained one last time
    - the display is cleared and cleaned up
@@ -127,10 +127,10 @@ yoyopod.py / yoyopod.main
   -> YoyoPodApp
      -> RuntimeBootService
      -> RuntimeLoopService
-     -> RecoverySupervisor
-     -> PowerRuntimeService
-     -> integrations.display.ScreenPowerService
-      -> ShutdownLifecycleService
+    -> RuntimeRecoveryService
+    -> PowerRuntimeService
+    -> integrations.display.ScreenPowerService
+     -> core.shutdown.ShutdownLifecycleService
       -> EventBus
       -> Display facade
          -> Display factory

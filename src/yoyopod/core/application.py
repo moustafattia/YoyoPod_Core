@@ -43,19 +43,21 @@ from yoyopod.integrations.cloud.manager import CloudManager
 from yoyopod.integrations.contacts.directory import PeopleManager
 from yoyopod.integrations.music import LocalMusicService, RecentTrackHistoryStore
 from yoyopod.integrations.network import NetworkManager
-from yoyopod.integrations.power import PowerManager
+from yoyopod.integrations.power import (
+    PendingShutdown,
+    PowerAlert,
+    PowerManager,
+    PowerRuntimeService,
+)
 from yoyopod.core.bootstrap import RuntimeBootService
 from yoyopod.core.event_subscriptions import RuntimeEventSubscriptions
 from yoyopod.core.loop import RuntimeLoopService
 from yoyopod.core.status import RuntimeMetricsStore
-from yoyopod.core.recovery import RecoveryState
+from yoyopod.core.recovery import RecoveryState, RuntimeRecoveryService
 from yoyopod.integrations.call import VoiceNoteEventHandler
 from yoyopod.integrations.network import NetworkEventHandler
-from yoyopod.integrations.power import PendingShutdown, PowerAlert
-from yoyopod.runtime.power_service import PowerRuntimeService
-from yoyopod.runtime.recovery import RecoverySupervisor
 from yoyopod.integrations.display import ScreenPowerService
-from yoyopod.runtime.shutdown import ShutdownLifecycleService
+from yoyopod.core.shutdown import ShutdownLifecycleService
 from yoyopod.core.status import RuntimeStatusService
 
 if TYPE_CHECKING:
@@ -227,7 +229,7 @@ class YoyoPodApp:
 
         # Runtime services
         self.screen_power_service = ScreenPowerService(self)
-        self.recovery_service = RecoverySupervisor(self)
+        self.recovery_service = RuntimeRecoveryService(self)
         self.power_runtime = PowerRuntimeService(self)
         self.shutdown_service = ShutdownLifecycleService(self)
         self.voice_note_events = VoiceNoteEventHandler(self)

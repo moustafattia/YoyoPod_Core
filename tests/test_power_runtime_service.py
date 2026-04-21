@@ -1,12 +1,11 @@
-"""Tests for the runtime-owned power service coordination helpers."""
+"""Tests for the canonical power runtime service coordination helpers."""
 
 from __future__ import annotations
 
 from datetime import datetime
 from types import SimpleNamespace
 
-from yoyopod.integrations.power import BatteryState, PowerSnapshot
-from yoyopod.runtime.power_service import PowerRuntimeService
+from yoyopod.integrations.power import BatteryState, PowerRuntimeService, PowerSnapshot
 
 
 class _FakePowerCoordinator:

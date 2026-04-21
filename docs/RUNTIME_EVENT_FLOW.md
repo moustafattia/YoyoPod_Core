@@ -131,13 +131,13 @@ Canonical owner:
 - `src/yoyopod/integrations/display/service.py`
 - `src/yoyopod/runtime/screen_power.py` is now a compatibility shim only
 
-### `RecoverySupervisor`
+### `RuntimeRecoveryService`
 
 Owns:
 - backend recovery attempts
 - publishing recovery completion events
 
-### `PowerRuntimeService`
+### `integrations.power.PowerRuntimeService`
 
 Owns:
 - periodic power polling
@@ -241,7 +241,7 @@ Ownership: playback truth comes from the music backend; playback interpretation 
    - runs `PowerSafetyPolicy`
    - republishes policy outputs like low-battery warnings or graceful shutdown requests
 
-Ownership: power telemetry and safety evaluation are centralized in `PowerCoordinator`, but overlay rendering and shutdown execution remain in `ScreenPowerService` and `ShutdownLifecycleService`.
+Ownership: power telemetry and safety evaluation are centralized in `PowerCoordinator`, but overlay rendering and shutdown execution remain in `ScreenPowerService` and `core.shutdown.ShutdownLifecycleService`.
 
 ### Screen change and user activity flow
 
@@ -268,12 +268,12 @@ Ownership: network state is still app-owned, not coordinator-owned. This is one 
 
 ### Recovery flow
 
-1. `RuntimeLoopService` calls `RecoverySupervisor.attempt_manager_recovery()`.
+1. `RuntimeLoopService` calls `RuntimeRecoveryService.attempt_manager_recovery()`.
 2. VoIP recovery runs inline because it is a direct manager restart attempt.
 3. Music recovery starts a background worker so mpv reconnect work does not block the coordinator loop.
 4. That worker publishes `RecoveryAttemptCompletedEvent`.
 5. The event queues onto `EventBus` because it was published off-thread.
-6. The next coordinator drain calls `RecoverySupervisor.handle_recovery_attempt_completed_event()`.
+6. The next coordinator drain calls `RuntimeRecoveryService.handle_recovery_attempt_completed()`.
 7. Recovery backoff state is finalized on the coordinator thread.
 
 ## Where state actually lives
@@ -342,7 +342,7 @@ This works, but it is not especially obvious. A future cleanup probably wants ei
 
 ### 5. Power behavior is split across multiple runtime services
 
-`PowerCoordinator` owns telemetry application and safety-policy evaluation, while `ScreenPowerService` owns overlays and `ShutdownLifecycleService` owns actual shutdown execution. The division is workable, but a reader must cross service boundaries to understand the full low-battery path.
+`PowerCoordinator` owns telemetry application and safety-policy evaluation, while `ScreenPowerService` owns overlays and `core.shutdown.ShutdownLifecycleService` owns actual shutdown execution. The division is workable, but a reader must cross service boundaries to understand the full low-battery path.
 
 ### 6. Event timing depends on the source thread
 
