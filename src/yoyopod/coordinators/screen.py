@@ -30,37 +30,41 @@ class ScreenCoordinator:
 
         logger.debug("Call screens cleared from stack")
 
-    def update_now_playing_if_needed(self) -> None:
-        """Refresh the now playing screen for periodic progress updates."""
-        if (
-            self.runtime.screen_manager is None
-            or self.runtime.now_playing_screen is None
-            or self.runtime.screen_manager.current_screen != self.runtime.now_playing_screen
-        ):
-            return
+    def refresh_current_screen_for_visible_tick(self) -> bool:
+        """Refresh the current screen when it opts into periodic visible ticks."""
+        if self.runtime.screen_manager is None:
+            return False
 
-        if self.runtime.music_backend and self.runtime.music_backend.is_connected:
-            playback_state = self.runtime.music_backend.get_playback_state()
-            if playback_state == "playing":
-                self.runtime.now_playing_screen.render()
+        current_screen = self.runtime.screen_manager.get_current_screen()
+        if current_screen is None:
+            return False
+
+        wants_visible_tick_refresh = getattr(current_screen, "wants_visible_tick_refresh", None)
+        refresh_for_visible_tick = getattr(current_screen, "refresh_for_visible_tick", None)
+        if callable(wants_visible_tick_refresh):
+            if not wants_visible_tick_refresh():
+                return False
+        elif not callable(refresh_for_visible_tick):
+            return False
+
+        self.runtime.screen_manager.refresh_current_screen()
+        logger.debug(
+            "  -> Visible tick refreshed {}",
+            current_screen.route_name or getattr(current_screen, "name", "unknown"),
+        )
+        return True
+
+    def update_now_playing_if_needed(self) -> None:
+        """Compatibility wrapper over the generic visible-tick refresh path."""
+        self.refresh_current_screen_for_visible_tick()
 
     def update_in_call_if_needed(self) -> None:
-        """Refresh the in-call screen for live duration and mute updates."""
-        if (
-            self.runtime.screen_manager is not None
-            and self.runtime.in_call_screen is not None
-            and self.runtime.screen_manager.current_screen == self.runtime.in_call_screen
-        ):
-            self.runtime.in_call_screen.render()
+        """Compatibility wrapper over the generic visible-tick refresh path."""
+        self.refresh_current_screen_for_visible_tick()
 
     def update_power_screen_if_needed(self) -> None:
-        """Refresh the power screen for live runtime metrics when visible."""
-        if (
-            self.runtime.screen_manager is not None
-            and self.runtime.power_screen is not None
-            and self.runtime.screen_manager.current_screen == self.runtime.power_screen
-        ):
-            self.refresh_current_screen()
+        """Compatibility wrapper over the generic visible-tick refresh path."""
+        self.refresh_current_screen_for_visible_tick()
 
     def refresh_current_screen(self) -> None:
         """Refresh whichever screen is currently visible."""

@@ -128,6 +128,17 @@ class InCallScreen(Screen):
             return
         render_in_call_pil(self)
 
+    @staticmethod
+    def wants_visible_tick_refresh() -> bool:
+        """Return True while the in-call duration and mute state are visible."""
+
+        return True
+
+    def refresh_for_visible_tick(self) -> None:
+        """Keep the in-call view eligible for generic visible-tick refreshes."""
+
+        return None
+
     def _hangup_call(self) -> None:
         """End the current call."""
 

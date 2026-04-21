@@ -72,12 +72,16 @@ class FakeScreen:
         self.render_calls = 0
         self.refresh_for_visible_tick_calls = 0
         self.route_name: str | None = None
+        self.visible_tick_refresh_enabled = False
 
     def render(self) -> None:
         self.render_calls += 1
 
     def refresh_for_visible_tick(self) -> None:
         self.refresh_for_visible_tick_calls += 1
+
+    def wants_visible_tick_refresh(self) -> bool:
+        return self.visible_tick_refresh_enabled
 
 
 class FakeIncomingCallScreen(FakeScreen):
@@ -545,6 +549,9 @@ class OrchestrationHarness:
             outgoing_call=FakeScreen(),
             in_call=FakeScreen(),
         )
+        screens.power.visible_tick_refresh_enabled = True
+        screens.now_playing.visible_tick_refresh_enabled = True
+        screens.in_call.visible_tick_refresh_enabled = True
         app.menu_screen = screens.menu
         app.power_screen = screens.power
         app.now_playing_screen = screens.now_playing
@@ -1081,16 +1088,30 @@ def test_periodic_in_call_refresh_only_renders_visible_call_screen() -> None:
     app, _, screen_manager = _build_app(playback_state="stopped")
 
     assert app.screen_coordinator is not None
-    app.screen_coordinator.update_in_call_if_needed()
+    assert app.screen_coordinator.refresh_current_screen_for_visible_tick() is False
     assert app.in_call_screen.render_calls == 0
 
     screen_manager.push_screen("in_call")
-    app.screen_coordinator.update_in_call_if_needed()
+    assert app.screen_coordinator.refresh_current_screen_for_visible_tick() is True
     assert app.in_call_screen.render_calls == 1
 
     screen_manager.pop_screen()
-    app.screen_coordinator.update_in_call_if_needed()
+    assert app.screen_coordinator.refresh_current_screen_for_visible_tick() is False
     assert app.in_call_screen.render_calls == 1
+
+
+def test_periodic_visible_tick_refreshes_visible_now_playing_screen() -> None:
+    """Visible-tick refreshes should reuse the generic screen opt-in path."""
+    harness = OrchestrationHarness.build(playback_state="playing")
+
+    assert harness.app.screen_coordinator is not None
+    assert harness.app.screen_coordinator.refresh_current_screen_for_visible_tick() is False
+    assert harness.screens.now_playing.render_calls == 0
+
+    harness.show_now_playing()
+    assert harness.app.screen_coordinator.refresh_current_screen_for_visible_tick() is True
+    assert harness.screens.now_playing.render_calls == 1
+    assert harness.screens.now_playing.refresh_for_visible_tick_calls == 1
 
 
 def test_voip_unavailable_event_ends_call_and_restores_music() -> None:
@@ -1493,12 +1514,12 @@ def test_periodic_power_refresh_only_renders_visible_power_screen() -> None:
     )
 
     assert app.screen_coordinator is not None
-    app.screen_coordinator.update_power_screen_if_needed()
+    assert app.screen_coordinator.refresh_current_screen_for_visible_tick() is False
     assert app.power_screen.render_calls == 0
     assert app.power_screen.refresh_for_visible_tick_calls == 0
 
     screen_manager.push_screen("power")
-    app.screen_coordinator.update_power_screen_if_needed()
+    assert app.screen_coordinator.refresh_current_screen_for_visible_tick() is True
     assert app.power_screen.render_calls == 1
     assert app.power_screen.refresh_for_visible_tick_calls == 1
 

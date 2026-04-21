@@ -1,14 +1,18 @@
 #!/usr/bin/env python3
 """Smoke tests for current display and screen rendering paths."""
 
+from types import SimpleNamespace
+
 import pytest
 
 from yoyopod.core import AppContext
+from yoyopod.audio import MockMusicBackend, Track
 from yoyopod.ui.display import Display, get_hardware_info
 from yoyopod.ui.display.adapters.pimoroni import PimoroniDisplayAdapter
 from yoyopod.ui.screens.music.now_playing import NowPlayingScreen
 from yoyopod.ui.screens.navigation.home import HomeScreen
 from yoyopod.ui.screens.navigation.menu import MenuScreen
+from yoyopod.ui.screens.voip.in_call import InCallScreen
 
 
 @pytest.fixture
@@ -59,6 +63,42 @@ def test_rendering_still_works_after_state_changes(display: Display, context: Ap
     context.next_track()
     context.pause()
     now_playing_screen.render()
+
+
+def test_now_playing_screen_only_requests_visible_ticks_while_playing(
+    display: Display,
+    context: AppContext,
+) -> None:
+    """Now-playing should only opt into periodic visible ticks during active playback."""
+
+    backend = MockMusicBackend()
+    backend.start()
+    backend.current_track = Track(
+        uri="demo.mp3",
+        name="Demo",
+        artists=["Artist"],
+        album="Album",
+        length=180,
+    )
+    app = SimpleNamespace(context=context, music_backend=backend)
+    screen = NowPlayingScreen(display, context, app=app)
+
+    assert screen.wants_visible_tick_refresh() is False
+
+    backend.play()
+
+    assert screen.wants_visible_tick_refresh() is True
+
+
+def test_in_call_screen_always_requests_visible_tick_refresh(
+    display: Display,
+    context: AppContext,
+) -> None:
+    """In-call should keep opting into visible ticks for live duration updates."""
+
+    screen = InCallScreen(display, context)
+
+    assert screen.wants_visible_tick_refresh() is True
 
 
 def test_simulate_mode_uses_whisplay_sized_simulation_adapter() -> None:

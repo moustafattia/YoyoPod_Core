@@ -589,6 +589,12 @@ class PowerScreen(Screen):
             allow_gps_refresh=self._current_page_title() == "GPS",
         )
 
+    @staticmethod
+    def wants_visible_tick_refresh() -> bool:
+        """Return True while live Setup telemetry should keep updating on-screen."""
+
+        return True
+
     def _prepared_pages(self) -> list[PowerPage]:
         if self._prepared_state is None:
             resolved_state = PowerScreenState()

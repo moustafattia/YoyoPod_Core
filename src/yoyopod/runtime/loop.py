@@ -645,19 +645,13 @@ class RuntimeLoopService:
 
             if current_time - last_screen_update >= screen_update_interval:
                 self.app.boot_service.ensure_coordinators()
-                assert self.app.playback_coordinator is not None
-                assert self.app.screen_coordinator is not None
-                playback_coordinator = self.app.playback_coordinator
                 screen_coordinator = self.app.screen_coordinator
-
-                def refresh_visible_screen() -> None:
-                    playback_coordinator.update_now_playing_if_needed()
-                    screen_coordinator.update_in_call_if_needed()
-                    screen_coordinator.update_power_screen_if_needed()
+                if screen_coordinator is None:
+                    return current_time
 
                 self._measure_blocking_span(
                     "visible_screen_refresh",
-                    refresh_visible_screen,
+                    screen_coordinator.refresh_current_screen_for_visible_tick,
                 )
                 return current_time
 

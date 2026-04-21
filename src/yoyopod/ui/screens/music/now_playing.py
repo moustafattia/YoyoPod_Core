@@ -256,6 +256,16 @@ class NowPlayingScreen(Screen):
             return
         render_now_playing_pil(self)
 
+    def wants_visible_tick_refresh(self) -> bool:
+        """Return True while playback progress should keep updating on-screen."""
+
+        return self.current_state().is_playing
+
+    def refresh_for_visible_tick(self) -> None:
+        """Keep the now-playing view eligible for generic visible-tick refreshes."""
+
+        return None
+
     def get_footer_text(self, *, is_playing: bool, state_label: str | None = None) -> str:
         """Return the gesture hint for the active playback state."""
 
