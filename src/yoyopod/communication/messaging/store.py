@@ -142,6 +142,21 @@ class VoIPMessageStore:
             and message.unread
         )
 
+    def unread_voice_note_counts_by_contact(self) -> dict[str, int]:
+        """Return unread incoming voice-note counts grouped by peer address."""
+
+        counts: dict[str, int] = {}
+        for message in self._messages:
+            if (
+                message.kind != MessageKind.VOICE_NOTE
+                or message.direction != MessageDirection.INCOMING
+                or not message.unread
+                or not message.peer_sip_address
+            ):
+                continue
+            counts[message.peer_sip_address] = counts.get(message.peer_sip_address, 0) + 1
+        return counts
+
     def latest_voice_note_by_contact(self) -> dict[str, dict[str, object]]:
         """Return compact per-contact voice-note metadata for the Talk UI."""
 

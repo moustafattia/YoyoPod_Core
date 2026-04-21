@@ -199,6 +199,62 @@ def test_messaging_service_decorates_and_persists_incoming_messages(tmp_path: Pa
     assert received[-1].display_name == "Mom"
 
 
+def test_message_store_tracks_unread_voice_note_counts_by_contact(tmp_path: Path) -> None:
+    """Unread incoming voice notes should be grouped by peer address."""
+
+    config = build_config(tmp_path)
+    store = build_message_store(config)
+    for index, address in enumerate(
+        [
+            "sip:mom@example.com",
+            "sip:mom@example.com",
+            "sip:dad@example.com",
+        ],
+        start=1,
+    ):
+        store.upsert(
+            VoIPMessageRecord(
+                id=f"incoming-{index}",
+                peer_sip_address=address,
+                sender_sip_address=address,
+                recipient_sip_address="sip:alice@example.com",
+                kind=MessageKind.VOICE_NOTE,
+                direction=MessageDirection.INCOMING,
+                delivery_state=MessageDeliveryState.DELIVERED,
+                created_at="2026-04-06T00:00:00+00:00",
+                updated_at="2026-04-06T00:00:00+00:00",
+                unread=True,
+            )
+        )
+
+    store.upsert(
+        VoIPMessageRecord(
+            id="outgoing-1",
+            peer_sip_address="sip:mom@example.com",
+            sender_sip_address="sip:alice@example.com",
+            recipient_sip_address="sip:mom@example.com",
+            kind=MessageKind.VOICE_NOTE,
+            direction=MessageDirection.OUTGOING,
+            delivery_state=MessageDeliveryState.DELIVERED,
+            created_at="2026-04-06T00:00:00+00:00",
+            updated_at="2026-04-06T00:00:00+00:00",
+            unread=False,
+        )
+    )
+
+    assert store.unread_voice_note_count() == 3
+    assert store.unread_voice_note_counts_by_contact() == {
+        "sip:dad@example.com": 1,
+        "sip:mom@example.com": 2,
+    }
+
+    store.mark_contact_seen("sip:mom@example.com")
+
+    assert store.unread_voice_note_counts_by_contact() == {
+        "sip:dad@example.com": 1,
+    }
+
+
 def test_voice_note_service_transitions_recording_review_and_sending(tmp_path: Path) -> None:
     """VoiceNoteService should manage the active draft through record and send states."""
 

@@ -755,6 +755,7 @@ def test_voip_manager_receives_incoming_voice_note_and_updates_summary(tmp_path:
     )
 
     assert manager.unread_voice_note_count() == 1
+    assert manager.unread_voice_note_counts_by_contact() == {"sip:mom@example.com": 1}
     latest = manager.latest_voice_note_for_contact("sip:mom@example.com")
     assert latest is not None
     assert latest.local_file_path.endswith("incoming.wav")

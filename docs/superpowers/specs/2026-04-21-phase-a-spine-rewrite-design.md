@@ -330,6 +330,7 @@ Integrations register their `setup(app)` in a known order (see §11.2). The app 
 | `screen.awake` | `bool` | — | screen |
 | `screen.brightness_percent` | `int 0..100` | — | screen |
 | `voice.state` | `idle | listening | thinking | responding` | `transcript`, `response` | voice |
+| `contacts.people_count` | `int` | — | contacts |
 | `contacts.unread_voice_notes` | `int` | `by_address` | contacts |
 
 **Not in the state store** (direct reads on the owning integration):
@@ -433,7 +434,7 @@ app.services.call("music", "play", PlayCommand(track_uri="local:file:song.mp3"))
 **screen:** `wake`, `sleep`, `set_brightness`, `set_idle_timeout`
 **voice:** `start_listening`, `stop_listening`, `say`
 **cloud:** `sync_now`, `publish_telemetry`
-**contacts:** `lookup_by_address`, `reload`
+**contacts:** `lookup_by_address`, `reload`, `mark_voice_notes_seen`
 **diagnostics:** `snapshot`, `mark_user_activity`
 
 Total ≈ 40 commands. Exact set finalised per integration during implementation.

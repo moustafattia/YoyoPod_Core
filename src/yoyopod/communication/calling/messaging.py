@@ -160,6 +160,9 @@ class MessagingService:
     def unread_voice_note_count(self) -> int:
         return self.message_store.unread_voice_note_count()
 
+    def unread_voice_note_counts_by_contact(self) -> dict[str, int]:
+        return self.message_store.unread_voice_note_counts_by_contact()
+
     def latest_voice_note_summary(self) -> dict[str, dict[str, object]]:
         return self.message_store.latest_voice_note_by_contact()
 

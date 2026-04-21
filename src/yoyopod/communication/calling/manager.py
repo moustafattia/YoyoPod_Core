@@ -293,6 +293,9 @@ class VoIPManager:
     def unread_voice_note_count(self) -> int:
         return self._voice_note_service.unread_voice_note_count()
 
+    def unread_voice_note_counts_by_contact(self) -> dict[str, int]:
+        return self._voice_note_service.unread_voice_note_counts_by_contact()
+
     def latest_voice_note_summary(self) -> dict[str, dict[str, object]]:
         return self._voice_note_service.latest_voice_note_summary()
 
