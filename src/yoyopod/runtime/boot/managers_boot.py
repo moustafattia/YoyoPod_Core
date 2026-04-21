@@ -132,7 +132,7 @@ class ManagersBoot:
             if self.app.network_manager.config.enabled and not self.app.simulate:
                 try:
                     self.app.network_manager.start()
-                    self.app.event_wiring.network_events.sync_network_context_from_manager()
+                    self.app.network_events.sync_network_context_from_manager()
                 except Exception as exc:
                     self.logger.error("Network manager start failed: {}", exc)
                     if self.app.context is not None:

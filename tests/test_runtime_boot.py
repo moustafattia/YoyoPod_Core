@@ -6,7 +6,9 @@ import sys
 from types import SimpleNamespace
 
 import yoyopod.runtime.boot as boot_module
+from yoyopod.core import AppContext
 from yoyopod.runtime.boot import RuntimeBootService
+from yoyopod.runtime.boot.managers_boot import ManagersBoot
 
 
 class _FakeDisplay:
@@ -319,10 +321,7 @@ def test_setup_voip_callbacks_bind_direct_call_handlers() -> None:
     app = SimpleNamespace(
         voip_manager=voip_manager,
         call_coordinator=call_coordinator,
-        handle_voice_note_summary_changed=voice_note_events.handle_voice_note_summary_changed,
-        handle_voice_note_activity_changed=voice_note_events.handle_voice_note_activity_changed,
-        handle_voice_note_failure=voice_note_events.handle_voice_note_failure,
-        sync_active_voice_note_context=voice_note_events.sync_active_voice_note_context,
+        voice_note_events=voice_note_events,
         context=None,
         call_history_store=None,
     )
@@ -365,3 +364,122 @@ def test_setup_music_callbacks_bind_direct_playback_handlers() -> None:
         music_backend.connection_change_callback.__name__
         == "handle_availability_change"
     )
+
+
+def test_managers_boot_starts_network_and_syncs_context_without_event_wiring() -> None:
+    """Network startup should use the dedicated runtime handler instead of deleted wiring glue."""
+
+    sync_calls: list[str] = []
+
+    class _FakeVoipConfig:
+        iterate_interval_ms = 20
+
+        @classmethod
+        def from_config_manager(cls, _config_manager):
+            return cls()
+
+    class _FakeVoipManager:
+        def __init__(self, *_args, **_kwargs) -> None:
+            self.running = False
+            self.registration_state = "none"
+
+        def start(self) -> bool:
+            return False
+
+    class _FakeMusicConfig:
+        music_dir = "data/test_music"
+
+        @classmethod
+        def from_config_manager(cls, _config_manager):
+            return cls()
+
+    class _FakeMusicBackend:
+        def __init__(self, _config) -> None:
+            self.is_connected = False
+
+        def start(self) -> bool:
+            return False
+
+    class _FakeLocalMusicService:
+        def __init__(self, *_args, **_kwargs) -> None:
+            return None
+
+    class _FakeOutputVolumeController:
+        def __init__(self, _music_backend) -> None:
+            return None
+
+    class _FakePowerManager:
+        def __init__(self) -> None:
+            self.config = SimpleNamespace(enabled=False, poll_interval_seconds=30.0)
+
+        @classmethod
+        def from_config_manager(cls, _config_manager):
+            return cls()
+
+    class _FakeNetworkManager:
+        def __init__(self) -> None:
+            self.config = SimpleNamespace(enabled=True)
+            self.started = False
+
+        @classmethod
+        def from_config_manager(cls, _config_manager, event_bus=None):
+            assert event_bus is not None
+            return cls()
+
+        def start(self) -> None:
+            self.started = True
+
+    class _FakeCloudManager:
+        def __init__(self, *, app, config_manager) -> None:
+            self.app = app
+            self.config_manager = config_manager
+            self.prepare_calls = 0
+
+        def prepare_boot(self) -> None:
+            self.prepare_calls += 1
+
+    display = SimpleNamespace(
+        COLOR_BLACK=0,
+        COLOR_WHITE=1,
+        clear=lambda *_args, **_kwargs: None,
+        text=lambda *_args, **_kwargs: None,
+        update=lambda: None,
+    )
+    app = SimpleNamespace(
+        display=display,
+        config_manager=_FakeConfigManager(),
+        people_directory=None,
+        recent_track_store=None,
+        context=AppContext(),
+        runtime_loop=SimpleNamespace(queue_main_thread_callback=lambda *_args, **_kwargs: None),
+        output_volume=None,
+        audio_volume_controller=None,
+        simulate=False,
+        event_bus=object(),
+        network_events=SimpleNamespace(
+            sync_network_context_from_manager=lambda: sync_calls.append("synced")
+        ),
+    )
+
+    service = ManagersBoot(
+        app,
+        logger=SimpleNamespace(
+            info=lambda *_args, **_kwargs: None,
+            warning=lambda *_args, **_kwargs: None,
+            error=lambda *_args, **_kwargs: None,
+            exception=lambda *_args, **_kwargs: None,
+        ),
+        voip_config_cls=_FakeVoipConfig,
+        voip_manager_cls=_FakeVoipManager,
+        music_config_cls=_FakeMusicConfig,
+        mpv_backend_cls=_FakeMusicBackend,
+        local_music_service_cls=_FakeLocalMusicService,
+        output_volume_controller_cls=_FakeOutputVolumeController,
+        power_manager_cls=_FakePowerManager,
+        network_manager_cls=_FakeNetworkManager,
+        cloud_manager_cls=_FakeCloudManager,
+    )
+
+    assert service.init_managers() is True
+    assert app.network_manager.started is True
+    assert sync_calls == ["synced"]
