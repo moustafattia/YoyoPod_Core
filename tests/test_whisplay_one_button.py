@@ -6,15 +6,10 @@ from types import SimpleNamespace
 
 import pytest
 
+from yoyopod.backends.music import MockMusicBackend, Playlist, Track
 from yoyopod.core import AppContext
-from yoyopod.audio import (
-    LocalMusicService,
-    MockMusicBackend,
-    Playlist,
-    RecentTrackHistoryStore,
-    Track,
-)
 from yoyopod.integrations.call import VoiceNoteDraft
+from yoyopod.integrations.music import LocalMusicService, RecentTrackHistoryStore
 from yoyopod.ui.display import Display
 from yoyopod.ui.input import InteractionProfile
 from yoyopod.ui.screens.music.now_playing import (

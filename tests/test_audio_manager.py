@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from yoyopod.audio.manager import MusicManager
+from yoyopod.core.audio_manager import MusicManager
 
 
 def test_music_manager_skips_pygame_import_when_simulating(monkeypatch) -> None:
@@ -11,7 +11,7 @@ def test_music_manager_skips_pygame_import_when_simulating(monkeypatch) -> None:
     import_calls: list[str] = []
 
     monkeypatch.setattr(
-        "yoyopod.audio.manager._load_pygame_mixer",
+        "yoyopod.core.audio_manager._load_pygame_mixer",
         lambda: import_calls.append("pygame.mixer"),
     )
 
@@ -39,7 +39,7 @@ def test_music_manager_imports_and_initializes_pygame_on_demand(monkeypatch) -> 
         def quit(self) -> None:
             return None
 
-    monkeypatch.setattr("yoyopod.audio.manager._load_pygame_mixer", lambda: FakeMixer())
+    monkeypatch.setattr("yoyopod.core.audio_manager._load_pygame_mixer", lambda: FakeMixer())
     monkeypatch.setattr(MusicManager, "_detect_devices", lambda self: [])
 
     manager = MusicManager(simulate=False)

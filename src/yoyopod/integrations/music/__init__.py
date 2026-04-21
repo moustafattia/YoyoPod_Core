@@ -38,6 +38,7 @@ from yoyopod.integrations.music.library import LocalLibraryItem, LocalMusicServi
 
 if TYPE_CHECKING:
     from yoyopod.backends.music import MusicBackend, MusicConfig, Track
+    from yoyopod.integrations.music.coordinator import PlaybackCoordinator
 
 
 @dataclass(slots=True)
@@ -51,6 +52,7 @@ class MusicIntegration:
 
 
 __all__ = [
+    "PlaybackCoordinator",
     "LoadPlaylistCommand",
     "LocalLibraryItem",
     "LocalMusicService",
@@ -72,6 +74,16 @@ __all__ = [
     "setup",
     "teardown",
 ]
+
+
+def __getattr__(name: str) -> Any:
+    """Load relocated music exports lazily when needed."""
+
+    if name == "PlaybackCoordinator":
+        from yoyopod.integrations.music.coordinator import PlaybackCoordinator
+
+        return PlaybackCoordinator
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
 def setup(

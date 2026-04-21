@@ -31,6 +31,7 @@ if TYPE_CHECKING:
         VoiceNoteSummaryChangedEvent,
         VoIPAvailabilityChangedEvent,
     )
+    from yoyopod.integrations.call.coordinator import CallCoordinator
     from yoyopod.integrations.call.history import CallHistoryEntry, CallHistoryStore
     from yoyopod.integrations.call.lifecycle import ActiveCallSession, CallSessionTracker
     from yoyopod.integrations.call.messaging import MessagingService
@@ -72,6 +73,7 @@ _PUBLIC_EXPORTS = {
         "CancelVoiceNoteRecordingCommand",
     ),
     "CallFSM": ("yoyopod.integrations.call.session", "CallFSM"),
+    "CallCoordinator": ("yoyopod.integrations.call.coordinator", "CallCoordinator"),
     "CallEndedEvent": ("yoyopod.integrations.call.events", "CallEndedEvent"),
     "CallHistoryUpdatedEvent": ("yoyopod.integrations.call.events", "CallHistoryUpdatedEvent"),
     "CallInterruptionPolicy": ("yoyopod.integrations.call.session", "CallInterruptionPolicy"),
@@ -540,6 +542,7 @@ __all__ = [
     "CallIntegration",
     "CallEndedEvent",
     "CallFSM",
+    "CallCoordinator",
     "CallHistoryUpdatedEvent",
     "CallInterruptionPolicy",
     "CallStateChangedEvent",

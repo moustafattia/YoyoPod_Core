@@ -24,8 +24,8 @@ from yoyopod.core.runtime_state import (
 from yoyopod.ui.input.hal import InteractionProfile
 
 if TYPE_CHECKING:
-    from yoyopod.audio.manager import MusicManager
-    from yoyopod.audio.volume_controller import AudioVolumeController
+    from yoyopod.core.audio_manager import MusicManager
+    from yoyopod.core.audio_volume import AudioVolumeController
     from yoyopod.integrations.power.models import PowerSnapshot
 
 __all__ = [

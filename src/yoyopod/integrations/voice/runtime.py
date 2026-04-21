@@ -16,8 +16,8 @@ from yoyopod.backends.voice import AlsaOutputPlayer
 from yoyopod.core import VoiceInteractionState
 from yoyopod.integrations.voice import VoiceCaptureRequest, VoiceManager, VoiceSettings
 
-from .executor import VoiceCommandExecutor
-from .settings import VoiceCommandOutcome, VoiceSettingsResolver
+from yoyopod.integrations.voice.executor import VoiceCommandExecutor
+from yoyopod.integrations.voice.settings import VoiceCommandOutcome, VoiceSettingsResolver
 
 if TYPE_CHECKING:
     from yoyopod.core import AppContext

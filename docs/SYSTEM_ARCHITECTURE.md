@@ -39,9 +39,10 @@ The frozen end state is:
 - `src/yoyopod/backends/`: external adapters only
 - `src/yoyopod/ui/`: display, input, and screens
 
-`src/yoyopod/runtime/` and the legacy domain-facade packages are now gone.
-`src/yoyopod/coordinators/` and `src/yoyopod/audio/` are the remaining
-transition buckets that should disappear before the hard merge.
+`src/yoyopod/runtime/`, `src/yoyopod/coordinators/`, `src/yoyopod/audio/`,
+and the legacy domain-facade packages are now gone. The remaining migration
+surface is limited to the live dual-bus/runtime-state seams under
+`src/yoyopod/core/` plus any stale docs or test layout drift.
 
 ## Startup And Bootstrap Flow
 
@@ -178,10 +179,10 @@ yoyopod.py / yoyopod.main
 - `src/yoyopod/core/bus.py`, `states.py`, `services.py`, `scheduler.py`: frozen spine primitives
 - `src/yoyopod/core/events.py`: universal state-change and cross-cutting app events only
 - `src/yoyopod/core/focus.py`, `recovery.py`, `status.py`, `diagnostics/`: cross-cutting core modules
-- `src/yoyopod/fsm.py`: compatibility wrapper over relocated FSM primitives
-- `src/yoyopod/coordinators/registry.py`: derived app runtime state
-- `src/yoyopod/app_context.py`: compatibility wrapper over focused shared runtime state
-- `src/yoyopod/runtime_state.py`: focused runtime state objects owned by `AppContext`
+- `src/yoyopod/core/fsm/`: canonical playback and call-session FSM primitives
+- `src/yoyopod/core/ui_state.py`: derived app runtime state
+- `src/yoyopod/core/app_context.py`: focused shared runtime state
+- `src/yoyopod/core/runtime_state.py`: focused runtime state objects owned by `AppContext`
 - `src/yoyopod/core/bootstrap/`: boot-time composition and manager wiring
 - `src/yoyopod/core/loop.py`: coordinator-loop scheduling and queued main-thread work
 - `src/yoyopod/core/recovery.py`: backend recovery supervision and retry services
@@ -189,13 +190,13 @@ yoyopod.py / yoyopod.main
 - `src/yoyopod/core/shutdown.py`: shutdown countdowns, hooks, and lifecycle cleanup
 - `src/yoyopod/integrations/power/service.py`: power polling and watchdog cadence
 
-### Coordinators
+### Orchestration
 
-- `src/yoyopod/coordinators/call.py`: call-flow orchestration
-- `src/yoyopod/coordinators/playback.py`: music-flow orchestration
-- `src/yoyopod/coordinators/power.py`: power and shutdown-related orchestration
-- `src/yoyopod/coordinators/screen.py`: screen refresh and call-screen updates
-- `src/yoyopod/coordinators/registry.py`: derived runtime state and shared runtime references
+- `src/yoyopod/integrations/call/coordinator.py`: call-flow orchestration
+- `src/yoyopod/integrations/music/coordinator.py`: music-flow orchestration
+- `src/yoyopod/integrations/power/coordinator.py`: power and shutdown-related orchestration
+- `src/yoyopod/ui/screens/coordinator.py`: screen refresh and call-screen updates
+- `src/yoyopod/core/ui_state.py`: derived runtime state and shared runtime references
 
 ### Domains and Backends
 
@@ -287,10 +288,10 @@ Screen groups:
 
 Playback and call orchestration use composed models:
 
-- `MusicFSM` in `src/yoyopod/fsm.py`
+- `MusicFSM` in `src/yoyopod/core/fsm/music.py`
 - `CallFSM` in `src/yoyopod/integrations/call/session.py`
 - `CallInterruptionPolicy` in `src/yoyopod/integrations/call/session.py`
-- `CoordinatorRuntime` in `src/yoyopod/coordinators/registry.py`
+- `CoordinatorRuntime` in `src/yoyopod/core/ui_state.py`
 
 `CoordinatorRuntime` derives the current application status from those models, including:
 
@@ -346,9 +347,13 @@ These are known implementation constraints, not architecture goals.
 
 For current behavior, trust these files over older notes or demos:
 
-- `src/yoyopod/app.py`
-- `src/yoyopod/fsm.py`
-- `src/yoyopod/coordinators/registry.py`
+- `src/yoyopod/core/application.py`
+- `src/yoyopod/core/fsm/`
+- `src/yoyopod/core/event_bus.py`
+- `src/yoyopod/core/events.py`
+- `src/yoyopod/core/app_context.py`
+- `src/yoyopod/core/runtime_state.py`
+- `src/yoyopod/core/ui_state.py`
 - `src/yoyopod/backends/music/`
 - `src/yoyopod/integrations/music/`
 - `src/yoyopod/backends/voip/`

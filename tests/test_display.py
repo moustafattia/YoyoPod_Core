@@ -6,7 +6,7 @@ from types import SimpleNamespace
 import pytest
 
 from yoyopod.core import AppContext
-from yoyopod.audio import MockMusicBackend, Track
+from yoyopod.backends.music import MockMusicBackend, Track
 from yoyopod.ui.display import Display, get_hardware_info
 from yoyopod.ui.display.adapters.pimoroni import PimoroniDisplayAdapter
 from yoyopod.ui.screens.music.now_playing import NowPlayingScreen

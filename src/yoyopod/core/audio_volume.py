@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING, Callable
 
 from loguru import logger
 
-from yoyopod.audio.volume import OutputVolumeController
+from yoyopod.core.output_volume import OutputVolumeController
 
 if TYPE_CHECKING:
     from yoyopod.backends.music import MusicBackend

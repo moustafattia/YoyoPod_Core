@@ -361,13 +361,13 @@ If ordering looks inconsistent, this is usually the first place to check.
 - `src/yoyopod/core/bootstrap/`
 - `src/yoyopod/core/loop.py`
 - `src/yoyopod/core/recovery.py`
-- `src/yoyopod/coordinators/registry.py`
-- `src/yoyopod/coordinators/call.py`
-- `src/yoyopod/coordinators/playback.py`
-- `src/yoyopod/coordinators/power.py`
-- `src/yoyopod/coordinators/screen.py`
-- `src/yoyopod/event_bus.py`
-- `src/yoyopod/events.py`
+- `src/yoyopod/core/ui_state.py`
+- `src/yoyopod/integrations/call/coordinator.py`
+- `src/yoyopod/integrations/music/coordinator.py`
+- `src/yoyopod/integrations/power/coordinator.py`
+- `src/yoyopod/ui/screens/coordinator.py`
+- `src/yoyopod/core/event_bus.py`
+- `src/yoyopod/core/events.py`
 - `src/yoyopod/integrations/network/manager.py`
 
 ## Bottom line

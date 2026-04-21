@@ -33,7 +33,7 @@ Main files:
 - `src/yoyopod/integrations/power/__init__.py`
 - `src/yoyopod/backends/power/pisugar.py`
 - `src/yoyopod/backends/power/watchdog.py`
-- `src/yoyopod/coordinators/power.py`
+- `src/yoyopod/integrations/power/coordinator.py`
 - `src/yoyopod/ui/screens/system/power_screen.py`
 - `src/yoyopod/cli/pi/power.py` (`yoyopod pi power battery`, `yoyopod pi power rtc`)
 
@@ -47,7 +47,7 @@ YoyoPodApp
         -> Unix socket or TCP PiSugar server transport
      -> PiSugarWatchdog
         -> i2cget / i2cset
-  -> PowerCoordinator
+  -> integrations.power.PowerCoordinator
      -> EventBus
      -> PowerSafetyPolicy
      -> AppContext / CoordinatorRuntime

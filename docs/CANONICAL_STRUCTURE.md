@@ -140,8 +140,6 @@ Frozen canonical package homes:
 
 Temporary migration buckets are not part of the canonical target:
 
-- `src/yoyopod/coordinators/`
-- `src/yoyopod/audio/`
 - thin root compatibility wrappers such as `events.py`, `event_bus.py`, `fsm.py`, and `runtime_state.py`
 
 The app layer should import from domain seams such as:

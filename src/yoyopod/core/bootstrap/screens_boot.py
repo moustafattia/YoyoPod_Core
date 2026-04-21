@@ -4,12 +4,12 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from yoyopod.coordinators.voice import (
+from yoyopod.integrations.voice import (
     VoiceCommandExecutor,
     VoiceRuntimeCoordinator,
+    VoiceSettings,
     VoiceSettingsResolver,
 )
-from yoyopod.integrations.voice import VoiceSettings
 from yoyopod.ui.input import InteractionProfile
 
 if TYPE_CHECKING:

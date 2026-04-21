@@ -6,7 +6,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from yoyopod.audio.music import LocalLibraryItem
+from yoyopod.integrations.music import LocalLibraryItem
 from yoyopod.ui.screens.music.now_playing import NowPlayingState
 from yoyopod.ui.screens.music.now_playing_pil_view import render_now_playing_pil
 from yoyopod.ui.screens.music.playlist_pil_view import render_playlist_pil

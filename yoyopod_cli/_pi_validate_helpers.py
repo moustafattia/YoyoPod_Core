@@ -20,7 +20,7 @@ from yoyopod_cli.music_fixtures import (
     ProvisionedTestMusicLibrary,
     provision_test_music_library,
 )
-from yoyopod.events import UserActivityEvent
+from yoyopod.core.events import UserActivityEvent
 from yoyopod.ui.input import InputAction, InteractionProfile
 
 if TYPE_CHECKING:

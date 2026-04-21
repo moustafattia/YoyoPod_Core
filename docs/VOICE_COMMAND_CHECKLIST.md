@@ -40,7 +40,7 @@ The file references below were captured at the time of writing. Their links have
 
 ### Shared App State
 
-- [src/yoyopod/app_context.py](../src/yoyopod/app_context.py)
+- [src/yoyopod/core/app_context.py](../src/yoyopod/core/app_context.py)
 
 ### Config Models and Persistence
 
@@ -50,7 +50,7 @@ The file references below were captured at the time of writing. Their links have
 
 ### Output Volume and Audio
 
-- [src/yoyopod/audio/volume.py](../src/yoyopod/audio/volume.py)
+- [src/yoyopod/core/output_volume.py](../src/yoyopod/core/output_volume.py)
 - [docs/AUDIO_STACK.md](AUDIO_STACK.md)
 
 ### Contact Calling / VoIP
@@ -96,7 +96,7 @@ Notes:
 Files:
 
 - [src/yoyopod/config/manager.py](../src/yoyopod/config/manager.py)
-- [src/yoyopod/app_context.py](../src/yoyopod/app_context.py)
+- [src/yoyopod/core/app_context.py](../src/yoyopod/core/app_context.py)
 
 Checklist:
 
@@ -195,9 +195,9 @@ Notes:
 Files:
 
 - [src/yoyopod/app.py](../src/yoyopod/app.py)
-- [src/yoyopod/audio/volume.py](../src/yoyopod/audio/volume.py)
+- [src/yoyopod/core/output_volume.py](../src/yoyopod/core/output_volume.py)
 - [src/yoyopod/voip/manager.py](../src/yoyopod/voip/manager.py)
-- [src/yoyopod/app_context.py](../src/yoyopod/app_context.py)
+- [src/yoyopod/core/app_context.py](../src/yoyopod/core/app_context.py)
 
 Checklist:
 
@@ -348,7 +348,7 @@ Checklist:
 Start with the low-risk backbone:
 
 - [src/yoyopod/config/models.py](../src/yoyopod/config/models.py)
-- [src/yoyopod/app_context.py](../src/yoyopod/app_context.py)
+- [src/yoyopod/core/app_context.py](../src/yoyopod/core/app_context.py)
 - new `src/yoyopod/voice/` package skeleton
 
 That gives the rest of the UI work a stable typed target.

@@ -8,9 +8,8 @@ from typing import Optional
 
 from loguru import logger
 
-from yoyopod.coordinators.registry import AppRuntimeState, CoordinatorRuntime
-from yoyopod.coordinators.screen import ScreenCoordinator
 from yoyopod.core import EventBus
+from yoyopod.core.ui_state import AppRuntimeState, CoordinatorRuntime
 from yoyopod.integrations.call import (
     CallHistoryStore,
     CallRinger,
@@ -20,6 +19,7 @@ from yoyopod.integrations.call import (
     RegistrationState,
     sync_context_voip_status,
 )
+from yoyopod.ui.screens.coordinator import ScreenCoordinator
 
 
 class CallCoordinator:

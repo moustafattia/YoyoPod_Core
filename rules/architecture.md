@@ -3,23 +3,23 @@
 ```text
 yoyopod.py / src/yoyopod/main.py  (entry points)
         |
-    YoyoPodApp (app.py) -- thin composition shell
-    |- RuntimeBootService (runtime/boot.py)
-    |- RuntimeLoopService (runtime/loop.py)
-    |- RecoverySupervisor (runtime/recovery.py)
-    |- ScreenPowerService (runtime/screen_power.py)
-    |- ShutdownLifecycleService (runtime/shutdown.py)
-    |- MusicFSM + CallFSM (fsm.py) -- composed playback and call state machines
-    |- CoordinatorRuntime (coordinators/registry.py) -- shared coordinator registry + derived app state
-    |- VoiceRuntimeCoordinator (coordinators/voice/coordinator.py) -- Ask voice session orchestration
-    |- AppContext (app_context.py) -- compatibility wrapper over focused runtime state objects
+    YoyoPodApp (core/application.py)
+    |- RuntimeBootService (core/bootstrap/)
+    |- RuntimeLoopService (core/loop.py)
+    |- RuntimeRecoveryService (core/recovery.py)
+    |- ShutdownLifecycleService (core/shutdown.py)
+    |- ScreenPowerService (integrations/display/service.py)
+    |- MusicFSM + CallFSM -- composed playback and call state machines
+    |- CoordinatorRuntime (core/ui_state.py) -- shared derived app state
+    |- VoiceRuntimeCoordinator (integrations/voice/runtime.py) -- Ask voice session orchestration
+    |- AppContext (core/app_context.py)
     |  |- media / power / network / screen / voip / talk / voice
-    |- LocalMusicService (audio/local_service.py) -- playlists, recents, shuffle
-    |- MpvBackend (audio/music/backend.py)
-    |  |- MpvProcess (audio/music/process.py)
-    |  `- MpvIpcClient (audio/music/ipc.py) -- mpv JSON IPC
-    |- VoIPManager (communication/calling/manager.py)
-    |  `- LiblinphoneBackend (communication/calling/backend.py)
+    |- LocalMusicService (integrations/music/library.py) -- playlists, recents, shuffle
+    |- MpvBackend (backends/music/mpv.py)
+    |  |- MpvProcess (backends/music/process.py)
+    |  `- MpvIpcClient (backends/music/ipc.py) -- mpv JSON IPC
+    |- VoIPManager (integrations/call/manager.py)
+    |  `- LiblinphoneBackend (backends/voip/backend.py)
     |- Display HAL (ui/display/) -- factory pattern, 3 adapters
     |- Input HAL (ui/input/) -- semantic actions, 3 adapters
     `- ScreenManager (ui/screens/manager.py) -- stack-based navigation
@@ -39,7 +39,7 @@ yoyopod.py / src/yoyopod/main.py  (entry points)
 
 ## State Orchestration
 
-`MusicFSM` and `CallFSM` stay independent, while `CoordinatorRuntime` (from `coordinators/registry.py`) derives combined runtime states such as `PLAYING_WITH_VOIP`, `PAUSED_BY_CALL`, and `CALL_ACTIVE_MUSIC_PAUSED`. Incoming calls can auto-pause music, and playback can auto-resume after the call ends when enabled.
+`MusicFSM` and `CallFSM` stay independent, while `CoordinatorRuntime` (from `core/ui_state.py`) derives combined runtime states such as `PLAYING_WITH_VOIP`, `PAUSED_BY_CALL`, and `CALL_ACTIVE_MUSIC_PAUSED`. Incoming calls can auto-pause music, and playback can auto-resume after the call ends when enabled.
 
 ## Key Patterns
 
@@ -64,21 +64,24 @@ yoyopod.py / src/yoyopod/main.py  (entry points)
 - Screens should not own hardware lifecycle, process supervision, watchdog behavior, or cross-feature orchestration.
 - Heavy voice, playback, call, or power policy should live outside screens and be consumed by screens.
 
-### Coordinators
+### Orchestration
 
-- `src/yoyopod/coordinators/` owns cross-subsystem orchestration.
-- `src/yoyopod/coordinators/registry.py` is the shared state/composition registry for coordinator modules.
-- Coordinators may translate events into runtime state changes and navigation changes.
-- Coordinators should not contain rendering code, hardware-driver code, or long-lived persistence logic.
-- Per-domain coordinator modules currently include call, playback, power, screen, and voice.
+- Shared derived state and runtime references live in `src/yoyopod/core/ui_state.py`.
+- Cross-domain coordination lives with the owning domain seam:
+  - `src/yoyopod/integrations/call/coordinator.py`
+  - `src/yoyopod/integrations/music/coordinator.py`
+  - `src/yoyopod/integrations/power/coordinator.py`
+  - `src/yoyopod/integrations/voice/runtime.py`
+  - `src/yoyopod/ui/screens/coordinator.py`
+- Orchestration code may translate events into runtime state changes and navigation changes.
+- Orchestration code should not contain rendering code, hardware-driver code, or long-lived persistence logic.
 
 ### Subsystem managers and backends
 
-- `audio/`, `communication/`, `people/`, `power/`, `network/`, and `voice/` own subsystem behavior and backend integration.
+- `src/yoyopod/integrations/` owns domain behavior and app-facing facades.
+- `src/yoyopod/backends/` owns concrete I/O, process, hardware, and protocol adapters.
 - `backend.py` is the low-level I/O or protocol driver (one concrete driver implementation per module family).
 - `manager.py` is the domain-owned app-facing facade for that subsystem.
-- `src/yoyopod/runtime/` is reserved for loop-attached lifecycle and threaded services (`boot`, `loop`, `screen_power`, `shutdown`, `recovery`, `power_service`), not per-domain orchestrators.
-- `src/yoyopod/coordinators/` is reserved for per-domain event-driven orchestration between managers, FSMs, and EventBus.
 - Keep backend-specific details behind the subsystem boundary whenever possible.
 
 ### Hardware abstraction
@@ -91,11 +94,11 @@ yoyopod.py / src/yoyopod/main.py  (entry points)
 
 - Prefer canonical typed models over parallel shape duplication across UI and runtime layers.
 - `AppContext` is shared runtime state, not a dumping ground for every new feature field.
-- Prefer adding new mutable runtime fields to the focused state objects in `src/yoyopod/runtime_state.py`
+- Prefer adding new mutable runtime fields to the focused state objects in `src/yoyopod/core/runtime_state.py`
   before extending `AppContext` directly.
-- Music runtime state should compose with the canonical models in `src/yoyopod/audio/music/models.py`.
+- Music runtime state should compose with the canonical models in `src/yoyopod/backends/music/models.py`.
 - Use `PlaybackQueue` for ordered playback state instead of defining alternate runtime `Track` or
-  `Playlist` shapes under `AppContext` or `runtime_state.py`.
+  `Playlist` shapes under `AppContext` or `core/runtime_state.py`.
 - New domain objects should be introduced in clear model modules before being copied into screen-only state.
 
 ### Events and threading
@@ -108,8 +111,9 @@ yoyopod.py / src/yoyopod/main.py  (entry points)
 
 Prefer this direction of dependency:
 
-- entrypoints -> coordinators / managers / UI wiring
-- coordinators -> runtime state + subsystem facades + screen manager
+- entrypoints -> core application / integrations / UI wiring
+- core application -> integrations / backends / UI
+- integrations -> core + backends
 - screens -> display/input abstractions + typed runtime state + narrow feature actions
 - managers -> backends / persistence / subprocess control
 - backends -> hardware / native bindings / external processes

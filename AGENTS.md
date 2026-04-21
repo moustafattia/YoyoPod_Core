@@ -36,20 +36,24 @@ Canonical deploy/debug skills
 
 Current runtime summary
 - Entrypoint: `yoyopod.py` -> `yoyopod.main` -> `YoyoPodApp`
-- Main packages: `src/yoyopod/audio/`, `src/yoyopod/communication/`, `src/yoyopod/power/`, `src/yoyopod/ui/`, `src/yoyopod/coordinators/`
-- Runtime structure: split `MusicFSM` + `CallFSM`, typed `EventBus`, coordinator-driven app state
-- Production audio: mpv backend under `src/yoyopod/audio/music/`
-- Production VoIP: Liblinphone under `src/yoyopod/communication/integrations/liblinphone_binding/`
+- Main packages: `src/yoyopod/core/`, `src/yoyopod/integrations/`, `src/yoyopod/backends/`, `src/yoyopod/ui/`, `src/yoyopod/config/`
+- Runtime structure: canonical `YoyoPodApp` in `src/yoyopod/core/application.py`, boot in `src/yoyopod/core/bootstrap/`, loop in `src/yoyopod/core/loop.py`, and remaining live dual-bus/runtime-state seams under `src/yoyopod/core/`
+- Production audio: mpv backend under `src/yoyopod/backends/music/`
+- Production VoIP: Liblinphone under `src/yoyopod/backends/voip/`
 - Production LVGL path: `src/yoyopod/ui/lvgl_binding/`
 - Production service templates: `deploy/systemd/`
 - CLI package: `yoyopod_cli/` (flat, single `yoyopod` entry point)
 
 Source-of-truth files
-- `src/yoyopod/app.py`
-- `src/yoyopod/fsm.py`
-- `src/yoyopod/event_bus.py`
-- `src/yoyopod/events.py`
-- `src/yoyopod/coordinators/runtime.py`
+- `src/yoyopod/core/application.py`
+- `src/yoyopod/core/bootstrap/`
+- `src/yoyopod/core/loop.py`
+- `src/yoyopod/core/event_bus.py`
+- `src/yoyopod/core/events.py`
+- `src/yoyopod/core/ui_state.py`
+- `src/yoyopod/integrations/`
+- `src/yoyopod/backends/`
+- `src/yoyopod/ui/`
 - `yoyopod_cli/main.py`
 - `yoyopod_cli/COMMANDS.md`
 - `README.md`

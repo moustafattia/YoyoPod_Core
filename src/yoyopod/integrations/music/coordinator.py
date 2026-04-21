@@ -7,10 +7,10 @@ from __future__ import annotations
 from loguru import logger
 
 from yoyopod.backends.music import Track
-from yoyopod.coordinators.registry import AppRuntimeState, CoordinatorRuntime
-from yoyopod.coordinators.screen import ScreenCoordinator
 from yoyopod.core import EventBus
+from yoyopod.core.ui_state import AppRuntimeState, CoordinatorRuntime
 from yoyopod.integrations.music import LocalMusicService
+from yoyopod.ui.screens.coordinator import ScreenCoordinator
 
 
 class PlaybackCoordinator:

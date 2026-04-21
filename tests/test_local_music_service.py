@@ -6,9 +6,10 @@ from pathlib import Path
 
 import pytest
 
-import yoyopod.audio.music.library as library_module
-from yoyopod.audio import LocalMusicService, MockMusicBackend, RecentTrackHistoryStore, Track
-from yoyopod.coordinators.playback import PlaybackCoordinator
+import yoyopod.integrations.music.library as library_module
+from yoyopod.backends.music import MockMusicBackend, Track
+from yoyopod.integrations.music import LocalMusicService, RecentTrackHistoryStore
+from yoyopod.integrations.music.coordinator import PlaybackCoordinator
 
 
 class StubRuntime:

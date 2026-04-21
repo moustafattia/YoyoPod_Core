@@ -10,11 +10,11 @@ from typing import TYPE_CHECKING, Callable
 from loguru import logger
 
 from yoyopod.core import AppContext
-from yoyopod.coordinators.registry import CoordinatorRuntime
-from yoyopod.coordinators.screen import ScreenCoordinator
 from yoyopod.core import EventBus
+from yoyopod.core.ui_state import CoordinatorRuntime
 from yoyopod.integrations.power.models import PowerSnapshot
 from yoyopod.integrations.power.policies import PowerSafetyPolicy
+from yoyopod.ui.screens.coordinator import ScreenCoordinator
 
 if TYPE_CHECKING:
     from yoyopod.integrations.cloud.manager import CloudManager

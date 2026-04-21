@@ -4,15 +4,12 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from yoyopod.coordinators import (
-    AppRuntimeState,
-    CallCoordinator,
-    CoordinatorRuntime,
-    PlaybackCoordinator,
-    PowerCoordinator,
-    ScreenCoordinator,
-)
 from yoyopod.core import ScreenChangedEvent
+from yoyopod.core.ui_state import AppRuntimeState, CoordinatorRuntime
+from yoyopod.integrations.call.coordinator import CallCoordinator
+from yoyopod.integrations.music.coordinator import PlaybackCoordinator
+from yoyopod.integrations.power.coordinator import PowerCoordinator
+from yoyopod.ui.screens.coordinator import ScreenCoordinator
 
 if TYPE_CHECKING:
     from yoyopod.core.application import YoyoPodApp

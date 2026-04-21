@@ -514,20 +514,20 @@ Retained for human-readable `info`/`warn`/`error` lines. Complementary to the st
 
 | Class / module | File(s) | Why |
 |---|---|---|
-| `MusicFSM` | `src/yoyopod/fsm.py` | 3 states, 3 triggers; replaced by `app.states.get("music.state")` |
-| `CallFSM` | `src/yoyopod/fsm.py` | Replaced by `app.states.get("call.state")` |
-| `CallInterruptionPolicy` | `src/yoyopod/fsm.py` | Replaced by `focus` integration's AudioFocus arbiter |
-| `AppRuntimeState` enum | `src/yoyopod/coordinators/runtime.py` | 18 cross-product values become direct state reads per entity |
-| `CoordinatorRuntime` | `src/yoyopod/coordinators/runtime.py` | Aggregate view replaced by `app.states.all()` + direct reads |
-| `CallCoordinator` | `src/yoyopod/coordinators/call.py` | Logic into `integrations/call/handlers.py` |
-| `PlaybackCoordinator` | `src/yoyopod/coordinators/playback.py` | Logic into `integrations/music/handlers.py` |
-| `ScreenCoordinator` | `src/yoyopod/coordinators/screen.py` | Push/pop into `ScreenManager`; refresh-if-visible becomes subscription |
-| `PowerCoordinator` | `src/yoyopod/coordinators/power.py` | Into `integrations/power/handlers.py` |
+| `MusicFSM` | `src/yoyopod/core/fsm/music.py` | 3 states, 3 triggers; replaced by `app.states.get("music.state")` |
+| `CallFSM` | `src/yoyopod/integrations/call/session.py` | Replaced by `app.states.get("call.state")` |
+| `CallInterruptionPolicy` | `src/yoyopod/integrations/call/session.py` | Replaced by `core/focus.py` audio-focus arbitration |
+| `AppRuntimeState` enum | `src/yoyopod/core/ui_state.py` | 18 cross-product values become direct state reads per entity |
+| `CoordinatorRuntime` | `src/yoyopod/core/ui_state.py` | Aggregate view replaced by `app.states.all()` + direct reads |
+| `CallCoordinator` | `src/yoyopod/integrations/call/coordinator.py` | Logic into `integrations/call/handlers.py` |
+| `PlaybackCoordinator` | `src/yoyopod/integrations/music/coordinator.py` | Logic into `integrations/music/handlers.py` |
+| `ScreenCoordinator` | `src/yoyopod/ui/screens/coordinator.py` | Push/pop into `ScreenManager`; refresh-if-visible becomes subscription |
+| `PowerCoordinator` | `src/yoyopod/integrations/power/coordinator.py` | Into `integrations/power/handlers.py` |
 | `RuntimeBootService` | `src/yoyopod/runtime/` | Replaced by `YoyoPodApp.setup()` calling each integration's `setup(app)` |
 | `RuntimeLoopService` | `src/yoyopod/runtime/` | Replaced by 4-line loop in `YoyoPodApp.run()` |
 | `ShutdownLifecycleService` | `src/yoyopod/runtime/` | Replaced by `YoyoPodApp.stop()` calling integration `teardown(app)` |
 | `RuntimeEventWiring` | `src/yoyopod/runtime/event_wiring.py` | Each integration wires itself in its own `setup()` |
-| `AppContext` | `src/yoyopod/app_context.py` | Screens read via `app.states.get(...)`; config via `app.config` |
+| `AppContext` | `src/yoyopod/core/app_context.py` | Screens read via `app.states.get(...)`; config via `app.config` |
 
 All of `src/yoyopod/coordinators/` and `src/yoyopod/runtime/` end up empty and are removed.
 

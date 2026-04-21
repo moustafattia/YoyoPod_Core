@@ -8,7 +8,7 @@ from loguru import logger
 
 from yoyopod.integrations.voice import VoiceCommandIntent, match_voice_command
 
-from .settings import VoiceCommandOutcome
+from yoyopod.integrations.voice.settings import VoiceCommandOutcome
 
 if TYPE_CHECKING:
     from yoyopod.core import AppContext

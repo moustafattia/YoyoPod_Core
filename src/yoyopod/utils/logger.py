@@ -37,10 +37,19 @@ FILE_FORMAT = (
 _SUBSYSTEM_OVERRIDES = {
     "yoyopod.integrations.call": "comm",
     "yoyopod.backends.voip": "comm",
-    "yoyopod.audio": "music",
     "yoyopod.integrations.music": "music",
     "yoyopod.backends.music": "music",
-    "yoyopod.coordinators": "coord",
+    "yoyopod.core.audio_manager": "music",
+    "yoyopod.core.audio_volume": "music",
+    "yoyopod.core.output_volume": "music",
+    "yoyopod.core.ui_state": "coord",
+    "yoyopod.ui.screens.coordinator": "coord",
+    "yoyopod.integrations.call.coordinator": "coord",
+    "yoyopod.integrations.music.coordinator": "coord",
+    "yoyopod.integrations.power.coordinator": "coord",
+    "yoyopod.integrations.voice.runtime": "coord",
+    "yoyopod.integrations.voice.executor": "coord",
+    "yoyopod.integrations.voice.settings": "coord",
     "yoyopod.ui": "ui",
     "yoyopod.integrations.power": "power",
     "yoyopod.backends.power": "power",
@@ -100,8 +109,6 @@ def infer_subsystem(module_name: str | None) -> str:
 
     if module_name in {"yoyopod.app", "yoyopod.main"}:
         return "app"
-    if module_name in {"yoyopod.event_bus", "yoyopod.events", "yoyopod.fsm"}:
-        return "core"
     if module_name == "yoyopod.core" or module_name.startswith("yoyopod.core."):
         return "core"
     return DEFAULT_SUBSYSTEM

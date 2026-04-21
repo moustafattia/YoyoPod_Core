@@ -8,7 +8,7 @@ from tempfile import NamedTemporaryFile
 from types import SimpleNamespace
 
 from yoyopod.core import AppContext
-from yoyopod.coordinators.voice import (
+from yoyopod.integrations.voice import (
     VoiceCommandExecutor,
     VoiceCommandOutcome,
     VoiceRuntimeCoordinator,
@@ -332,7 +332,7 @@ def test_voice_runtime_coordinator_releases_cached_service_when_settings_change(
         def release_resources(self) -> None:
             self.released = True
 
-    monkeypatch.setattr("yoyopod.coordinators.voice.coordinator.VoiceManager", _TrackingVoiceManager)
+    monkeypatch.setattr("yoyopod.integrations.voice.runtime.VoiceManager", _TrackingVoiceManager)
     coordinator = VoiceRuntimeCoordinator(
         context=None,
         settings_resolver=VoiceSettingsResolver(

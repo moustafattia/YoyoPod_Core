@@ -6,15 +6,15 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from yoyopod.core import AppContext
+from yoyopod.core import MusicFSM
+from yoyopod.core.ui_state import CoordinatorRuntime
 from yoyopod.integrations.call import (
     CallFSM,
     CallHistoryStore,
     CallInterruptionPolicy,
 )
+from yoyopod.integrations.call.coordinator import CallCoordinator
 from yoyopod.integrations.call.models import CallState, RegistrationState
-from yoyopod.coordinators.call import CallCoordinator
-from yoyopod.coordinators.registry import CoordinatorRuntime
-from yoyopod.core import MusicFSM
 
 
 class _ScreenCoordinatorStub:

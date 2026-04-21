@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from loguru import logger
 
-from yoyopod.coordinators.registry import CoordinatorRuntime
+from yoyopod.core.ui_state import CoordinatorRuntime
 
 
 class ScreenCoordinator:

@@ -7,9 +7,9 @@ from typing import TYPE_CHECKING
 
 from loguru import logger
 
-from yoyopod.audio import OutputVolumeController
 from yoyopod.backends.music import MpvBackend, MusicConfig
 from yoyopod.config import ConfigManager
+from yoyopod.core.output_volume import OutputVolumeController
 from yoyopod.core.hardware import AudioDeviceCatalog
 from yoyopod.integrations.call import CallHistoryStore, VoIPConfig, VoIPManager
 from yoyopod.integrations.cloud.manager import CloudManager

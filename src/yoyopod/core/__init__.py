@@ -1,10 +1,4 @@
-"""Core orchestration primitives for YoyoPod.
-
-Legacy top-level modules such as ``yoyopod.app_context``, ``yoyopod.event_bus``,
-``yoyopod.events``, ``yoyopod.fsm``, ``yoyopod.runtime_state``, and
-``yoyopod.setup_contract`` remain as thin compatibility shims that re-export
-these symbols.
-"""
+"""Core orchestration primitives for YoyoPod."""
 
 from __future__ import annotations
 
@@ -12,10 +6,14 @@ from typing import Any
 
 _PUBLIC_EXPORTS = {
     "ActiveVoiceNoteState": ("yoyopod.core.runtime_state", "ActiveVoiceNoteState"),
+    "AudioDevice": ("yoyopod.core.audio_manager", "AudioDevice"),
+    "AudioManager": ("yoyopod.core.audio_manager", "AudioManager"),
     "AudioDeviceCatalog": ("yoyopod.core.hardware", "AudioDeviceCatalog"),
     "AudioFocusGrantedEvent": ("yoyopod.core.events", "AudioFocusGrantedEvent"),
     "AudioFocusLostEvent": ("yoyopod.core.events", "AudioFocusLostEvent"),
+    "AudioVolumeController": ("yoyopod.core.audio_volume", "AudioVolumeController"),
     "AppContext": ("yoyopod.core.app_context", "AppContext"),
+    "AppRuntimeState": ("yoyopod.core.ui_state", "AppRuntimeState"),
     "BackendStoppedEvent": ("yoyopod.core.events", "BackendStoppedEvent"),
     "Bus": ("yoyopod.core.bus", "Bus"),
     "CallEndedEvent": ("yoyopod.core.events", "CallEndedEvent"),
@@ -23,6 +21,7 @@ _PUBLIC_EXPORTS = {
     "CallInterruptionPolicy": ("yoyopod.core.fsm", "CallInterruptionPolicy"),
     "CallSessionState": ("yoyopod.core.fsm", "CallSessionState"),
     "CallStateChangedEvent": ("yoyopod.core.events", "CallStateChangedEvent"),
+    "CoordinatorRuntime": ("yoyopod.core.ui_state", "CoordinatorRuntime"),
     "DiagnosticsRuntime": ("yoyopod.core.diagnostics", "DiagnosticsRuntime"),
     "EventBus": ("yoyopod.core.event_bus", "EventBus"),
     "EventLogWriter": ("yoyopod.core.diagnostics", "EventLogWriter"),
@@ -36,6 +35,7 @@ _PUBLIC_EXPORTS = {
         "yoyopod.core.events",
         "MusicAvailabilityChangedEvent",
     ),
+    "MusicManager": ("yoyopod.core.audio_manager", "MusicManager"),
     "MusicFSM": ("yoyopod.core.fsm", "MusicFSM"),
     "MusicState": ("yoyopod.core.fsm", "MusicState"),
     "NetworkGpsFixEvent": ("yoyopod.core.events", "NetworkGpsFixEvent"),
@@ -46,6 +46,7 @@ _PUBLIC_EXPORTS = {
     "NetworkRegisteredEvent": ("yoyopod.core.events", "NetworkRegisteredEvent"),
     "NetworkRuntimeState": ("yoyopod.core.runtime_state", "NetworkRuntimeState"),
     "NetworkSignalUpdateEvent": ("yoyopod.core.events", "NetworkSignalUpdateEvent"),
+    "OutputVolumeController": ("yoyopod.core.output_volume", "OutputVolumeController"),
     "PlaybackState": ("yoyopod.core.runtime_state", "PlaybackState"),
     "PlaybackStateChangedEvent": ("yoyopod.core.events", "PlaybackStateChangedEvent"),
     "PowerRuntimeState": ("yoyopod.core.runtime_state", "PowerRuntimeState"),

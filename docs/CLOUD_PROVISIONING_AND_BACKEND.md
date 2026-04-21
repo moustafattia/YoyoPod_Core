@@ -15,8 +15,8 @@ When this file and older plans disagree, trust the current code in:
 - `src/yoyopod/integrations/cloud/`
 - `src/yoyopod/backends/cloud/`
 - `src/yoyopod/core/bootstrap/`
-- `src/yoyopod/runtime/`
-- `src/yoyopod/coordinators/power.py`
+- `src/yoyopod/core/loop.py`
+- `src/yoyopod/integrations/power/coordinator.py`
 
 ## 1. Device-Side Concept
 
@@ -46,7 +46,7 @@ Current core files:
 - [src/yoyopod/config/models.py](../src/yoyopod/config/models.py)
 - [src/yoyopod/core/bootstrap/__init__.py](../src/yoyopod/core/bootstrap/__init__.py)
 - [src/yoyopod/core/loop.py](../src/yoyopod/core/loop.py)
-- [src/yoyopod/coordinators/power.py](../src/yoyopod/coordinators/power.py)
+- [src/yoyopod/integrations/power/coordinator.py](../src/yoyopod/integrations/power/coordinator.py)
 
 Current architecture:
 
@@ -273,7 +273,7 @@ The safest claim is what is definitely wired today.
 
 Battery telemetry is currently wired through:
 
-- [src/yoyopod/coordinators/power.py](/home/raouf/YoyoPod_Core/src/yoyopod/coordinators/power.py)
+- [src/yoyopod/integrations/power/coordinator.py](/home/raouf/YoyoPod_Core/src/yoyopod/integrations/power/coordinator.py)
 
 When power snapshots update:
 
@@ -376,7 +376,7 @@ If you change the device/backend integration, review these together:
 - [src/yoyopod/config/models.py](../src/yoyopod/config/models.py)
 - [src/yoyopod/core/bootstrap/__init__.py](../src/yoyopod/core/bootstrap/__init__.py)
 - [src/yoyopod/core/loop.py](../src/yoyopod/core/loop.py)
-- [src/yoyopod/coordinators/power.py](../src/yoyopod/coordinators/power.py)
+- [src/yoyopod/integrations/power/coordinator.py](../src/yoyopod/integrations/power/coordinator.py)
 - [tests/test_cloud_config_manager.py](../tests/test_cloud_config_manager.py)
 
 Pair those with:

@@ -12,6 +12,7 @@ if TYPE_CHECKING:
         VoiceCommandTemplate,
         match_voice_command,
     )
+    from yoyopod.integrations.voice.executor import VoiceCommandExecutor
     from yoyopod.integrations.voice.manager import VoiceManager, VoiceService
     from yoyopod.integrations.voice.models import (
         VoiceCaptureRequest,
@@ -19,6 +20,8 @@ if TYPE_CHECKING:
         VoiceSettings,
         VoiceTranscript,
     )
+    from yoyopod.integrations.voice.runtime import VoiceRuntimeCoordinator
+    from yoyopod.integrations.voice.settings import VoiceCommandOutcome, VoiceSettingsResolver
 
 
 _PUBLIC_EXPORTS = {
@@ -27,10 +30,14 @@ _PUBLIC_EXPORTS = {
     "VoiceCaptureResult": ("yoyopod.integrations.voice.models", "VoiceCaptureResult"),
     "VoiceCommandIntent": ("yoyopod.integrations.voice.commands", "VoiceCommandIntent"),
     "VoiceCommandMatch": ("yoyopod.integrations.voice.commands", "VoiceCommandMatch"),
+    "VoiceCommandOutcome": ("yoyopod.integrations.voice.settings", "VoiceCommandOutcome"),
     "VoiceCommandTemplate": ("yoyopod.integrations.voice.commands", "VoiceCommandTemplate"),
+    "VoiceCommandExecutor": ("yoyopod.integrations.voice.executor", "VoiceCommandExecutor"),
     "VoiceManager": ("yoyopod.integrations.voice.manager", "VoiceManager"),
+    "VoiceRuntimeCoordinator": ("yoyopod.integrations.voice.runtime", "VoiceRuntimeCoordinator"),
     "VoiceService": ("yoyopod.integrations.voice.manager", "VoiceService"),
     "VoiceSettings": ("yoyopod.integrations.voice.models", "VoiceSettings"),
+    "VoiceSettingsResolver": ("yoyopod.integrations.voice.settings", "VoiceSettingsResolver"),
     "VoiceTranscript": ("yoyopod.integrations.voice.models", "VoiceTranscript"),
     "match_voice_command": ("yoyopod.integrations.voice.commands", "match_voice_command"),
 }
@@ -54,10 +61,14 @@ __all__ = [
     "VoiceCaptureResult",
     "VoiceCommandIntent",
     "VoiceCommandMatch",
+    "VoiceCommandOutcome",
     "VoiceCommandTemplate",
+    "VoiceCommandExecutor",
     "VoiceManager",
+    "VoiceRuntimeCoordinator",
     "VoiceService",
     "VoiceSettings",
+    "VoiceSettingsResolver",
     "VoiceTranscript",
     "match_voice_command",
 ]

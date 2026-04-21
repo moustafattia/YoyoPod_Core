@@ -14,10 +14,11 @@ import pytest
 from loguru import logger
 
 from yoyopod.app import YoyoPodApp
+from yoyopod.backends.music import MockMusicBackend
 from yoyopod.core import AppContext
-from yoyopod.audio import AudioVolumeController, MockMusicBackend
+from yoyopod.core.audio_volume import AudioVolumeController
 from yoyopod.integrations.call.models import CallState, RegistrationState
-from yoyopod.coordinators.registry import AppRuntimeState, CoordinatorRuntime
+from yoyopod.core.ui_state import AppRuntimeState, CoordinatorRuntime
 from yoyopod.core import (
     CallEndedEvent,
     CallStateChangedEvent,

@@ -12,19 +12,12 @@ from typing import TYPE_CHECKING, Any, Optional
 
 from loguru import logger
 
-from yoyopod.audio import AudioVolumeController, OutputVolumeController
+from yoyopod.core.audio_volume import AudioVolumeController
 from yoyopod.backends.music import MpvBackend
 from yoyopod.config import ConfigManager, MediaConfig, YoyoPodConfig
-from yoyopod.coordinators import (
-    CallCoordinator,
-    CoordinatorRuntime,
-    PlaybackCoordinator,
-    PowerCoordinator,
-    ScreenCoordinator,
-)
-from yoyopod.coordinators.voice import VoiceRuntimeCoordinator
 from yoyopod.core.app_context import AppContext
 from yoyopod.core.bus import Bus
+from yoyopod.core.output_volume import OutputVolumeController
 from yoyopod.core.event_bus import EventBus
 from yoyopod.core.events import LifecycleEvent
 from yoyopod.core.fsm import MusicFSM
@@ -33,15 +26,18 @@ from yoyopod.core.logbuffer import LogBuffer
 from yoyopod.core.scheduler import MainThreadScheduler
 from yoyopod.core.services import Services
 from yoyopod.core.states import States
+from yoyopod.core.ui_state import CoordinatorRuntime
 from yoyopod.integrations.call import (
     CallFSM,
     CallHistoryStore,
     CallInterruptionPolicy,
     VoIPManager,
 )
+from yoyopod.integrations.call.coordinator import CallCoordinator
 from yoyopod.integrations.cloud.manager import CloudManager
 from yoyopod.integrations.contacts.directory import PeopleManager
 from yoyopod.integrations.music import LocalMusicService, RecentTrackHistoryStore
+from yoyopod.integrations.music.coordinator import PlaybackCoordinator
 from yoyopod.integrations.network import NetworkManager
 from yoyopod.integrations.power import (
     PendingShutdown,
@@ -49,6 +45,7 @@ from yoyopod.integrations.power import (
     PowerManager,
     PowerRuntimeService,
 )
+from yoyopod.integrations.power.coordinator import PowerCoordinator
 from yoyopod.core.bootstrap import RuntimeBootService
 from yoyopod.core.event_subscriptions import RuntimeEventSubscriptions
 from yoyopod.core.loop import RuntimeLoopService
@@ -57,8 +54,10 @@ from yoyopod.core.recovery import RecoveryState, RuntimeRecoveryService
 from yoyopod.integrations.call import VoiceNoteEventHandler
 from yoyopod.integrations.network import NetworkEventHandler
 from yoyopod.integrations.display import ScreenPowerService
+from yoyopod.integrations.voice.runtime import VoiceRuntimeCoordinator
 from yoyopod.core.shutdown import ShutdownLifecycleService
 from yoyopod.core.status import RuntimeStatusService
+from yoyopod.ui.screens.coordinator import ScreenCoordinator
 
 if TYPE_CHECKING:
     from yoyopod.ui.display import Display
