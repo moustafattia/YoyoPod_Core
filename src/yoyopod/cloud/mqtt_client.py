@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import threading
 import time
+from collections.abc import Callable
 from typing import Any
 
 from loguru import logger
@@ -47,6 +48,8 @@ class DeviceMqttClient:
         self._connected = False
         self._stopped = False
         self._lock = threading.Lock()
+        self._connect_callbacks: list[Callable[[], None]] = []
+        self._disconnect_callbacks: list[Callable[[str], None]] = []
 
     # ------------------------------------------------------------------
     # Lifecycle
@@ -119,6 +122,38 @@ class DeviceMqttClient:
             except Exception:
                 pass
 
+    def on_connect(self, callback: Callable[[], None]) -> None:
+        """Register one callback to run after a successful MQTT connection."""
+
+        self._connect_callbacks.append(callback)
+
+    def on_disconnect(self, callback: Callable[[str], None]) -> None:
+        """Register one callback to run after an MQTT disconnect."""
+
+        self._disconnect_callbacks.append(callback)
+
+    def publish(self, topic: str, payload: str, qos: int = 0) -> bool:
+        """Publish a raw message to one MQTT topic."""
+
+        with self._lock:
+            client = self._client
+            connected = self._connected
+
+        if client is None or not connected:
+            logger.debug("MQTT not connected — skipping publish to {}", topic)
+            return False
+
+        try:
+            result = client.publish(topic, payload, qos=max(0, int(qos)))
+            if result.rc != 0:
+                logger.warning("MQTT publish failed for {}: rc={}", topic, result.rc)
+                return False
+            logger.debug("MQTT published {}", topic)
+            return True
+        except Exception as exc:
+            logger.warning("MQTT publish error for {}: {}", topic, exc)
+            return False
+
     # ------------------------------------------------------------------
     # Publishing
     # ------------------------------------------------------------------
@@ -154,16 +189,7 @@ class DeviceMqttClient:
 
         topic = f"yoyopod/{self._device_id}/evt"
         message = json.dumps({"type": event_type, "payload": payload, "ts": int(time.time())})
-        try:
-            result = client.publish(topic, message, qos=1)
-            if result.rc != 0:
-                logger.warning("MQTT publish failed for {}: rc={}", event_type, result.rc)
-                return False
-            logger.debug("MQTT published {} event", event_type)
-            return True
-        except Exception as exc:
-            logger.warning("MQTT publish error for {}: {}", event_type, exc)
-            return False
+        return self.publish(topic, message, qos=1)
 
     def _on_connect(self, client: Any, userdata: Any, flags: Any, rc: int) -> None:
         if rc == 0:
@@ -172,6 +198,11 @@ class DeviceMqttClient:
                     return
                 self._connected = True
             client.subscribe(f"yoyopod/{self._device_id}/cmd", qos=1)
+            for callback in list(self._connect_callbacks):
+                try:
+                    callback()
+                except Exception as exc:
+                    logger.warning("MQTT connect callback failed: {}", exc)
             logger.info(
                 "MQTT connected to {}:{} (device={})", self._broker_host, self._port, self._device_id
             )
@@ -183,6 +214,12 @@ class DeviceMqttClient:
             if self._client is not None and self._client is not client:
                 return
             self._connected = False
+        reason = "" if rc == 0 else f"rc={rc}"
+        for callback in list(self._disconnect_callbacks):
+            try:
+                callback(reason)
+            except Exception as exc:
+                logger.warning("MQTT disconnect callback failed: {}", exc)
         if rc != 0 and not self._stopped:
             logger.warning("MQTT disconnected unexpectedly: rc={}", rc)
 
