@@ -5,8 +5,6 @@ Call-event coordination for YoyoPod.
 from __future__ import annotations
 
 import subprocess
-import time
-from dataclasses import dataclass, field
 from typing import Optional
 
 from loguru import logger
@@ -22,25 +20,12 @@ from yoyopod.core import (
     VoIPAvailabilityChangedEvent,
 )
 from yoyopod.integrations.call import (
-    CallSessionState,
-    CallHistoryEntry,
     CallHistoryStore,
+    CallSessionState,
+    CallSessionTracker,
     CallState,
     RegistrationState,
 )
-
-
-@dataclass(slots=True)
-class _CallSessionDraft:
-    """One in-progress call, tracked until the final release event."""
-
-    direction: str
-    display_name: str
-    sip_address: str
-    started_at: float = field(default_factory=time.time)
-    answered: bool = False
-    terminal_state: CallState | None = None
-    local_end_action: str | None = None
 
 
 class CallCoordinator:
@@ -62,8 +47,7 @@ class CallCoordinator:
         self.ringing_process: Optional[subprocess.Popen] = None
         self._event_bus: Optional[EventBus] = None
         self._bound = False
-        self._active_call_session: _CallSessionDraft | None = None
-        self._pending_incoming_call: tuple[str, str] | None = None
+        self._session_tracker = CallSessionTracker(call_history_store)
 
     def bind(self, event_bus: EventBus) -> None:
         """Bind typed event subscriptions once."""
@@ -191,12 +175,7 @@ class CallCoordinator:
     def handle_incoming_call(self, caller_address: str, caller_name: str) -> None:
         """Capture incoming-call metadata for the active incoming phase."""
         logger.info(f"Incoming call metadata: {caller_name} ({caller_address})")
-        self._pending_incoming_call = (caller_address, caller_name)
-        self._active_call_session = _CallSessionDraft(
-            direction="incoming",
-            display_name=caller_name or "Unknown",
-            sip_address=caller_address,
-        )
+        self._session_tracker.begin_incoming_call(caller_address, caller_name)
         self._present_incoming_call_if_ready()
 
     def handle_call_state_change(self, state: CallState) -> None:
@@ -210,24 +189,13 @@ class CallCoordinator:
             CallState.OUTGOING_EARLY_MEDIA,
         ):
             self._pause_music_for_call(phase="outgoing")
-            self._ensure_outgoing_call_session()
+            session = self._session_tracker.ensure_outgoing_call(self._current_caller_info())
             self.runtime.call_fsm.transition("dial")
             self.runtime.sync_app_state("call_outgoing")
-            if self._active_call_session is not None:
-                caller_info = self._current_caller_info()
-                if caller_info:
-                    self._active_call_session.display_name = str(
-                        caller_info.get("display_name")
-                        or caller_info.get("name")
-                        or self._active_call_session.display_name
-                    )
-                    self._active_call_session.sip_address = str(
-                        caller_info.get("address") or self._active_call_session.sip_address
-                    )
-                self.screen_coordinator.show_outgoing_call(
-                    self._active_call_session.sip_address,
-                    self._active_call_session.display_name,
-                )
+            self.screen_coordinator.show_outgoing_call(
+                session.sip_address,
+                session.display_name,
+            )
             return
 
         if state == CallState.INCOMING:
@@ -238,9 +206,7 @@ class CallCoordinator:
             return
 
         if state in (CallState.CONNECTED, CallState.STREAMS_RUNNING):
-            if self._active_call_session is not None:
-                self._active_call_session.answered = True
-
+            self._session_tracker.mark_answered()
             self.runtime.call_fsm.transition("connect")
             state_change = self.runtime.sync_app_state("call_connected")
             if state_change.entered(AppRuntimeState.CALL_ACTIVE_MUSIC_PAUSED):
@@ -255,9 +221,10 @@ class CallCoordinator:
                 return
 
             local_end_action = self._consume_pending_terminal_action()
-            if self._active_call_session is not None:
-                self._active_call_session.terminal_state = state
-                self._active_call_session.local_end_action = local_end_action
+            self._session_tracker.mark_terminal_state(
+                state,
+                local_end_action=local_end_action,
+            )
             self.handle_call_ended(reason=state.value)
             return
 
@@ -265,13 +232,13 @@ class CallCoordinator:
 
     def handle_call_ended(self, *, reason: str = "released") -> None:
         """Coordinate call cleanup and possible music resume."""
-        if not self.runtime.call_fsm.is_active and self._active_call_session is None:
+        if not self.runtime.call_fsm.is_active and not self._session_tracker.has_live_session:
             logger.warning(
                 "Ignoring terminal call teardown without an active session (reason: {})",
                 reason,
             )
             self.stop_ringing()
-            self._pending_incoming_call = None
+            self._session_tracker.clear_pending_incoming_call()
             self.screen_coordinator.pop_call_screens()
             self.runtime.sync_app_state(f"call_ended:{reason}")
             return
@@ -279,7 +246,7 @@ class CallCoordinator:
         logger.info("Call ended ({})", reason)
 
         self.stop_ringing()
-        self._pending_incoming_call = None
+        self._session_tracker.clear_pending_incoming_call()
         self._finalize_call_history()
         self.screen_coordinator.pop_call_screens()
 
@@ -360,7 +327,7 @@ class CallCoordinator:
         self.stop_ringing()
         self.screen_coordinator.refresh_call_screen_if_visible()
 
-        if self.runtime.call_fsm.is_active or self._active_call_session is not None:
+        if self.runtime.call_fsm.is_active or self._session_tracker.has_live_session:
             self.handle_call_ended(reason=reason or "unavailable")
 
     def _is_voip_configured(self) -> bool:
@@ -373,21 +340,6 @@ class CallCoordinator:
                 return True
 
         return False
-
-    def _ensure_outgoing_call_session(self) -> None:
-        """Capture callee metadata for an outgoing call once it starts."""
-
-        if self._active_call_session is not None:
-            return
-
-        caller_info = self._current_caller_info()
-        self._active_call_session = _CallSessionDraft(
-            direction="outgoing",
-            display_name=str(
-                caller_info.get("display_name") or caller_info.get("name") or "Unknown"
-            ),
-            sip_address=str(caller_info.get("address") or ""),
-        )
 
     def _pause_music_for_call(self, *, phase: str) -> None:
         """Pause active playback once when a call enters an interruption phase."""
@@ -428,18 +380,18 @@ class CallCoordinator:
 
         if self.runtime.call_fsm.state != CallSessionState.INCOMING:
             return
-        if self._pending_incoming_call is None:
+        if self._session_tracker.pending_incoming_call is None:
             logger.debug("Incoming call phase entered before caller metadata arrived")
             return
 
-        caller_address, caller_name = self._pending_incoming_call
+        caller_address, caller_name = self._session_tracker.pending_incoming_call
         self.screen_coordinator.show_incoming_call(caller_address, caller_name)
         self.start_ringing()
 
     def _has_live_call_state(self) -> bool:
         """Return whether the coordinator still has a live call to tear down."""
 
-        return self.runtime.call_fsm.is_active or self._active_call_session is not None
+        return self.runtime.call_fsm.is_active or self._session_tracker.has_live_session
 
     def _consume_pending_terminal_action(self) -> str | None:
         """Return any locally initiated teardown action awaiting terminal backend state."""
@@ -475,41 +427,14 @@ class CallCoordinator:
     def _finalize_call_history(self) -> None:
         """Persist the just-finished call into the Talk history store."""
 
-        if self.call_history_store is None:
-            self._active_call_session = None
-            return
-
-        if self._active_call_session is None:
-            self._publish_call_summary_to_context()
-            return
-
-        draft = self._active_call_session
         call_duration = 0
         call_voip_manager = getattr(self.runtime.call_screen, "voip_manager", None)
         if call_voip_manager is not None:
             call_duration = int(call_voip_manager.get_call_duration())
 
-        if draft.answered:
-            outcome = "completed"
-        elif draft.direction == "incoming" and draft.local_end_action == "reject":
-            outcome = "rejected"
-        elif draft.terminal_state == CallState.ERROR:
-            outcome = "failed"
-        elif draft.direction == "incoming":
-            outcome = "missed"
-        else:
-            outcome = "cancelled"
-
-        self.call_history_store.add_entry(
-            CallHistoryEntry.create(
-                direction=draft.direction,  # type: ignore[arg-type]
-                display_name=draft.display_name,
-                sip_address=draft.sip_address,
-                outcome=outcome,  # type: ignore[arg-type]
-                duration_seconds=call_duration,
-            )
+        self._session_tracker.finalize(
+            call_duration_seconds=call_duration,
         )
-        self._active_call_session = None
         self._publish_call_summary_to_context()
 
     def _publish_call_summary_to_context(self) -> None:

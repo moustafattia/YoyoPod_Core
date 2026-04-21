@@ -7,14 +7,17 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from yoyopod.backends.voip.protocol import VoIPIterateMetrics
     from yoyopod.integrations.call.history import CallHistoryEntry, CallHistoryStore
+    from yoyopod.integrations.call.lifecycle import ActiveCallSession, CallSessionTracker
     from yoyopod.integrations.call.messaging import MessagingService
     from yoyopod.integrations.call.message_store import VoIPMessageStore
     from yoyopod.integrations.call.manager import VoIPManager
-    from yoyopod.integrations.call.models import (
-        BackendStopped,
+    from yoyopod.integrations.call.session import (
         CallFSM,
         CallInterruptionPolicy,
         CallSessionState,
+    )
+    from yoyopod.integrations.call.models import (
+        BackendStopped,
         CallState,
         CallStateChanged,
         IncomingCallDetected,
@@ -35,9 +38,11 @@ if TYPE_CHECKING:
 
 
 _PUBLIC_EXPORTS = {
+    "ActiveCallSession": ("yoyopod.integrations.call.lifecycle", "ActiveCallSession"),
     "CallFSM": ("yoyopod.integrations.call.session", "CallFSM"),
     "CallInterruptionPolicy": ("yoyopod.integrations.call.session", "CallInterruptionPolicy"),
     "CallSessionState": ("yoyopod.integrations.call.session", "CallSessionState"),
+    "CallSessionTracker": ("yoyopod.integrations.call.lifecycle", "CallSessionTracker"),
     "CallHistoryEntry": ("yoyopod.integrations.call.history", "CallHistoryEntry"),
     "CallHistoryStore": ("yoyopod.integrations.call.history", "CallHistoryStore"),
     "CallState": ("yoyopod.integrations.call.models", "CallState"),
@@ -87,9 +92,11 @@ def __getattr__(name: str) -> Any:
 
 
 __all__ = [
+    "ActiveCallSession",
     "CallFSM",
     "CallInterruptionPolicy",
     "CallSessionState",
+    "CallSessionTracker",
     "CallHistoryEntry",
     "CallHistoryStore",
     "CallState",
