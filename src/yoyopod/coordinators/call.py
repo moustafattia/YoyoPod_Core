@@ -22,12 +22,12 @@ from yoyopod.core import (
     VoIPAvailabilityChangedEvent,
 )
 from yoyopod.integrations.call import (
+    CallSessionState,
     CallHistoryEntry,
     CallHistoryStore,
     CallState,
     RegistrationState,
 )
-from yoyopod.core import CallSessionState
 
 
 @dataclass(slots=True)

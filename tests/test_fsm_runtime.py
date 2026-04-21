@@ -5,11 +5,13 @@ from __future__ import annotations
 import yoyopod.core.fsm.music as fsm_module
 from yoyopod.coordinators.registry import AppRuntimeState, CoordinatorRuntime
 from yoyopod.core import (
+    MusicFSM,
+    MusicState,
+)
+from yoyopod.integrations.call import (
     CallFSM,
     CallInterruptionPolicy,
     CallSessionState,
-    MusicFSM,
-    MusicState,
 )
 
 

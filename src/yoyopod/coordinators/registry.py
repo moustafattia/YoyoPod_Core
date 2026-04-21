@@ -9,11 +9,13 @@ from typing import TYPE_CHECKING
 from loguru import logger
 
 from yoyopod.core import (
+    MusicFSM,
+    MusicState,
+)
+from yoyopod.integrations.call import (
     CallFSM,
     CallInterruptionPolicy,
     CallSessionState,
-    MusicFSM,
-    MusicState,
 )
 
 if TYPE_CHECKING:

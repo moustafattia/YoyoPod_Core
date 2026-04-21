@@ -51,6 +51,9 @@ from yoyopod.backends.voip import LiblinphoneBinding as BackendLiblinphoneBindin
 from yoyopod.backends.voip import MockVoIPBackend as BackendMockVoIPBackend
 from yoyopod.backends.voip import VoIPBackend as BackendVoIPBackend
 from yoyopod.backends.voip import VoIPIterateMetrics as BackendVoIPIterateMetrics
+from yoyopod.integrations.call import CallFSM as IntegrationCallFSM
+from yoyopod.integrations.call import CallInterruptionPolicy as IntegrationCallInterruptionPolicy
+from yoyopod.integrations.call import CallSessionState as IntegrationCallSessionState
 from yoyopod.integrations.call import CallState as IntegrationCallState
 from yoyopod.integrations.call import CallHistoryEntry as IntegrationCallHistoryEntry
 from yoyopod.integrations.call import CallHistoryStore as IntegrationCallHistoryStore
@@ -192,6 +195,8 @@ def test_legacy_core_import_paths_resolve_to_relocated_symbols() -> None:
     assert TrackChangedEvent is CoreTrackChangedEvent
     assert MusicFSM is CoreMusicFSM
     assert VoiceState is CoreVoiceState
+    assert CoreCallFSM is IntegrationCallFSM
+    assert CoreCallInterruptionPolicy is IntegrationCallInterruptionPolicy
     assert RUNTIME_REQUIRED_CONFIG_FILES == CORE_RUNTIME_REQUIRED_CONFIG_FILES
     assert AppContextPlaybackQueue is RuntimeStatePlaybackQueue
     assert AppContextTrack is RuntimeStateTrack
@@ -199,7 +204,15 @@ def test_legacy_core_import_paths_resolve_to_relocated_symbols() -> None:
     assert SetupContractPath is Path
     assert RootEventBus is EventBus
     assert RootMusicFSM is MusicFSM
-    assert RootCallFSM is CoreCallFSM
+    assert RootCallFSM is IntegrationCallFSM
+
+
+def test_legacy_core_call_state_imports_resolve_to_relocated_symbols() -> None:
+    """Legacy call-session imports should point at the canonical call seam."""
+
+    from yoyopod.core import CallSessionState as CoreCallSessionState
+
+    assert CoreCallSessionState is IntegrationCallSessionState
 
 
 def test_legacy_people_import_paths_resolve_to_relocated_contacts_symbols() -> None:

@@ -31,11 +31,13 @@ from yoyopod.core import (
     VoIPAvailabilityChangedEvent,
 )
 from yoyopod.core import (
+    MusicFSM,
+    MusicState,
+)
+from yoyopod.integrations.call import (
     CallFSM,
     CallInterruptionPolicy,
     CallSessionState,
-    MusicFSM,
-    MusicState,
 )
 from yoyopod.power.models import BatteryState, PowerSnapshot
 from yoyopod.runtime.loop import RuntimeLoopService

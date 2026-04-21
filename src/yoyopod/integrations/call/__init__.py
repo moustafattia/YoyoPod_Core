@@ -12,6 +12,9 @@ if TYPE_CHECKING:
     from yoyopod.integrations.call.manager import VoIPManager
     from yoyopod.integrations.call.models import (
         BackendStopped,
+        CallFSM,
+        CallInterruptionPolicy,
+        CallSessionState,
         CallState,
         CallStateChanged,
         IncomingCallDetected,
@@ -32,6 +35,9 @@ if TYPE_CHECKING:
 
 
 _PUBLIC_EXPORTS = {
+    "CallFSM": ("yoyopod.integrations.call.session", "CallFSM"),
+    "CallInterruptionPolicy": ("yoyopod.integrations.call.session", "CallInterruptionPolicy"),
+    "CallSessionState": ("yoyopod.integrations.call.session", "CallSessionState"),
     "CallHistoryEntry": ("yoyopod.integrations.call.history", "CallHistoryEntry"),
     "CallHistoryStore": ("yoyopod.integrations.call.history", "CallHistoryStore"),
     "CallState": ("yoyopod.integrations.call.models", "CallState"),
@@ -81,6 +87,9 @@ def __getattr__(name: str) -> Any:
 
 
 __all__ = [
+    "CallFSM",
+    "CallInterruptionPolicy",
+    "CallSessionState",
     "CallHistoryEntry",
     "CallHistoryStore",
     "CallState",

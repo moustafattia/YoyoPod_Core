@@ -67,7 +67,7 @@ This is the startup sequence that exists on `main` today.
       - renders the initial `YoyoPod Starting...` splash
       - creates `AppContext`
       - seeds voice and VoIP-ready status in shared runtime state
-      - constructs `MusicFSM`, `CallFSM`, and `CallInterruptionPolicy`
+      - constructs `MusicFSM` plus the canonical call-session seam from `yoyopod.integrations.call`
       - creates and starts `InputManager`
       - wires the LVGL input bridge when LVGL is active
       - creates `ScreenManager`
@@ -132,7 +132,7 @@ yoyopod.py / yoyopod.main
         -> navigation screens
         -> music screens
         -> voip screens
-     -> MusicFSM / CallFSM / CallInterruptionPolicy
+     -> MusicFSM / call-session seam
       -> CoordinatorRuntime
       -> CallCoordinator / PlaybackCoordinator / ScreenCoordinator / PowerCoordinator
       -> AppContext
@@ -164,7 +164,7 @@ yoyopod.py / yoyopod.main
 
 - `src/yoyopod/app.py`: thin runtime shell and compatibility surface
 - `src/yoyopod/main.py`: package entry point
-- `src/yoyopod/fsm.py`: split music and call state models
+- `src/yoyopod/fsm.py`: compatibility wrapper over relocated FSM primitives
 - `src/yoyopod/coordinators/registry.py`: derived app runtime state
 - `src/yoyopod/app_context.py`: compatibility wrapper over focused shared runtime state
 - `src/yoyopod/runtime_state.py`: focused runtime state objects owned by `AppContext`
@@ -192,11 +192,12 @@ yoyopod.py / yoyopod.main
 - `src/yoyopod/audio/music/models.py`: `Track`, `Playlist`, `PlaybackQueue`, `MusicConfig`
 - `src/yoyopod/audio/volume.py`: shared ALSA and mpv output-volume coordination
 - `src/yoyopod/communication/__init__.py`: compatibility facade for historical communication imports
-- `src/yoyopod/integrations/call/`: canonical public call manager, messaging service, models, message store, history, and voice-note seam
+- `src/yoyopod/integrations/call/`: canonical public call manager, session FSM/policy, messaging service, models, message store, history, and voice-note seam
 - `src/yoyopod/backends/voip/`: canonical Liblinphone adapter, protocol types, mock backend, and native shim binding
 - `src/yoyopod/communication/calling/`: legacy compatibility shims plus remaining call helper modules
 - `src/yoyopod/communication/messaging/`: compatibility shim for the historical message-store path
 - `src/yoyopod/communication/models.py`: compatibility shim for the historical call-model import path
+- `src/yoyopod/core/fsm/call.py`: compatibility shim for the historical core-owned call FSM path
 - `src/yoyopod/communication/integrations/liblinphone/` and `liblinphone_binding/`: compatibility aliases for historical VoIP import paths
 - `src/yoyopod/integrations/contacts/`: mutable contacts/address-book domain
 - `src/yoyopod/people/`: compatibility shims for the historical contacts import path
@@ -280,8 +281,8 @@ Screen groups:
 Playback and call orchestration use composed models:
 
 - `MusicFSM` in `src/yoyopod/fsm.py`
-- `CallFSM` in `src/yoyopod/fsm.py`
-- `CallInterruptionPolicy` in `src/yoyopod/fsm.py`
+- `CallFSM` in `src/yoyopod/integrations/call/session.py`
+- `CallInterruptionPolicy` in `src/yoyopod/integrations/call/session.py`
 - `CoordinatorRuntime` in `src/yoyopod/coordinators/registry.py`
 
 `CoordinatorRuntime` derives the current application status from those models, including:

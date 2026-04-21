@@ -109,10 +109,12 @@ Current exemplar package homes:
   - `integrations/`
   - `__init__.py` is a historical compatibility facade
 - `src/yoyopod/integrations/call/`
-  - canonical call manager, messaging service, models, message store, call-history store, and voice-note services
+  - canonical call manager, session FSM/policy, messaging service, models, message store, call-history store, and voice-note services
   - `__init__.py` is the app-facing seam
 - `src/yoyopod/backends/voip/`
   - canonical Liblinphone adapter, mock backend, protocol types, and native shim binding
+- `src/yoyopod/core/fsm/call.py` and `src/yoyopod/fsm.py`
+  - compatibility facades for the historical call FSM import paths
 - `src/yoyopod/integrations/contacts/`
   - mutable contacts/address-book concerns
   - owns the canonical contacts directory, models, and cloud-sync helpers
@@ -169,11 +171,13 @@ The call migration follows the same cutover shape:
 - communication policy remains under `config/communication/calling.yaml` and
   `config/communication/messaging.yaml`
 - `src/yoyopod/integrations/call/` is the canonical owner of the public
-  call manager, messaging service, models, message store, call-history, and voice-note seam
+  call manager, session FSM/policy, messaging service, models, message store,
+  call-history, and voice-note seam
 - `src/yoyopod/backends/voip/` is the canonical owner of the concrete
   Liblinphone and mock backend adapters plus protocol/binding types
 - `src/yoyopod/communication/calling/`, `src/yoyopod/communication/messaging/`,
-  and `src/yoyopod/communication/models.py` are retained as compatibility shims
+  `src/yoyopod/communication/models.py`, `src/yoyopod/core/fsm/call.py`, and
+  `src/yoyopod/fsm.py` are retained as compatibility shims
 - app/runtime composition depends on `yoyopod.integrations.call` instead of
   reaching through `yoyopod.communication.calling.*` for public call services
 

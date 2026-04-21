@@ -39,8 +39,14 @@ from yoyopod.core import (
 )
 from yoyopod.device import AudioDeviceCatalog
 from yoyopod.integrations.contacts.directory import PeopleManager
+from yoyopod.integrations.call import (
+    CallFSM,
+    CallHistoryStore,
+    CallInterruptionPolicy,
+    VoIPManager,
+)
 from yoyopod.integrations.power import PowerManager
-from yoyopod.core import CallFSM, CallInterruptionPolicy, MusicFSM
+from yoyopod.core import MusicFSM
 from yoyopod.integrations.network import NetworkManager
 from yoyopod.runtime.boot import RuntimeBootService
 from yoyopod.runtime.loop import RuntimeLoopService
@@ -52,7 +58,6 @@ from yoyopod.runtime.shutdown import ShutdownLifecycleService
 from yoyopod.runtime.event_wiring import RuntimeEventWiring
 from yoyopod.ui.input import InteractionProfile
 from yoyopod.integrations.cloud.manager import CloudManager
-from yoyopod.integrations.call import CallHistoryStore, VoIPManager
 
 if TYPE_CHECKING:
     from yoyopod.ui.display import Display
