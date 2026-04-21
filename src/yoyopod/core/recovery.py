@@ -11,6 +11,22 @@ from yoyopod.core.events import BackendStoppedEvent
 RetryHandler = Callable[[], bool]
 
 
+@dataclass(slots=True)
+class RecoveryState:
+    """Track reconnect backoff for one recoverable subsystem."""
+
+    next_attempt_at: float = 0.0
+    delay_seconds: float = 1.0
+    in_flight: bool = False
+
+    def reset(self) -> None:
+        """Reset backoff after a successful recovery."""
+
+        self.next_attempt_at = 0.0
+        self.delay_seconds = 1.0
+        self.in_flight = False
+
+
 @dataclass(frozen=True, slots=True)
 class RequestRecoveryCommand:
     """Request a retry cycle for one recoverable domain."""
@@ -185,6 +201,7 @@ __all__ = [
     "BackendStoppedEvent",
     "RecoveryAttemptedEvent",
     "RecoveryRuntime",
+    "RecoveryState",
     "RecoverySupervisor",
     "RequestRecoveryCommand",
     "setup",

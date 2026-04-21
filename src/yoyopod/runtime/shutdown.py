@@ -13,7 +13,7 @@ from yoyopod.integrations.power.events import (
     GracefulShutdownCancelled,
     GracefulShutdownRequested,
 )
-from yoyopod.runtime.models import PendingShutdown
+from yoyopod.integrations.power import PendingShutdown
 
 if TYPE_CHECKING:
     from yoyopod.app import YoyoPodApp

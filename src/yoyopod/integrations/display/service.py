@@ -8,8 +8,8 @@ from typing import TYPE_CHECKING, Any
 from loguru import logger
 
 from yoyopod.core.events import ScreenChangedEvent, UserActivityEvent
+from yoyopod.integrations.power import PowerAlert
 from yoyopod.integrations.power.events import LowBatteryWarningRaised
-from yoyopod.runtime.models import PowerAlert
 
 if TYPE_CHECKING:
     from yoyopod.core.application import YoyoPodApp

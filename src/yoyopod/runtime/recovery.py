@@ -10,7 +10,7 @@ from loguru import logger
 
 if TYPE_CHECKING:
     from yoyopod.app import YoyoPodApp
-    from yoyopod.runtime.models import RecoveryState
+    from yoyopod.core.recovery import RecoveryState
 
 
 class RecoverySupervisor:

@@ -48,7 +48,8 @@ from yoyopod.runtime.boot import RuntimeBootService
 from yoyopod.runtime.event_subscriptions import RuntimeEventSubscriptions
 from yoyopod.runtime.loop import RuntimeLoopService
 from yoyopod.runtime.metrics import RuntimeMetricsStore
-from yoyopod.runtime.models import PendingShutdown, PowerAlert, RecoveryState
+from yoyopod.core.recovery import RecoveryState
+from yoyopod.integrations.power import PendingShutdown, PowerAlert
 from yoyopod.runtime.network_events import NetworkEventHandler
 from yoyopod.runtime.power_service import PowerRuntimeService
 from yoyopod.runtime.recovery import RecoverySupervisor

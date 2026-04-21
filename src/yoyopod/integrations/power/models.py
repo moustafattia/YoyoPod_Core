@@ -46,6 +46,26 @@ class ShutdownState:
     safe_shutdown_delay_seconds: int | None = None
 
 
+@dataclass(slots=True)
+class PowerAlert:
+    """Short-lived full-screen power alert overlay."""
+
+    title: str
+    subtitle: str
+    color: tuple[int, int, int]
+    expires_at: float
+
+
+@dataclass(slots=True)
+class PendingShutdown:
+    """Track a delayed low-battery shutdown countdown."""
+
+    reason: str
+    requested_at: float
+    execute_at: float
+    battery_percent: float | None
+
+
 @dataclass(frozen=True, slots=True)
 class PowerSnapshot:
     """Best-effort point-in-time power snapshot."""
@@ -62,6 +82,8 @@ class PowerSnapshot:
 
 __all__ = [
     "BatteryState",
+    "PendingShutdown",
+    "PowerAlert",
     "PowerDeviceInfo",
     "PowerSnapshot",
     "RTCState",
