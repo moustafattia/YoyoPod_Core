@@ -12,7 +12,7 @@ from yoyopod.communication.models import (
     MessageKind,
     VoIPMessageRecord,
 )
-from yoyopod.people import Contact
+from yoyopod.integrations.contacts.models import Contact
 from yoyopod.ui.display import Display
 from yoyopod.ui.screens.router import NavigationRequest
 from yoyopod.ui.screens.voip.quick_call import CallScreen

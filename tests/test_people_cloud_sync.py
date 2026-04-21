@@ -6,7 +6,8 @@ from pathlib import Path
 
 import yaml
 
-from yoyopod.people import Contact, PeopleDirectory
+from yoyopod.integrations.contacts.directory import PeopleDirectory
+from yoyopod.integrations.contacts.models import Contact
 
 
 def test_cloud_contact_sync_preserves_local_contacts_and_updates_speed_dial(

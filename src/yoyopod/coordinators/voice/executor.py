@@ -14,8 +14,8 @@ if TYPE_CHECKING:
     from yoyopod.core import AppContext
     from yoyopod.communication.calling.manager import VoIPManager
     from yoyopod.config import ConfigManager
-    from yoyopod.people import Contact
-    from yoyopod.people import PeopleManager
+    from yoyopod.integrations.contacts.directory import PeopleManager
+    from yoyopod.integrations.contacts.models import Contact
 
 
 class VoiceCommandExecutor:

@@ -11,13 +11,19 @@ from yoyopod.integrations.contacts.commands import (
     MarkVoiceNotesSeenCommand,
     ReloadContactsCommand,
 )
+from yoyopod.integrations.contacts.cloud_sync import build_cloud_contact
+from yoyopod.integrations.contacts.directory import PeopleDirectory, PeopleManager
 from yoyopod.integrations.contacts.handlers import (
     lookup_by_address,
     mark_voice_notes_seen,
     refresh_contacts_state,
     reload_contacts,
 )
-from yoyopod.people import PeopleManager
+from yoyopod.integrations.contacts.models import (
+    Contact,
+    contacts_from_mapping,
+    contacts_to_mapping,
+)
 
 
 @dataclass(slots=True)
@@ -108,10 +114,16 @@ def _build_directory(config: object | None) -> PeopleManager:
 
 
 __all__ = [
+    "build_cloud_contact",
+    "Contact",
     "ContactsIntegration",
     "LookupByAddressCommand",
     "MarkVoiceNotesSeenCommand",
+    "PeopleDirectory",
+    "PeopleManager",
     "ReloadContactsCommand",
+    "contacts_from_mapping",
+    "contacts_to_mapping",
     "setup",
     "teardown",
 ]

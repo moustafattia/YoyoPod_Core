@@ -195,7 +195,8 @@ yoyopod.py / yoyopod.main
 - `src/yoyopod/communication/calling/`: call facade, backend, and history
 - `src/yoyopod/communication/messaging/`: message metadata store
 - `src/yoyopod/communication/integrations/liblinphone_binding/`: native Liblinphone shim and CPython binding
-- `src/yoyopod/people/`: mutable contacts/address-book domain
+- `src/yoyopod/integrations/contacts/`: mutable contacts/address-book domain
+- `src/yoyopod/people/`: compatibility shims for the historical contacts import path
 - `config/communication/integrations/liblinphone_factory.conf`: repo-managed Liblinphone factory config for media, codec, and network defaults
 
 ### Power, Network, and Voice
@@ -335,7 +336,7 @@ For current behavior, trust these files over older notes or demos:
 - `src/yoyopod/coordinators/registry.py`
 - `src/yoyopod/audio/`
 - `src/yoyopod/communication/`
-- `src/yoyopod/people/`
+- `src/yoyopod/integrations/contacts/`
 - `src/yoyopod/ui/display/`
 - `src/yoyopod/ui/input/`
 - `src/yoyopod/ui/screens/`

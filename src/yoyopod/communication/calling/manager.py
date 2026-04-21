@@ -32,7 +32,7 @@ from yoyopod.communication.models import (
 )
 
 if TYPE_CHECKING:
-    from yoyopod.people import PeopleManager
+    from yoyopod.integrations.contacts.directory import PeopleManager
 
 
 @dataclass(frozen=True, slots=True)

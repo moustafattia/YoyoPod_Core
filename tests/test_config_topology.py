@@ -8,8 +8,8 @@ import yaml
 
 from yoyopod.config import ConfigManager
 from yoyopod.audio import MusicConfig
+from yoyopod.integrations.contacts.directory import PeopleDirectory
 from yoyopod.network import NetworkManager
-from yoyopod.people import PeopleDirectory
 from yoyopod.power import PowerManager
 
 

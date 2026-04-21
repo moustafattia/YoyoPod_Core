@@ -20,8 +20,8 @@ from yoyopod.communication.calling.manager import VoIPManager
 from yoyopod.communication.models import VoIPConfig
 from yoyopod.config import ConfigManager
 from yoyopod.device import AudioDeviceCatalog
+from yoyopod.integrations.contacts.directory import PeopleManager
 from yoyopod.network import NetworkManager
-from yoyopod.people import PeopleManager
 from yoyopod.power.manager import PowerManager
 from yoyopod.ui.display import Display
 from yoyopod.ui.display.contracts import (

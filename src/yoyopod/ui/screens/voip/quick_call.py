@@ -22,7 +22,8 @@ if TYPE_CHECKING:
     from yoyopod.core import AppContext
     from yoyopod.communication.calling.history import CallHistoryStore
     from yoyopod.communication.calling.manager import VoIPManager
-    from yoyopod.people import Contact, PeopleManager
+    from yoyopod.integrations.contacts.directory import PeopleManager
+    from yoyopod.integrations.contacts.models import Contact
     from yoyopod.ui.screens.view import ScreenView
 
 

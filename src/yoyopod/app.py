@@ -38,7 +38,7 @@ from yoyopod.core import (
     UserActivityEvent,
 )
 from yoyopod.device import AudioDeviceCatalog
-from yoyopod.people import PeopleManager
+from yoyopod.integrations.contacts.directory import PeopleManager
 from yoyopod.core import CallFSM, CallInterruptionPolicy, MusicFSM
 from yoyopod.network import NetworkManager
 from yoyopod.power.manager import PowerManager

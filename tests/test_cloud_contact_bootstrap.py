@@ -6,7 +6,7 @@ from types import SimpleNamespace
 
 from yoyopod.cloud.manager import CloudManager
 from yoyopod.cloud.models import CloudAccessToken
-from yoyopod.people import Contact
+from yoyopod.integrations.contacts.models import Contact
 
 
 class _FakePeopleDirectory:

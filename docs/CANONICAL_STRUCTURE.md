@@ -105,9 +105,11 @@ Current exemplar package homes:
   - `messaging/`
   - `integrations/`
   - `__init__.py` is the app-facing seam
-- `src/yoyopod/people/`
+- `src/yoyopod/integrations/contacts/`
   - mutable contacts/address-book concerns
-  - `__init__.py` is the app-facing seam
+  - owns the canonical contacts directory, models, and cloud-sync helpers
+- `src/yoyopod/people/`
+  - compatibility shims for the historical contacts import path
 - `src/yoyopod/audio/`
   - local music/media behavior, history, output-volume coordination, and mpv backend wiring
   - `__init__.py` is the app-facing seam
@@ -126,7 +128,7 @@ The app layer should import from domain seams such as:
 - `yoyopod.audio`
 - `yoyopod.power`
 - `yoyopod.communication`
-- `yoyopod.people`
+- `yoyopod.integrations.contacts`
 
 It should not reach arbitrarily into domain internals unless the app is the
 explicit owner of that internal boundary.
@@ -136,7 +138,7 @@ explicit owner of that internal boundary.
 The communication exemplar establishes:
 
 - communication code under `src/yoyopod/communication/`
-- contacts under `src/yoyopod/people/`
+- contacts under `src/yoyopod/integrations/contacts/`
 - communication config separated from mutable people data
 - runtime people data seeded into `data/people/contacts.yaml` from
   `config/people/contacts.seed.yaml` only when needed

@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from yoyopod.people.manager import PeopleManager
-
-PeopleDirectory = PeopleManager
+from yoyopod.integrations.contacts.directory import PeopleDirectory, PeopleManager
 
 __all__ = ["PeopleDirectory", "PeopleManager"]
