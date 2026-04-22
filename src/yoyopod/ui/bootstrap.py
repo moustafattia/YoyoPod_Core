@@ -174,7 +174,9 @@ def build_and_register_screens(app: "YoyoPodApp", *, logger: Any) -> None:
     def _ready_to_call() -> bool:
         if app.call_coordinator is not None:
             return app.call_coordinator.is_ready_to_call()
-        return bool(context.voip.running and context.voip.ready)
+        if app.voip_manager is None:
+            return False
+        return bool(app.voip_manager.running and app.voip_manager.registered)
 
     def _toggle_playback() -> None:
         if app.playback_coordinator is not None:

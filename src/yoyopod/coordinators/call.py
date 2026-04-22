@@ -180,6 +180,10 @@ class CallCoordinator:
 
     def is_ready_to_call(self) -> bool:
         """Return whether VoIP is ready for new outgoing calls."""
+        voip_manager = self.runtime.voip_manager
+        if voip_manager is not None:
+            return bool(voip_manager.running and voip_manager.registered)
+
         context = self.runtime.context
         if context is not None:
             return bool(context.voip.running and context.voip.ready)
