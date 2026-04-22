@@ -24,6 +24,13 @@ def test_liblinphone_help() -> None:
     assert "liblinphone" in result.output.lower()
 
 
+def test_ensure_native_help() -> None:
+    runner = CliRunner()
+    result = runner.invoke(app, ["ensure-native", "--help"])
+    assert result.exit_code == 0
+    assert "native" in result.output.lower()
+
+
 def test_resolve_lvgl_native_dir_points_at_package_root() -> None:
     native_dir = build_cli._resolve_lvgl_native_dir()
 
@@ -83,3 +90,67 @@ def test_build_liblinphone_uses_resolved_native_dir(
         "native_dir": build_cli._REPO_ROOT / "yoyopod" / "backends" / "voip" / "shim_native",
         "build_dir": build_dir,
     }
+
+
+def test_ensure_native_shims_rebuilds_missing_artifacts(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    lvgl_native = tmp_path / "lvgl-native"
+    lib_native = tmp_path / "liblinphone-native"
+    lvgl_native.mkdir()
+    lib_native.mkdir()
+
+    calls: list[tuple[str, Path, Path | None]] = []
+
+    monkeypatch.setattr(build_cli, "_resolve_lvgl_native_dir", lambda: lvgl_native)
+    monkeypatch.setattr(build_cli, "_resolve_liblinphone_native_dir", lambda: lib_native)
+    monkeypatch.setattr(build_cli, "_default_lvgl_source_dir", lambda: tmp_path / "lvgl-source")
+    monkeypatch.setattr(build_cli, "_ensure_lvgl_source", lambda source_dir: calls.append(("fetch", source_dir, None)))
+    monkeypatch.setattr(
+        build_cli,
+        "_build_lvgl",
+        lambda native_dir, source_dir, build_dir: calls.append(("lvgl", native_dir, build_dir)),
+    )
+    monkeypatch.setattr(
+        build_cli,
+        "_build_liblinphone",
+        lambda native_dir, build_dir: calls.append(("liblinphone", native_dir, build_dir)),
+    )
+
+    rebuilt = build_cli._ensure_native_shims()
+
+    assert rebuilt == ("LVGL", "Liblinphone")
+    assert ("fetch", tmp_path / "lvgl-source", None) in calls
+    assert ("lvgl", lvgl_native, lvgl_native / "build") in calls
+    assert ("liblinphone", lib_native, lib_native / "build") in calls
+
+
+def test_ensure_native_shims_skips_current_artifacts(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    lvgl_native = tmp_path / "lvgl-native"
+    lib_native = tmp_path / "liblinphone-native"
+    (lvgl_native / "build").mkdir(parents=True)
+    (lib_native / "build").mkdir(parents=True)
+    (lvgl_native / "build" / "libyoyopod_lvgl_shim.so").write_text("ok", encoding="utf-8")
+    (lib_native / "build" / "libyoyopod_liblinphone_shim.so").write_text("ok", encoding="utf-8")
+
+    monkeypatch.setattr(build_cli, "_resolve_lvgl_native_dir", lambda: lvgl_native)
+    monkeypatch.setattr(build_cli, "_resolve_liblinphone_native_dir", lambda: lib_native)
+    monkeypatch.setattr(build_cli, "_ensure_lvgl_source", lambda _source_dir: pytest.fail("fetch not expected"))
+    monkeypatch.setattr(
+        build_cli,
+        "_build_lvgl",
+        lambda *_args, **_kwargs: pytest.fail("LVGL rebuild not expected"),
+    )
+    monkeypatch.setattr(
+        build_cli,
+        "_build_liblinphone",
+        lambda *_args, **_kwargs: pytest.fail("Liblinphone rebuild not expected"),
+    )
+
+    rebuilt = build_cli._ensure_native_shims()
+
+    assert rebuilt == ()

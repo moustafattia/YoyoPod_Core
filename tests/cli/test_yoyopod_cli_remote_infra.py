@@ -12,6 +12,7 @@ from yoyopod_cli.remote_infra import (
     _build_service_uninstall,
     _build_service_action,
 )
+from yoyopod_cli.paths import HOST
 
 
 def test_build_power_invokes_pi_power_battery() -> None:
@@ -121,3 +122,10 @@ def test_build_service_uninstall_removes_env_file() -> None:
     assert "/etc/default/yoyopod" in shell
     assert "systemctl disable" in shell
     assert "systemctl daemon-reload" in shell
+
+
+def test_systemd_template_refreshes_native_shims_before_start() -> None:
+    template = HOST.systemd_unit_template.read_text(encoding="utf-8")
+
+    assert "ExecStartPre=" in template
+    assert "uv run yoyopod build ensure-native" in template

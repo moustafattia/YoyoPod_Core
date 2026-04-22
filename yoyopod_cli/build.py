@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import shutil
 import subprocess
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Annotated, Optional
 
@@ -25,6 +26,15 @@ app = typer.Typer(
 LVGL_VERSION = "9.5.0"
 LVGL_TAG = f"v{LVGL_VERSION}"
 LVGL_REPO = "https://github.com/lvgl/lvgl.git"
+
+
+@dataclass(frozen=True)
+class NativeArtifact:
+    """One native artifact plus the sources that make it stale."""
+
+    label: str
+    output: Path
+    sources: tuple[Path, ...]
 
 
 def _run(command: list[str], cwd: Path | None = None) -> None:
@@ -140,6 +150,83 @@ def _build_liblinphone(native_dir: Path, build_dir: Path) -> None:
     _run(["cmake", "--build", str(build_dir), "--parallel", "2"])
 
 
+def _default_lvgl_source_dir() -> Path:
+    """Return the stable cache path for the pinned LVGL source checkout."""
+
+    return _REPO_ROOT / ".cache" / "lvgl" / f"lvgl-{LVGL_VERSION}"
+
+
+def _newest_mtime(paths: tuple[Path, ...]) -> float:
+    """Return the newest file mtime under the provided paths."""
+
+    newest = 0.0
+    for path in paths:
+        if not path.exists():
+            continue
+        if path.is_dir():
+            for candidate in path.rglob("*"):
+                if candidate.is_file():
+                    newest = max(newest, candidate.stat().st_mtime)
+            continue
+        newest = max(newest, path.stat().st_mtime)
+    return newest
+
+
+def _is_stale(binary: Path, sources: tuple[Path, ...]) -> bool:
+    """Return True when one native artifact is missing or older than its sources."""
+
+    if not binary.exists():
+        return True
+    return _newest_mtime(sources) > binary.stat().st_mtime
+
+
+def _native_artifacts() -> tuple[NativeArtifact, ...]:
+    """Return the canonical native artifacts for the current checkout."""
+
+    lvgl_native_dir = _resolve_lvgl_native_dir()
+    liblinphone_native_dir = _resolve_liblinphone_native_dir()
+    return (
+        NativeArtifact(
+            label="LVGL",
+            output=lvgl_native_dir / "build" / "libyoyopod_lvgl_shim.so",
+            sources=(lvgl_native_dir,),
+        ),
+        NativeArtifact(
+            label="Liblinphone",
+            output=liblinphone_native_dir / "build" / "libyoyopod_liblinphone_shim.so",
+            sources=(liblinphone_native_dir,),
+        ),
+    )
+
+
+def _ensure_native_shims(*, skip_lvgl_fetch: bool = False) -> tuple[str, ...]:
+    """Build missing or stale native shims and return the labels that were rebuilt."""
+
+    rebuilt: list[str] = []
+    lvgl_native_dir = _resolve_lvgl_native_dir()
+    liblinphone_native_dir = _resolve_liblinphone_native_dir()
+    lvgl_source_dir = _default_lvgl_source_dir()
+
+    for artifact in _native_artifacts():
+        if not _is_stale(artifact.output, artifact.sources):
+            continue
+        if artifact.label == "LVGL":
+            if not skip_lvgl_fetch:
+                _ensure_lvgl_source(lvgl_source_dir)
+            _build_lvgl(
+                lvgl_native_dir,
+                lvgl_source_dir,
+                lvgl_native_dir / "build",
+            )
+        elif artifact.label == "Liblinphone":
+            _build_liblinphone(liblinphone_native_dir, liblinphone_native_dir / "build")
+        else:
+            raise SystemExit(f"Unknown native artifact: {artifact.label}")
+        rebuilt.append(artifact.label)
+
+    return tuple(rebuilt)
+
+
 # ---------------------------------------------------------------------------
 # Commands
 # ---------------------------------------------------------------------------
@@ -162,11 +249,7 @@ def build_lvgl(
 ) -> None:
     """Build the pinned LVGL shim for the current platform."""
     native_dir = _resolve_lvgl_native_dir()
-    resolved_source = (
-        source_dir
-        if source_dir is not None
-        else _REPO_ROOT / ".cache" / "lvgl" / f"lvgl-{LVGL_VERSION}"
-    )
+    resolved_source = source_dir if source_dir is not None else _default_lvgl_source_dir()
     resolved_build = build_dir if build_dir is not None else native_dir / "build"
 
     if not skip_fetch:
@@ -189,3 +272,22 @@ def build_liblinphone(
 
     _build_liblinphone(native_dir, resolved_build)
     typer.echo(f"Built Liblinphone shim in {resolved_build}")
+
+
+@app.command("ensure-native")
+def ensure_native(
+    skip_lvgl_fetch: Annotated[
+        bool,
+        typer.Option(
+            "--skip-lvgl-fetch",
+            help="Do not clone/update the pinned LVGL source checkout before rebuilding.",
+        ),
+    ] = False,
+) -> None:
+    """Build missing or stale native shims required by the app."""
+
+    rebuilt = _ensure_native_shims(skip_lvgl_fetch=skip_lvgl_fetch)
+    if rebuilt:
+        typer.echo(f"Ensured native shims: {', '.join(rebuilt)}")
+        return
+    typer.echo("Native shims already current")

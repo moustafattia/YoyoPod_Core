@@ -58,6 +58,7 @@ For live help, use `yoyopod <cmd> --help`.
 
 | Command | What it does |
 |---|---|
+| `yoyopod build ensure-native` | Build missing or stale native shims required by the app. |
 | `yoyopod build liblinphone` | Build the native Liblinphone shim for the current platform. |
 | `yoyopod build lvgl` | Build the pinned LVGL shim for the current platform. |
 
