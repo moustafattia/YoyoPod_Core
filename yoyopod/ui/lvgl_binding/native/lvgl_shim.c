@@ -38,6 +38,24 @@ typedef struct {
     int32_t gps_has_fix;
 } yoyopod_status_bar_state_t;
 
+typedef struct {
+    int valid;
+    uint32_t accent_rgb;
+    const lv_image_dsc_t * icon_image;
+    int32_t selected_index;
+    int32_t total_cards;
+    int32_t voip_state;
+    int32_t battery_percent;
+    int32_t charging;
+    int32_t power_available;
+    int32_t subtitle_visible;
+    yoyopod_status_bar_state_t status_bar_state;
+    char title[32];
+    char subtitle[64];
+    char footer[64];
+    char time_text[16];
+} yoyopod_hub_scene_state_t;
+
 static const uint32_t YOYOPOD_THEME_BACKGROUND_RGB = 0x2A2D35;
 static const uint32_t YOYOPOD_THEME_SURFACE_RGB = 0x31343C;
 static const uint32_t YOYOPOD_THEME_SURFACE_RAISED_RGB = 0x363A44;
@@ -67,6 +85,7 @@ typedef struct {
     lv_obj_t * footer_bar;
     lv_obj_t * footer_label;
     lv_obj_t * dots[4];
+    yoyopod_hub_scene_state_t last_state;
 } yoyopod_hub_scene_t;
 
 typedef struct {
@@ -860,6 +879,30 @@ static void yoyopod_apply_footer_label(lv_obj_t * label, const char * text, lv_c
     lv_obj_align(label, LV_ALIGN_BOTTOM_MID, 0, YOYOPOD_FOOTER_OFFSET_Y);
 }
 
+static int yoyopod_text_matches(const char * cached, const char * text) {
+    return strcmp(cached, text != NULL ? text : "") == 0;
+}
+
+static void yoyopod_copy_text(char * destination, size_t destination_size, const char * text) {
+    if(destination_size == 0U) {
+        return;
+    }
+
+    strncpy(destination, text != NULL ? text : "", destination_size - 1U);
+    destination[destination_size - 1U] = '\0';
+}
+
+static int yoyopod_status_bar_state_matches(
+    const yoyopod_status_bar_state_t * left,
+    const yoyopod_status_bar_state_t * right
+) {
+    return left->network_enabled == right->network_enabled
+        && left->network_connected == right->network_connected
+        && left->wifi_connected == right->wifi_connected
+        && left->signal_strength == right->signal_strength
+        && left->gps_has_fix == right->gps_has_fix;
+}
+
 static void yoyopod_apply_signal_bars(
     yoyopod_status_bar_t * bar,
     int32_t network_enabled,
@@ -1202,10 +1245,19 @@ int yoyopod_lvgl_hub_build(void) {
     lv_obj_remove_style_all(g_hub_scene.footer_bar);
     lv_obj_set_size(g_hub_scene.footer_bar, 240, 32);
     lv_obj_set_pos(g_hub_scene.footer_bar, 0, 248);
+    lv_obj_set_style_bg_color(g_hub_scene.footer_bar, yoyopod_color_u24(YOYOPOD_THEME_FOOTER_RGB), 0);
     lv_obj_set_style_bg_opa(g_hub_scene.footer_bar, LV_OPA_COVER, 0);
 
     g_hub_scene.footer_label = lv_label_create(g_hub_scene.screen);
     yoyopod_prepare_footer_label(g_hub_scene.footer_label);
+    lv_obj_set_style_image_recolor(g_hub_scene.icon_image, yoyopod_color_u24(YOYOPOD_THEME_INK_RGB), 0);
+    lv_obj_set_style_text_color(g_hub_scene.title_label, yoyopod_color_u24(YOYOPOD_THEME_INK_RGB), 0);
+    lv_obj_set_style_text_color(
+        g_hub_scene.subtitle_label,
+        yoyopod_color_u24(YOYOPOD_THEME_MUTED_DIM_RGB),
+        0
+    );
+    lv_obj_set_style_text_color(g_hub_scene.footer_label, yoyopod_color_u24(YOYOPOD_THEME_MUTED_DIM_RGB), 0);
 
     g_hub_scene.built = 1;
     return 0;
@@ -1233,40 +1285,15 @@ int yoyopod_lvgl_hub_sync(
         return -1;
     }
 
-    const lv_color_t background = yoyopod_color_u24(YOYOPOD_THEME_BACKGROUND_RGB);
-    const lv_color_t footer_fill = yoyopod_color_u24(YOYOPOD_THEME_FOOTER_RGB);
-    const lv_color_t ink = yoyopod_color_u24(YOYOPOD_THEME_INK_RGB);
-    const lv_color_t muted_dim = yoyopod_color_u24(YOYOPOD_THEME_MUTED_DIM_RGB);
+    yoyopod_hub_scene_state_t * state = &g_hub_scene.last_state;
+    const char * safe_title = title != NULL ? title : "";
+    const char * safe_subtitle = subtitle != NULL ? subtitle : "";
+    const char * safe_footer = footer != NULL ? footer : "";
+    const char * safe_time = yoyopod_time_or_default(time_text);
+    const int subtitle_visible = safe_subtitle[0] != '\0';
+    const lv_image_dsc_t * icon_image = yoyopod_hub_icon_for_key(icon_key);
     const lv_color_t accent = yoyopod_color_u24(accent_rgb);
     const lv_color_t glow_fill = yoyopod_mix_u24(accent_rgb, YOYOPOD_THEME_BACKGROUND_RGB, 72);
-
-    lv_obj_set_style_bg_color(g_hub_scene.screen, background, 0);
-    lv_obj_set_style_bg_opa(g_hub_scene.screen, LV_OPA_COVER, 0);
-    yoyopod_status_bar_sync(
-        &g_hub_scene.status_bar,
-        voip_state,
-        time_text,
-        battery_percent,
-        charging,
-        power_available
-    );
-
-    lv_obj_set_style_bg_color(g_hub_scene.icon_glow, glow_fill, 0);
-    lv_obj_set_style_bg_opa(g_hub_scene.icon_glow, LV_OPA_40, 0);
-    lv_obj_set_style_bg_color(g_hub_scene.card_panel, accent, 0);
-    lv_obj_set_style_bg_opa(g_hub_scene.card_panel, LV_OPA_COVER, 0);
-    lv_obj_set_style_shadow_color(g_hub_scene.card_panel, accent, 0);
-
-    lv_image_set_src(g_hub_scene.icon_image, yoyopod_hub_icon_for_key(icon_key));
-    lv_obj_set_style_image_recolor(g_hub_scene.icon_image, ink, 0);
-    lv_obj_set_style_image_recolor_opa(g_hub_scene.icon_image, LV_OPA_COVER, 0);
-    lv_obj_center(g_hub_scene.icon_image);
-    lv_label_set_text(g_hub_scene.title_label, title != NULL ? title : "");
-    lv_obj_set_style_text_color(g_hub_scene.title_label, ink, 0);
-    lv_label_set_text(g_hub_scene.subtitle_label, "");
-    lv_obj_add_flag(g_hub_scene.subtitle_label, LV_OBJ_FLAG_HIDDEN);
-    lv_obj_set_style_bg_color(g_hub_scene.footer_bar, footer_fill, 0);
-    yoyopod_apply_footer_label(g_hub_scene.footer_label, footer, muted_dim);
 
     if(total_cards < 1) {
         total_cards = 1;
@@ -1280,25 +1307,95 @@ int yoyopod_lvgl_hub_sync(
         selected_index += total_cards;
     }
 
+    if(
+        !state->valid
+        || !yoyopod_status_bar_state_matches(&state->status_bar_state, &g_status_bar_state)
+        || state->voip_state != voip_state
+        || state->battery_percent != battery_percent
+        || state->charging != charging
+        || state->power_available != power_available
+        || !yoyopod_text_matches(state->time_text, safe_time)
+    ) {
+        yoyopod_status_bar_sync(
+            &g_hub_scene.status_bar,
+            voip_state,
+            safe_time,
+            battery_percent,
+            charging,
+            power_available
+        );
+        state->status_bar_state = g_status_bar_state;
+        state->voip_state = voip_state;
+        state->battery_percent = battery_percent;
+        state->charging = charging;
+        state->power_available = power_available;
+        yoyopod_copy_text(state->time_text, sizeof(state->time_text), safe_time);
+    }
+
+    if(!state->valid || state->accent_rgb != accent_rgb) {
+        lv_obj_set_style_bg_color(g_hub_scene.icon_glow, glow_fill, 0);
+        lv_obj_set_style_bg_opa(g_hub_scene.icon_glow, LV_OPA_40, 0);
+        lv_obj_set_style_bg_color(g_hub_scene.card_panel, accent, 0);
+        lv_obj_set_style_bg_opa(g_hub_scene.card_panel, LV_OPA_COVER, 0);
+        lv_obj_set_style_shadow_color(g_hub_scene.card_panel, accent, 0);
+        state->accent_rgb = accent_rgb;
+    }
+
+    if(!state->valid || state->icon_image != icon_image) {
+        lv_image_set_src(g_hub_scene.icon_image, icon_image);
+        state->icon_image = icon_image;
+    }
+
+    if(!state->valid || !yoyopod_text_matches(state->title, safe_title)) {
+        lv_label_set_text(g_hub_scene.title_label, safe_title);
+        yoyopod_copy_text(state->title, sizeof(state->title), safe_title);
+    }
+
+    if(!state->valid || !yoyopod_text_matches(state->subtitle, safe_subtitle)) {
+        lv_label_set_text(g_hub_scene.subtitle_label, safe_subtitle);
+        yoyopod_copy_text(state->subtitle, sizeof(state->subtitle), safe_subtitle);
+    }
+    if(!state->valid || state->subtitle_visible != subtitle_visible) {
+        if(subtitle_visible) {
+            lv_obj_clear_flag(g_hub_scene.subtitle_label, LV_OBJ_FLAG_HIDDEN);
+        } else {
+            lv_obj_add_flag(g_hub_scene.subtitle_label, LV_OBJ_FLAG_HIDDEN);
+        }
+        state->subtitle_visible = subtitle_visible;
+    }
+
+    if(!state->valid || !yoyopod_text_matches(state->footer, safe_footer)) {
+        lv_label_set_text(g_hub_scene.footer_label, safe_footer);
+        yoyopod_copy_text(state->footer, sizeof(state->footer), safe_footer);
+    }
+
     int dot_spacing = 10;
     int dots_width = ((total_cards - 1) * dot_spacing) + 4;
     int first_x = (240 - dots_width) / 2;
-    for(int index = 0; index < 4; ++index) {
-        if(index >= total_cards) {
-            lv_obj_add_flag(g_hub_scene.dots[index], LV_OBJ_FLAG_HIDDEN);
-            continue;
-        }
+    if(!state->valid || state->total_cards != total_cards || state->selected_index != selected_index) {
+        const lv_color_t ink = yoyopod_color_u24(YOYOPOD_THEME_INK_RGB);
+        for(int index = 0; index < 4; ++index) {
+            if(index >= total_cards) {
+                lv_obj_add_flag(g_hub_scene.dots[index], LV_OBJ_FLAG_HIDDEN);
+                continue;
+            }
 
-        int selected = index == selected_index;
-        lv_obj_clear_flag(g_hub_scene.dots[index], LV_OBJ_FLAG_HIDDEN);
-        lv_obj_set_pos(g_hub_scene.dots[index], first_x + (index * dot_spacing), 218);
-        yoyopod_hub_style_dot(g_hub_scene.dots[index], ink, selected);
+            int selected = index == selected_index;
+            lv_obj_clear_flag(g_hub_scene.dots[index], LV_OBJ_FLAG_HIDDEN);
+            if(!state->valid || state->total_cards != total_cards) {
+                lv_obj_set_pos(g_hub_scene.dots[index], first_x + (index * dot_spacing), 218);
+            }
+            yoyopod_hub_style_dot(g_hub_scene.dots[index], ink, selected);
+        }
+        state->total_cards = total_cards;
+        state->selected_index = selected_index;
     }
 
     if(yoyopod_activate_scene_screen(g_hub_scene.screen, "hub scene screen is unavailable during sync") < 0) {
         return -1;
     }
 
+    state->valid = 1;
     return 0;
 }
 

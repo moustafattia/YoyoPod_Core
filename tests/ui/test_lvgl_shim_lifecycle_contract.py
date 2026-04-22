@@ -106,3 +106,18 @@ def test_retained_scene_syncs_guard_missing_roots_before_activation() -> None:
         assert (
             guard_match.start() < activate_match.start()
         ), f"root guard should run before activation in {signature}"
+
+
+def test_hub_sync_keeps_fixed_scene_chrome_out_of_per_step_updates() -> None:
+    """Hub card advances should not reapply static scene chrome on every sync."""
+
+    build_body = _function_body("int yoyopod_lvgl_hub_build")
+    sync_body = _function_body("int yoyopod_lvgl_hub_sync")
+
+    assert "lv_obj_set_style_bg_color(g_hub_scene.footer_bar" in build_body
+    assert "lv_obj_set_style_text_color(g_hub_scene.footer_label" in build_body
+
+    assert "lv_obj_set_style_bg_color(g_hub_scene.screen" not in sync_body
+    assert "lv_obj_set_style_bg_color(g_hub_scene.footer_bar" not in sync_body
+    assert "yoyopod_apply_footer_label(g_hub_scene.footer_label" not in sync_body
+    assert "state = &g_hub_scene.last_state" in sync_body
