@@ -49,10 +49,10 @@ class NowPlayingSnapshot:
 
 
 @dataclass(frozen=True, slots=True)
-class NowPlayingActions:
+class PlaybackActions:
     """Focused playback actions exposed to the now-playing screen."""
 
-    toggle_playback: Callable[[], None] | None = None
+    toggle: Callable[[], None] | None = None
     previous_track: Callable[[], None] | None = None
     next_track: Callable[[], None] | None = None
 
@@ -134,7 +134,7 @@ def build_now_playing_actions(
     toggle_playback_action: Callable[[], None] | None = None,
     previous_track_action: Callable[[], None] | None = None,
     next_track_action: Callable[[], None] | None = None,
-) -> NowPlayingActions:
+) -> PlaybackActions:
     """Build the focused playback actions for the now-playing screen.
 
     When no explicit callback is supplied, the action is a no-op. Actions are
@@ -153,8 +153,8 @@ def build_now_playing_actions(
         if next_track_action is not None:
             next_track_action()
 
-    return NowPlayingActions(
-        toggle_playback=toggle_playback,
+    return PlaybackActions(
+        toggle=toggle_playback,
         previous_track=previous_track,
         next_track=next_track,
     )
@@ -169,7 +169,7 @@ class NowPlayingScreen(Screen):
         context: Optional["AppContext"] = None,
         *,
         state_provider: Callable[[], NowPlayingState] | None = None,
-        actions: NowPlayingActions | None = None,
+        actions: PlaybackActions | None = None,
     ) -> None:
         super().__init__(display, context, "NowPlaying")
         self._state_provider = state_provider or build_now_playing_state_provider(context=context)
@@ -268,8 +268,8 @@ class NowPlayingScreen(Screen):
     def _toggle_playback(self) -> None:
         """Toggle playback via the injected action seam."""
 
-        if self._actions.toggle_playback is not None:
-            self._actions.toggle_playback()
+        if self._actions.toggle is not None:
+            self._actions.toggle()
 
     def _previous_track(self) -> None:
         """Go to the previous track via the injected action seam."""
