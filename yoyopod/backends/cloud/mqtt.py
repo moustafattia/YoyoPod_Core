@@ -18,7 +18,7 @@ _KEEPALIVE_SECONDS = 60
 class DeviceMqttClient:
     """Publish device telemetry events to the backend MQTT broker.
 
-    The device publishes to  ``yoyopod/{device_id}/evt``.
+    The device publishes to ``yoyopod/{device_id}/evt``.
     The backend sends commands on ``yoyopod/{device_id}/cmd``; those are
     forwarded to the registered command callback.
     """
@@ -51,17 +51,14 @@ class DeviceMqttClient:
         self._connect_callbacks: list[Callable[[], None]] = []
         self._disconnect_callbacks: list[Callable[[str], None]] = []
 
-    # ------------------------------------------------------------------
-    # Lifecycle
-    # ------------------------------------------------------------------
-
     def start(self) -> None:
         """Start the MQTT client and connect in the background."""
+
         try:
             import paho.mqtt.client as mqtt  # type: ignore[import-untyped]
         except ImportError:
             logger.warning(
-                "paho-mqtt not installed — device telemetry events will not be sent. "
+                "paho-mqtt not installed - device telemetry events will not be sent. "
                 "Install with: pip install paho-mqtt"
             )
             return
@@ -78,13 +75,10 @@ class DeviceMqttClient:
         if self._use_tls:
             client.tls_set()
 
-        # Keep reconnect behavior inside the single Paho network loop so
-        # replacement clients do not leave behind their own retry threads.
         client.reconnect_delay_set(
             min_delay=1,
             max_delay=int(_RECONNECT_DELAY_SECONDS),
         )
-
         client.on_connect = self._on_connect
         client.on_disconnect = self._on_disconnect
         client.on_message = self._on_message
@@ -106,6 +100,7 @@ class DeviceMqttClient:
 
     def stop(self) -> None:
         """Disconnect and stop reconnect attempts."""
+
         with self._lock:
             self._stopped = True
             self._connected = False
@@ -132,38 +127,14 @@ class DeviceMqttClient:
 
         self._disconnect_callbacks.append(callback)
 
-    def publish(self, topic: str, payload: str, qos: int = 0) -> bool:
-        """Publish a raw message to one MQTT topic."""
-
-        with self._lock:
-            client = self._client
-            connected = self._connected
-
-        if client is None or not connected:
-            logger.debug("MQTT not connected — skipping publish to {}", topic)
-            return False
-
-        try:
-            result = client.publish(topic, payload, qos=max(0, int(qos)))
-            if result.rc != 0:
-                logger.warning("MQTT publish failed for {}: rc={}", topic, result.rc)
-                return False
-            logger.debug("MQTT published {}", topic)
-            return True
-        except Exception as exc:
-            logger.warning("MQTT publish error for {}: {}", topic, exc)
-            return False
-
-    # ------------------------------------------------------------------
-    # Publishing
-    # ------------------------------------------------------------------
-
     def publish_battery(self, *, level: int, charging: bool) -> bool:
         """Publish a battery telemetry event."""
+
         return self._publish("battery", {"level": level, "charging": charging})
 
     def publish_heartbeat(self, *, firmware_version: str | None = None) -> bool:
         """Publish a device heartbeat event."""
+
         payload: dict[str, Any] = {}
         if firmware_version is not None:
             payload["firmware_version"] = firmware_version
@@ -171,25 +142,79 @@ class DeviceMqttClient:
 
     def publish_connectivity(self, *, connection_type: str) -> bool:
         """Publish a connectivity change (wifi / 4g)."""
+
         return self._publish("connectivity", {"type": connection_type})
 
-    # ------------------------------------------------------------------
-    # Internal
-    # ------------------------------------------------------------------
+    def publish_playback_event(self, payload: dict[str, Any]) -> bool:
+        """Publish one remote-playback event through the normal device event topic."""
 
-    def _publish(self, event_type: str, payload: dict[str, Any]) -> bool:
-        """Publish one event envelope to ``yoyopod/{device_id}/evt``."""
+        return self._publish("playback", payload)
+
+    def publish_event(self, event_type: str, payload: dict[str, Any]) -> bool:
+        """Publish one typed event envelope through the device event topic."""
+
+        return self._publish(event_type, payload)
+
+    def publish_ack(
+        self,
+        *,
+        command_id: str,
+        ok: bool,
+        reason: str | None = None,
+        payload: dict[str, Any] | None = None,
+    ) -> bool:
+        """Publish one command ACK/NACK to ``yoyopod/{device_id}/ack``."""
+
         with self._lock:
             client = self._client
             connected = self._connected
 
         if client is None or not connected:
-            logger.debug("MQTT not connected — skipping {} event", event_type)
+            logger.debug("MQTT not connected - skipping ack for {}", command_id)
+            return False
+
+        topic = f"yoyopod/{self._device_id}/ack"
+        message_payload: dict[str, Any] = {
+            "command_id": command_id,
+            "status": "ack" if ok else "nack",
+            "payload": payload or {},
+        }
+        if reason:
+            message_payload["reason"] = reason
+
+        try:
+            result = client.publish(topic, json.dumps(message_payload), qos=1)
+            if result.rc != 0:
+                logger.warning("MQTT publish failed for ack {}: rc={}", command_id, result.rc)
+                return False
+            return True
+        except Exception as exc:
+            logger.warning("MQTT ack publish error for {}: {}", command_id, exc)
+            return False
+
+    def _publish(self, event_type: str, payload: dict[str, Any]) -> bool:
+        """Publish one event envelope to ``yoyopod/{device_id}/evt``."""
+
+        with self._lock:
+            client = self._client
+            connected = self._connected
+
+        if client is None or not connected:
+            logger.debug("MQTT not connected - skipping {} event", event_type)
             return False
 
         topic = f"yoyopod/{self._device_id}/evt"
         message = json.dumps({"type": event_type, "payload": payload, "ts": int(time.time())})
-        return self.publish(topic, message, qos=1)
+        try:
+            result = client.publish(topic, message, qos=1)
+            if result.rc != 0:
+                logger.warning("MQTT publish failed for {}: rc={}", event_type, result.rc)
+                return False
+            logger.debug("MQTT published {} event", event_type)
+            return True
+        except Exception as exc:
+            logger.warning("MQTT publish error for {}: {}", event_type, exc)
+            return False
 
     def _on_connect(self, client: Any, userdata: Any, flags: Any, rc: int) -> None:
         if rc == 0:
@@ -204,7 +229,10 @@ class DeviceMqttClient:
                 except Exception as exc:
                     logger.warning("MQTT connect callback failed: {}", exc)
             logger.info(
-                "MQTT connected to {}:{} (device={})", self._broker_host, self._port, self._device_id
+                "MQTT connected to {}:{} (device={})",
+                self._broker_host,
+                self._port,
+                self._device_id,
             )
         else:
             logger.warning("MQTT connect refused: rc={}", rc)
@@ -225,9 +253,13 @@ class DeviceMqttClient:
 
     def _on_message(self, client: Any, userdata: Any, msg: Any) -> None:
         """Handle an incoming command from the backend."""
+
         try:
             payload = json.loads(msg.payload.decode())
-            logger.info("MQTT command received: {}", payload.get("type", "unknown"))
+            logger.info(
+                "MQTT command received: {}",
+                payload.get("command") or payload.get("type", "unknown"),
+            )
             if self._command_callback is not None:
                 self._command_callback(payload)
         except Exception as exc:

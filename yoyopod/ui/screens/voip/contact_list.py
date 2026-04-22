@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Literal, Optional
+from typing import TYPE_CHECKING, Any, Callable, Literal, Optional
 
 from loguru import logger
 
@@ -11,6 +11,7 @@ from yoyopod.ui.display import Display
 from yoyopod.ui.screens.base import Screen
 from yoyopod.ui.screens.lvgl_lifecycle import current_retained_view
 from yoyopod.ui.screens.theme import talk_monogram
+from yoyopod.ui.screens.voip.call_actions import CallActions
 from yoyopod.ui.screens.voip.lvgl import LvglContactListView
 
 if TYPE_CHECKING:
@@ -27,6 +28,8 @@ class ContactListScreen(Screen):
         context: Optional["AppContext"] = None,
         voip_manager=None,
         people_directory=None,
+        contacts_provider: Callable[[], list[object]] | None = None,
+        actions: CallActions | None = None,
         action_mode: Literal["call", "voice_note"] = "call",
         *,
         app: Any | None = None,
@@ -34,6 +37,8 @@ class ContactListScreen(Screen):
         super().__init__(display, context, "ContactList", app=app)
         self._explicit_voip_manager = voip_manager
         self._explicit_people_directory = people_directory
+        self._explicit_contacts_provider = contacts_provider
+        self._actions = actions
         self.action_mode = action_mode
         self.contacts = []
         self.selected_index = 0
@@ -114,7 +119,13 @@ class ContactListScreen(Screen):
 
     def load_contacts(self) -> None:
         """Load contacts from the people directory."""
-        if self.people_directory:
+        if self._explicit_contacts_provider is not None:
+            contacts = list(self._explicit_contacts_provider())
+            favorites = [contact for contact in contacts if contact.favorite]
+            others = [contact for contact in contacts if not contact.favorite]
+            self.contacts = favorites + others
+            logger.info(f"Loaded {len(self.contacts)} contacts")
+        elif self.people_directory:
             contacts = self.people_directory.get_callable_contacts(gsm_enabled=False)
             favorites = [contact for contact in contacts if contact.favorite]
             others = [contact for contact in contacts if not contact.favorite]
@@ -226,6 +237,11 @@ class ContactListScreen(Screen):
 
         contact = self.contacts[self.selected_index]
         logger.info(f"Calling contact: {contact.display_name} at {contact.sip_address}")
+        if self._actions is not None and self._actions.make_call is not None:
+            if self._actions.make_call(contact.sip_address, contact.display_name):
+                return
+            logger.error(f"Failed to initiate call to {contact.display_name}")
+            return
         services = getattr(self.app, "services", None)
         if services is not None and hasattr(services, "call"):
             if services.call(

@@ -56,10 +56,15 @@ class ManagersBoot:
                 event_scheduler=self.app.scheduler.run_on_main,
                 background_iterate_enabled=True,
             )
-            self.app._voip_iterate_interval_seconds = max(
-                0.01,
-                float(voip_config.iterate_interval_ms) / 1000.0,
+            set_configured_interval = getattr(
+                self.app.runtime_loop,
+                "set_configured_voip_iterate_interval_seconds",
+                None,
             )
+            if callable(set_configured_interval):
+                set_configured_interval(
+                    float(voip_config.iterate_interval_ms) / 1000.0,
+                )
             if self.app.voip_manager.start():
                 self.logger.info("    VoIP started successfully")
             else:

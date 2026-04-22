@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Any, Callable, Optional
 
 from yoyopod.ui.display import Display
 from yoyopod.ui.screens.lvgl_lifecycle import current_retained_view
@@ -35,6 +35,49 @@ class HubCard:
     icon: str
 
 
+@dataclass(frozen=True, slots=True)
+class HubListenSnapshot:
+    """Read-only Listen summary used by the hub subtitle provider."""
+
+    is_connected: bool
+    track: Any | None = None
+    playback_state: str = "stopped"
+    playlist_count: int | None = None
+
+
+def build_hub_listen_subtitle_provider(
+    display: Display,
+    *,
+    snapshot_provider: Callable[[], HubListenSnapshot] | None = None,
+) -> Callable[[], str]:
+    """Build the compact Listen subtitle provider for the hub."""
+
+    def provider() -> str:
+        if snapshot_provider is None:
+            return ""
+
+        snapshot = snapshot_provider()
+        if not snapshot.is_connected:
+            return "Reconnect"
+
+        track = snapshot.track
+        if track is None:
+            if snapshot.playlist_count:
+                label = "playlist" if snapshot.playlist_count == 1 else "playlists"
+                return f"{snapshot.playlist_count} {label}"
+            return "On-device music"
+
+        artist = track.get_artist_string() or "Unknown"
+        artist = artist.split(",")[0]
+        if snapshot.playback_state == "playing":
+            return text_fit(display, f"Playing {artist}", 134, 12)
+        if snapshot.playback_state == "paused":
+            return "Paused"
+        return "On-device music"
+
+    return provider
+
+
 class HubScreen(Screen):
     """Carousel-style root screen for the one-button Whisplay flow."""
 
@@ -45,6 +88,7 @@ class HubScreen(Screen):
         music_backend: Optional["MusicBackend"] = None,
         local_music_service: Optional["LocalMusicService"] = None,
         voip_manager: Optional["VoIPManager"] = None,
+        listen_subtitle_provider: Any | None = None,
         *,
         app: Any | None = None,
     ) -> None:
@@ -52,6 +96,7 @@ class HubScreen(Screen):
         self.music_backend = music_backend
         self.local_music_service = local_music_service
         self.voip_manager = voip_manager
+        self._listen_subtitle_provider = listen_subtitle_provider
         self.selected_index = 0
         self._playlist_count: int | None = None
         self._lvgl_view: "ScreenView | None" = None
@@ -110,6 +155,8 @@ class HubScreen(Screen):
 
     def _listen_subtitle(self) -> str:
         """Return the compact Listen card subtitle."""
+        if self._listen_subtitle_provider is not None:
+            return self._listen_subtitle_provider()
         music_backend = self._resolve_music_backend()
         if music_backend is None:
             return "Music offline"

@@ -10,6 +10,7 @@ from yoyopod.integrations.call import AnswerCommand, RejectCommand
 from yoyopod.ui.display import Display
 from yoyopod.ui.screens.base import Screen
 from yoyopod.ui.screens.lvgl_lifecycle import current_retained_view
+from yoyopod.ui.screens.voip.call_actions import CallActions
 from yoyopod.ui.screens.voip.lvgl import LvglIncomingCallView
 
 if TYPE_CHECKING:
@@ -27,11 +28,13 @@ class IncomingCallScreen(Screen):
         voip_manager=None,
         caller_address: str = "",
         caller_name: str = "Unknown",
+        actions: CallActions | None = None,
         *,
         app: Any | None = None,
     ) -> None:
         super().__init__(display, context, "IncomingCall", app=app)
         self._explicit_voip_manager = voip_manager
+        self._actions = actions
         self.caller_address = caller_address
         self.caller_name = caller_name
         self.ring_animation_frame = 0
@@ -114,6 +117,9 @@ class IncomingCallScreen(Screen):
     def _answer_call(self) -> None:
         """Answer the incoming call."""
         logger.info("Answering incoming call")
+        if self._actions is not None and self._actions.answer_call is not None:
+            if self._actions.answer_call():
+                return
         services = getattr(self.app, "services", None)
         if services is not None and hasattr(services, "call"):
             services.call("call", "answer", AnswerCommand())
@@ -124,6 +130,9 @@ class IncomingCallScreen(Screen):
     def _reject_call(self) -> None:
         """Reject the incoming call."""
         logger.info("Rejecting incoming call")
+        if self._actions is not None and self._actions.reject_call is not None:
+            if self._actions.reject_call():
+                return
         services = getattr(self.app, "services", None)
         if services is not None and hasattr(services, "call"):
             services.call("call", "reject", RejectCommand())

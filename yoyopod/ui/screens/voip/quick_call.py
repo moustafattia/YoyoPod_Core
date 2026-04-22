@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Any, Callable, Optional
 
 from yoyopod.ui.display import Display
 from yoyopod.ui.screens.base import Screen
@@ -60,6 +60,7 @@ class CallScreen(Screen):
         voip_manager: Optional["VoIPManager"] = None,
         people_directory: Optional["PeopleManager"] = None,
         call_history_store: Optional["CallHistoryStore"] = None,
+        contacts_provider: Callable[[], list["Contact"]] | None = None,
         *,
         app: Any | None = None,
     ) -> None:
@@ -67,6 +68,7 @@ class CallScreen(Screen):
         self._explicit_voip_manager = voip_manager
         self._explicit_people_directory = people_directory
         self._explicit_call_history_store = call_history_store
+        self._explicit_contacts_provider = contacts_provider
         self.people: list[TalkPerson] = []
         self.deck_cards: list[TalkDeckCard] = []
         self.selected_index = 0
@@ -136,10 +138,13 @@ class CallScreen(Screen):
     def _sorted_contacts(self) -> list["Contact"]:
         """Return contacts ordered for child-facing Talk access."""
 
-        if self.people_directory is None:
+        if self._explicit_contacts_provider is not None:
+            contacts = list(self._explicit_contacts_provider())
+        elif self.people_directory is not None:
+            contacts = list(self.people_directory.get_callable_contacts(gsm_enabled=False))
+        else:
             return []
 
-        contacts = list(self.people_directory.get_callable_contacts(gsm_enabled=False))
         favorites = [contact for contact in contacts if contact.favorite]
         others = [contact for contact in contacts if not contact.favorite]
         return (favorites + others)[: self._MAX_CONTACTS]

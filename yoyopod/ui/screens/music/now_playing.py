@@ -47,6 +47,16 @@ class NowPlayingState:
 
 
 @dataclass(frozen=True, slots=True)
+class NowPlayingSnapshot:
+    """Read-only playback snapshot used to build the now-playing view state."""
+
+    is_connected: bool
+    track: Any | None = None
+    playback_state: str = "stopped"
+    time_position: float = 0.0
+
+
+@dataclass(frozen=True, slots=True)
 class NowPlayingActions:
     """Focused playback actions exposed to the now-playing screen."""
 
@@ -60,6 +70,7 @@ def build_now_playing_state_provider(
     app: Any | None = None,
     context: "AppContext | None" = None,
     music_backend: "MusicBackend | None" = None,
+    snapshot_provider: Callable[[], NowPlayingSnapshot] | None = None,
 ) -> Callable[[], NowPlayingState]:
     """Build a narrow prepared-state provider for the now-playing screen."""
 
@@ -69,6 +80,44 @@ def build_now_playing_state_provider(
     )
 
     def provider() -> NowPlayingState:
+        if snapshot_provider is not None:
+            snapshot = snapshot_provider()
+            if not snapshot.is_connected:
+                return NowPlayingState(
+                    title="Music Offline",
+                    artist="Trying to reconnect",
+                    progress=0.0,
+                    state_label="OFFLINE",
+                    is_playing=False,
+                )
+
+            current_track = snapshot.track
+            playback_state = snapshot.playback_state
+            if current_track is not None:
+                progress = 0.0
+                if current_track.length > 0:
+                    progress = snapshot.time_position / current_track.length
+                state_label = (
+                    "PLAYING"
+                    if playback_state == "playing"
+                    else "PAUSED" if playback_state == "paused" else "READY"
+                )
+                return NowPlayingState(
+                    title=current_track.name,
+                    artist=current_track.get_artist_string() or "Unknown artist",
+                    progress=progress,
+                    state_label=state_label,
+                    is_playing=playback_state == "playing",
+                )
+
+            return NowPlayingState(
+                title="No Track Yet",
+                artist="Pick local music to begin",
+                progress=0.0,
+                state_label="READY",
+                is_playing=False,
+            )
+
         if resolved_music_backend is not None:
             if not resolved_music_backend.is_connected:
                 return NowPlayingState(
@@ -140,6 +189,9 @@ def build_now_playing_actions(
     app: Any | None = None,
     context: "AppContext | None" = None,
     music_backend: "MusicBackend | None" = None,
+    toggle_playback_action: Callable[[], None] | None = None,
+    previous_track_action: Callable[[], None] | None = None,
+    next_track_action: Callable[[], None] | None = None,
 ) -> NowPlayingActions:
     """Build the focused playback actions for the now-playing screen."""
 
@@ -149,6 +201,9 @@ def build_now_playing_actions(
     )
 
     def toggle_playback() -> None:
+        if toggle_playback_action is not None:
+            toggle_playback_action()
+            return
         services = getattr(app, "services", None)
         states = getattr(app, "states", None)
         if services is not None and hasattr(services, "call") and states is not None:
@@ -177,6 +232,9 @@ def build_now_playing_actions(
             resolved_context.toggle_playback()
 
     def previous_track() -> None:
+        if previous_track_action is not None:
+            previous_track_action()
+            return
         services = getattr(app, "services", None)
         if services is not None and hasattr(services, "call"):
             try:
@@ -197,6 +255,9 @@ def build_now_playing_actions(
             resolved_context.previous_track()
 
     def next_track() -> None:
+        if next_track_action is not None:
+            next_track_action()
+            return
         services = getattr(app, "services", None)
         if services is not None and hasattr(services, "call"):
             try:

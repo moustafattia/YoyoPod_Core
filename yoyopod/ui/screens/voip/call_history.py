@@ -10,6 +10,7 @@ from yoyopod.integrations.call import DialCommand, MarkHistorySeenCommand
 from yoyopod.ui.display import Display
 from yoyopod.ui.screens.base import Screen
 from yoyopod.ui.screens.lvgl_lifecycle import current_retained_view
+from yoyopod.ui.screens.voip.call_actions import CallActions
 from yoyopod.ui.screens.voip.lvgl.call_history_view import LvglCallHistoryView
 
 if TYPE_CHECKING:
@@ -27,12 +28,14 @@ class CallHistoryScreen(Screen):
         context: Optional["AppContext"] = None,
         voip_manager=None,
         call_history_store: Optional["CallHistoryStore"] = None,
+        actions: CallActions | None = None,
         *,
         app: Any | None = None,
     ) -> None:
         super().__init__(display, context, "CallHistory", app=app)
         self._explicit_voip_manager = voip_manager
         self._explicit_call_history_store = call_history_store
+        self._actions = actions
         self.entries: list["CallHistoryEntry"] = []
         self.selected_index = 0
         self.scroll_offset = 0
@@ -211,6 +214,11 @@ class CallHistoryScreen(Screen):
             return
 
         logger.info(f"Redialing recent contact: {selected.title} ({selected.sip_address})")
+        if self._actions is not None and self._actions.make_call is not None:
+            if self._actions.make_call(selected.sip_address, selected.display_name):
+                return
+            logger.error(f"Failed to redial recent contact: {selected.title}")
+            return
         services = getattr(self.app, "services", None)
         if services is not None and hasattr(services, "call"):
             if services.call(

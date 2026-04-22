@@ -10,6 +10,7 @@ from yoyopod.integrations.call import HangupCommand
 from yoyopod.ui.display import Display
 from yoyopod.ui.screens.base import Screen
 from yoyopod.ui.screens.lvgl_lifecycle import current_retained_view
+from yoyopod.ui.screens.voip.call_actions import CallActions
 from yoyopod.ui.screens.voip.lvgl import LvglOutgoingCallView
 
 if TYPE_CHECKING:
@@ -27,11 +28,13 @@ class OutgoingCallScreen(Screen):
         voip_manager=None,
         callee_address: str = "",
         callee_name: str = "Unknown",
+        actions: CallActions | None = None,
         *,
         app: Any | None = None,
     ) -> None:
         super().__init__(display, context, "OutgoingCall", app=app)
         self._explicit_voip_manager = voip_manager
+        self._actions = actions
         self.callee_address = callee_address
         self.callee_name = callee_name
         self.ring_animation_frame = 0
@@ -105,6 +108,9 @@ class OutgoingCallScreen(Screen):
     def _cancel_call(self) -> None:
         """Cancel the outgoing call."""
         logger.info("Canceling outgoing call")
+        if self._actions is not None and self._actions.hangup_call is not None:
+            if self._actions.hangup_call():
+                return
         services = getattr(self.app, "services", None)
         if services is not None and hasattr(services, "call"):
             services.call("call", "hangup", HangupCommand())
