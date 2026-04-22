@@ -1,4 +1,4 @@
-"""Centralized Loguru configuration and runtime logging helpers for YoyoPod."""
+"""Centralized Loguru configuration and runtime logging helpers for YoYoPod."""
 
 from __future__ import annotations
 
@@ -18,8 +18,8 @@ if TYPE_CHECKING:
 
 
 DEFAULT_SUBSYSTEM = "app"
-STARTUP_MARKER = "YoyoPod starting"
-SHUTDOWN_MARKER = "YoyoPod shutting down"
+STARTUP_MARKER = "YoYoPod starting"
+SHUTDOWN_MARKER = "YoYoPod shutting down"
 CONSOLE_FORMAT = (
     "<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> | "
     "<level>{level:<8}</level> | "
@@ -159,7 +159,7 @@ def init_logger(
     announce: bool = True,
 ) -> LoggingRuntimeConfig:
     """
-    Initialize Loguru for the YoyoPod application.
+    Initialize Loguru for the YoYoPod application.
 
     Args:
         config: Fully resolved runtime logging configuration.

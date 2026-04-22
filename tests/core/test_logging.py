@@ -1,4 +1,4 @@
-"""Tests for the centralized YoyoPod logging helpers."""
+"""Tests for the centralized YoYoPod logging helpers."""
 
 from __future__ import annotations
 

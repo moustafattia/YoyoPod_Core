@@ -1,6 +1,6 @@
 # Cloud Provisioning, Secure Backend Connection, And MQTT Telemetry
 
-This document is the device/runtime-side reference for how YoyoPod talks to the backend.
+This document is the device/runtime-side reference for how YoYoPod talks to the backend.
 
 It covers:
 
@@ -71,7 +71,7 @@ core bootstrap
 
 Current cloud config model is defined in:
 
-- [yoyopod/config/models.py](/home/raouf/YoyoPod_Core/yoyopod/config/models.py)
+- [yoyopod/config/models.py](/home/raouf/yoyopod-core/yoyopod/config/models.py)
 
 Tracked backend settings include:
 
@@ -273,7 +273,7 @@ The safest claim is what is definitely wired today.
 
 Battery telemetry is currently wired through:
 
-- [yoyopod/integrations/power/coordinator.py](/home/raouf/YoyoPod_Core/yoyopod/integrations/power/coordinator.py)
+- [yoyopod/integrations/power/coordinator.py](/home/raouf/yoyopod-core/yoyopod/integrations/power/coordinator.py)
 
 When power snapshots update:
 
@@ -303,7 +303,7 @@ The runtime tells `CloudManager` when backend/network connectivity changes:
 
 Relevant references:
 
-- [yoyopod/app.py](/home/raouf/YoyoPod_Core/yoyopod/app.py)
+- [yoyopod/app.py](/home/raouf/yoyopod-core/yoyopod/app.py)
 
 ## 11. Current Device-Side Gaps Relative To Backend Expectations
 
@@ -362,7 +362,7 @@ The interaction chain is:
 
 - `yoyo_dash` updates backend state over HTTPS
 - `yoyo_end` stores config, commands, messages, and notifications
-- `YoyoPod_Core` authenticates to `yoyo_end`, pulls config, and publishes telemetry
+- `yoyopod-core` authenticates to `yoyo_end`, pulls config, and publishes telemetry
 
 The dashboard then reads stored backend state back over REST.
 

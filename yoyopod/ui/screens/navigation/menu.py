@@ -55,7 +55,7 @@ class MenuScreen(Screen):
             self.display,
             self.context,
             mode=selected_mode,
-            title="YoyoPod",
+            title="YoYoPod",
             subtitle="Pick a mode for this adventure.",
             icon=selected_icon,
             show_time=False,

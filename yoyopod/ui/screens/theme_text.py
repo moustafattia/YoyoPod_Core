@@ -1,4 +1,4 @@
-"""Shared text and color helpers for YoyoPod themes."""
+"""Shared text and color helpers for YoYoPod themes."""
 
 from __future__ import annotations
 

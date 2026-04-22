@@ -92,7 +92,7 @@ def main() -> int:
                 )
             )
 
-        app_log.info("Initializing YoyoPod...")
+        app_log.info("Initializing YoYoPod...")
         app = YoyoPodApp(config_dir="config", simulate=simulate)
 
         if not app.setup():
@@ -106,7 +106,7 @@ def main() -> int:
             "\n".join(
                 (
                     "=" * 60,
-                    "YoyoPod Ready!",
+                    "YoYoPod Ready!",
                     "=" * 60,
                     "",
                     "Available Features:",
@@ -220,7 +220,7 @@ def main() -> int:
         except KeyboardInterrupt:
             app_log.info("Shutdown requested by signal or keyboard interrupt")
         except Exception:
-            logger.exception("Unhandled exception escaped the YoyoPod main loop")
+            logger.exception("Unhandled exception escaped the YoYoPod main loop")
             exit_code = 1
         finally:
             signal.signal(signal.SIGTERM, previous_sigterm)

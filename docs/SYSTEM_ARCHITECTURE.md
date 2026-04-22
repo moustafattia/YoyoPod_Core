@@ -1,4 +1,4 @@
-# YoyoPod System Architecture
+# YoYoPod System Architecture
 
 **Last updated:** 2026-04-22
 **Status:** Current implementation
@@ -8,7 +8,7 @@ rewrite.
 
 ## Overview
 
-YoyoPod runs as a single Python application that coordinates:
+YoYoPod runs as a single Python application that coordinates:
 
 - display rendering
 - semantic input handling
@@ -73,7 +73,7 @@ This is the startup sequence that exists on `main` today.
       - creates the `Display` facade using the configured or auto-detected hardware mode
       - treats non-simulated Whisplay as a strict LVGL production path and fails startup if that contract cannot be met
       - initializes the LVGL backend when the selected adapter supports it
-      - renders the initial `YoyoPod Starting...` splash
+      - renders the initial `YoYoPod Starting...` splash
       - creates `AppContext`
       - seeds voice and VoIP-ready status in shared runtime state
       - constructs the canonical music and call-session seams from `yoyopod.integrations.music` and `yoyopod.integrations.call`

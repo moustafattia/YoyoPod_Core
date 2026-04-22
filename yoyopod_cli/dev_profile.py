@@ -12,7 +12,7 @@ from yoyopod_cli.paths import HOST
 
 app = typer.Typer(
     name="profile",
-    help="Bounded profiling helpers for YoyoPod.",
+    help="Bounded profiling helpers for YoYoPod.",
     no_args_is_help=True,
 )
 

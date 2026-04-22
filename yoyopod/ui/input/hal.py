@@ -1,5 +1,5 @@
 """
-Input Hardware Abstraction Layer (HAL) for YoyoPod.
+Input Hardware Abstraction Layer (HAL) for YoYoPod.
 
 Defines the abstract interface for all input adapters and semantic input actions.
 """

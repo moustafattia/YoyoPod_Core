@@ -1,11 +1,11 @@
-# YoyoPod Global Audio Device Facade Contract
+# YoYoPod Global Audio Device Facade Contract
 
 **Last Updated:** 2026-04-10
 **Status:** Proposed
 
 ## Problem Statement
 
-YoyoPod currently reaches ALSA and device selection through multiple partially overlapping paths:
+YoYoPod currently reaches ALSA and device selection through multiple partially overlapping paths:
 
 - music playback uses `media_audio.alsa_device` plus `OutputVolumeController`
 - Liblinphone receives its own playback, ringer, capture, and media device IDs
@@ -54,7 +54,7 @@ The effect is that one physical audio stack is managed by several different poli
 
 ### 1. The application owns one resolved audio hardware profile
 
-At startup, YoyoPod must resolve one effective audio hardware profile for the app run.
+At startup, YoYoPod must resolve one effective audio hardware profile for the app run.
 
 That profile should include:
 

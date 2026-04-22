@@ -1,5 +1,5 @@
 """
-Keyboard input adapter for YoyoPod simulation mode.
+Keyboard input adapter for YoYoPod simulation mode.
 
 Provides keyboard input support using the pynput library for global
 keyboard event capture. Works in both focused terminal and background.
@@ -10,7 +10,7 @@ Keyboard mapping:
 - Up Arrow / K → UP
 - Down Arrow / J → DOWN
 
-Author: YoyoPod Team
+Author: YoYoPod Team
 Date: 2025-11-30
 """
 
@@ -34,7 +34,7 @@ class KeyboardInputAdapter(InputHAL):
     Keyboard input adapter for simulation mode.
 
     Captures keyboard events globally using pynput and maps them to
-    semantic InputAction events. Allows control of YoyoPod from keyboard
+    semantic InputAction events. Allows control of YoYoPod from keyboard
     during simulation mode.
 
     Keyboard Mapping:

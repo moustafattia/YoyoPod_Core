@@ -1,6 +1,6 @@
-# YoyoPod Core
+# YoYoPod Core
 
-YoyoPod is an iPod-inspired Raspberry Pi application that combines SIP calling, local-first music playback, and a small-screen button UI.
+YoYoPod is an iPod-inspired Raspberry Pi application that combines SIP calling, local-first music playback, and a small-screen button UI.
 
 Current product surface:
 - `Listen` - local-only music with `Playlists`, `Recent`, and `Shuffle`
@@ -25,7 +25,7 @@ Supported display/input modes:
 ## Call And Music Contract
 
 - Incoming and outgoing call setup both pause local music once when playback is actively running.
-- Missed, rejected, failed, cancelled, and completed call teardown only auto-resume music when YoyoPod paused it for that call and `auto_resume_after_call` is enabled.
+- Missed, rejected, failed, cancelled, and completed call teardown only auto-resume music when YoYoPod paused it for that call and `auto_resume_after_call` is enabled.
 - Calls that start while music is already paused or idle leave playback unchanged.
 - Playback FSM state only flips after the pause or resume command succeeds, so navigation after the call keeps the visible playback truth aligned with the backend.
 

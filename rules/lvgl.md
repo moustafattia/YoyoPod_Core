@@ -44,7 +44,7 @@ cffi ABI-mode wrapper. Mirrors the C shim API 1:1. Key patterns:
 
 ## lv_conf.h
 
-Minimal config enabling only what YoyoPod uses:
+Minimal config enabling only what YoYoPod uses:
 - `LV_COLOR_DEPTH 16` (RGB565)
 - `LV_USE_SNAPSHOT 1` (for screenshot readback)
 - Montserrat fonts 12-40

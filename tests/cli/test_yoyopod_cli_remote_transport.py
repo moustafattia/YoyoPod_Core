@@ -19,7 +19,7 @@ def test_shell_quote_escapes() -> None:
 
 def test_quote_remote_project_dir_tilde() -> None:
     assert quote_remote_project_dir("~") == '"$HOME"'
-    assert quote_remote_project_dir("~/YoyoPod_Core") == '"$HOME/YoyoPod_Core"'
+    assert quote_remote_project_dir("~/yoyopod-core") == '"$HOME/yoyopod-core"'
 
 
 def test_quote_remote_project_dir_absolute() -> None:
@@ -33,7 +33,7 @@ def test_quote_remote_project_dir_escapes_shell_metacharacters() -> None:
 
 
 def test_build_ssh_command_without_tty() -> None:
-    conn = RemoteConnection(host="rpi-zero", user="pi", project_dir="~/YoyoPod_Core", branch="main")
+    conn = RemoteConnection(host="rpi-zero", user="pi", project_dir="~/yoyopod-core", branch="main")
     parts = build_ssh_command(conn, "ls")
     assert len(parts) == 3
     assert parts[0] == "ssh"
@@ -41,7 +41,7 @@ def test_build_ssh_command_without_tty() -> None:
     # parts[2] is the single quoted bash -lc argument
     assert parts[2].startswith("bash -lc ")
     # verify the cd wrapper is inside
-    assert '"$HOME/YoyoPod_Core"' in parts[2]
+    assert '"$HOME/yoyopod-core"' in parts[2]
     assert "&& ls" in parts[2]
 
 
@@ -56,11 +56,11 @@ def test_build_ssh_command_with_tty() -> None:
 
 
 def test_validate_config_raises_on_empty_host() -> None:
-    conn = RemoteConnection(host="", user="pi", project_dir="~/YoyoPod_Core", branch="main")
+    conn = RemoteConnection(host="", user="pi", project_dir="~/yoyopod-core", branch="main")
     with pytest.raises(SystemExit, match="Missing Raspberry Pi host"):
         validate_config(conn)
 
 
 def test_validate_config_accepts_non_empty_host() -> None:
-    conn = RemoteConnection(host="rpi-zero", user="pi", project_dir="~/YoyoPod_Core", branch="main")
+    conn = RemoteConnection(host="rpi-zero", user="pi", project_dir="~/yoyopod-core", branch="main")
     validate_config(conn)  # should not raise

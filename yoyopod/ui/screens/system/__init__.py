@@ -1,4 +1,4 @@
-"""System and device-status screens for YoyoPod."""
+"""System and device-status screens for YoYoPod."""
 
 from __future__ import annotations
 

@@ -1,4 +1,4 @@
-"""Live music-runtime orchestration for YoyoPod."""
+"""Live music-runtime orchestration for YoYoPod."""
 
 from __future__ import annotations
 

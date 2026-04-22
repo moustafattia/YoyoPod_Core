@@ -1,4 +1,4 @@
-# YoyoPod Input HAL Architecture
+# YoYoPod Input HAL Architecture
 
 **Last updated:** 2026-04-15
 **Status:** Implemented

@@ -1,7 +1,7 @@
 # LVGL CPython Migration Plan
 
 **Last Updated:** 2026-04-05
-**Scope:** Whisplay-first LVGL migration for the CPython YoyoPod runtime
+**Scope:** Whisplay-first LVGL migration for the CPython YoYoPod runtime
 **Status:** Historical migration record, partly completed
 
 > Current note: the supported runtime is now LVGL-only for Whisplay hardware, Pimoroni/ST7789 hardware, and simulation. References below to PIL, mixed-renderer migration stages, or old target splits are historical context, not the current product contract. For current implementation details, trust `AGENTS.md`, `docs/SYSTEM_ARCHITECTURE.md`, and the code under `yoyopod/ui/lvgl_binding/`.

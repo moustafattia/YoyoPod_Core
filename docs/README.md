@@ -1,4 +1,4 @@
-# YoyoPod Core Documentation Guide
+# YoYoPod Core Documentation Guide
 
 This page is the entry point for the repo docs.
 

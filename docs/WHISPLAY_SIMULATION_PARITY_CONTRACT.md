@@ -1,4 +1,4 @@
-# YoyoPod Whisplay / Simulation Parity Contract
+# YoYoPod Whisplay / Simulation Parity Contract
 
 **Last Updated:** 2026-04-22
 **Status:** Implemented contract

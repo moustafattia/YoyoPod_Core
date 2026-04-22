@@ -236,4 +236,4 @@ def test_display_check_keeps_immediate_draw_path_without_ui_backend(monkeypatch)
 
     assert result.status == "pass"
     assert "backend=pil" in result.details
-    assert draw_calls == ["clear", "YoyoPod Pi smoke", "Display OK", "update"]
+    assert draw_calls == ["clear", "YoYoPod Pi smoke", "Display OK", "update"]

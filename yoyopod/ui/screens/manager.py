@@ -1,5 +1,5 @@
 """
-Screen management and navigation for YoyoPod.
+Screen management and navigation for YoYoPod.
 
 Handles screen transitions, route resolution, and the navigation stack.
 """

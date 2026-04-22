@@ -1,4 +1,4 @@
-"""Canonical config composition for YoyoPod."""
+"""Canonical config composition for YoYoPod."""
 
 from yoyopod.config.composition import load_composed_app_settings
 from yoyopod.config.manager import ConfigManager

@@ -693,7 +693,7 @@ class RuntimeLoopService:
         """Emit the current runtime snapshot before entering the main loop."""
         assert self.app.app_state_runtime is not None
         logger.info("=" * 60)
-        logger.info("YoyoPod Running")
+        logger.info("YoYoPod Running")
         logger.info("=" * 60)
         logger.info("")
         logger.info("Coordinator Status:")

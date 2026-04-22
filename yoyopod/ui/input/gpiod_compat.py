@@ -1,5 +1,5 @@
 """
-gpiod API compatibility layer for the Python bindings used by YoyoPod.
+gpiod API compatibility layer for the Python bindings used by YoYoPod.
 
 The project targets the historical Python gpiod layouts that expose
 ``chip()/line_request`` or ``Chip()/LINE_REQ_*`` with line-level requests.

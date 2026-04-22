@@ -31,7 +31,7 @@ class ConfigBoot:
         self.audio_device_catalog_cls = audio_device_catalog_cls
 
     def load_configuration(self) -> bool:
-        """Load YoyoPod configuration."""
+        """Load YoYoPod configuration."""
         self.logger.info("Loading configuration...")
 
         try:

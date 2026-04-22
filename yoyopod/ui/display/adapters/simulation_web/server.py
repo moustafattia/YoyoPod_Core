@@ -1,5 +1,5 @@
 """
-Web server for YoyoPod simulation mode.
+Web server for YoYoPod simulation mode.
 
 Provides a Flask + SocketIO web server that serves the simulation UI and handles
 real-time display updates and input events.
@@ -44,10 +44,10 @@ def _load_dependencies() -> dict[str, Any]:
 
 class SimulationWebServer:
     """
-    Web server for YoyoPod simulation mode.
+    Web server for YoYoPod simulation mode.
 
     Manages a Flask + SocketIO server that provides:
-    - HTML5 Canvas display of YoyoPod screen
+    - HTML5 Canvas display of YoYoPod screen
     - Real-time WebSocket updates for display
     - Web button controls for input
     - Keyboard event forwarding
@@ -110,7 +110,7 @@ class SimulationWebServer:
             return (
                 {
                     "status": "running",
-                    "server": "YoyoPod Simulation",
+                    "server": "YoYoPod Simulation",
                     "display": "ready",
                 },
                 200,

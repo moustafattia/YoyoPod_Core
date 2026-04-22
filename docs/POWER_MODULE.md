@@ -1,6 +1,6 @@
 # Power Module
 
-This document is the dedicated source of truth for YoyoPod's PiSugar-backed power subsystem.
+This document is the dedicated source of truth for YoYoPod's PiSugar-backed power subsystem.
 
 Current target hardware:
 - Raspberry Pi Zero 2W
@@ -248,7 +248,7 @@ Required system package:
 - `i2c-tools`
 
 Important expectation:
-- YoyoPod should be started by `systemd` on boot when watchdog mode is used
+- YoYoPod should be started by `systemd` on boot when watchdog mode is used
 
 Current production unit:
 - `deploy/systemd/yoyopod@.service`

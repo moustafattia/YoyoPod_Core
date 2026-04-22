@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Repo-owned profiling helpers for bounded YoyoPod investigations."""
+"""Repo-owned profiling helpers for bounded YoYoPod investigations."""
 
 from __future__ import annotations
 
@@ -298,7 +298,7 @@ def _handle_pyperf(args: argparse.Namespace) -> int:
 def build_parser() -> argparse.ArgumentParser:
     """Create the profiling command parser."""
 
-    parser = argparse.ArgumentParser(description="Run repo-owned YoyoPod profiling helpers.")
+    parser = argparse.ArgumentParser(description="Run repo-owned YoYoPod profiling helpers.")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     list_targets_parser = subparsers.add_parser(

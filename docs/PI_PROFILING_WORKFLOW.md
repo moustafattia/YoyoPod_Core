@@ -1,6 +1,6 @@
 # Raspberry Pi Profiling Workflow
 
-This guide is the repo-owned profiling path for YoyoPod performance and
+This guide is the repo-owned profiling path for YoYoPod performance and
 runtime investigations.
 
 Use it when you want to answer questions like:
@@ -35,7 +35,7 @@ The Linux `perf` tool is still a system package, not a Python dependency.
 ## 2. Start with the repo's own target diagnostics
 
 Before reaching for external profilers, run the normal target validation flow.
-YoyoPod already emits the most important coordinator-loop timing signals:
+YoYoPod already emits the most important coordinator-loop timing signals:
 
 - `Runtime loop blocked`
 - `Coordinator blocking span`
@@ -130,7 +130,7 @@ After `yoyopod remote validate` leaves the app running on the board:
 
 ```bash
 ssh <pi-host>
-cd ~/YoyoPod_Core
+cd ~/yoyopod-core
 source .venv/bin/activate
 mkdir -p logs/profiles
 py-spy record -o logs/profiles/pyspy.svg --pid "$(cat /tmp/yoyopod.pid)"
@@ -154,7 +154,7 @@ Notes:
 
 ## 5. Use Linux `perf` when native code or scheduler behavior looks suspicious
 
-`perf` matters here because YoyoPod crosses Python, mpv, Liblinphone, display
+`perf` matters here because YoYoPod crosses Python, mpv, Liblinphone, display
 drivers, and kernel scheduling.
 
 For a live process:

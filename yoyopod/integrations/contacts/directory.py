@@ -16,7 +16,7 @@ from yoyopod.integrations.contacts.models import (
 
 
 class PeopleManager:
-    """Load, bootstrap, query, and persist the mutable YoyoPod address book."""
+    """Load, bootstrap, query, and persist the mutable YoYoPod address book."""
 
     def __init__(
         self,

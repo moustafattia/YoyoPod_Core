@@ -1,4 +1,4 @@
-# YoyoPod VoIP + Local Music Integration Record
+# YoYoPod VoIP + Local Music Integration Record
 
 **Last updated:** 2026-04-07
 **Status:** Historical implementation record, implemented on `main`

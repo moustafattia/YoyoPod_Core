@@ -1,5 +1,5 @@
 """
-Display HAL for YoyoPod.
+Display HAL for YoYoPod.
 
 Provides hardware abstraction for the LVGL-backed display runtime:
 - PiSugar Whisplay HAT (240×280 portrait)

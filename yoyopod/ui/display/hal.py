@@ -1,11 +1,11 @@
 """
-Hardware Abstraction Layer (HAL) for YoyoPod display subsystem.
+Hardware Abstraction Layer (HAL) for YoYoPod display subsystem.
 
 This module defines the abstract interface that all display hardware
 adapters must implement, enabling support for multiple display types
 (Whisplay hardware, Pimoroni/ST7789 hardware, and simulation) with a unified API.
 
-Author: YoyoPod Team
+Author: YoYoPod Team
 Date: 2025-11-30
 """
 

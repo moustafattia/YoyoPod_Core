@@ -1,11 +1,11 @@
-# YoyoPod Audio Stack
+# YoYoPod Audio Stack
 
 **Last Verified:** 2026-04-08
 **Verified Against:** `origin/main` plus live `rpi-zero` runtime
 
 ## Overview
 
-YoyoPod now uses an app-managed `mpv` process for music playback and Liblinphone for call audio.
+YoYoPod now uses an app-managed `mpv` process for music playback and Liblinphone for call audio.
 
 For music playback, the runtime path is:
 
@@ -162,7 +162,7 @@ Verified live on `rpi-zero`:
 So the effective music loudness comes from:
 
 ```text
-YoyoPod shared volume
+YoYoPod shared volume
   -> ALSA mixer controls
   -> mpv volume property
   -> WM8960 analog output stage
@@ -186,7 +186,7 @@ mpv
   -> speaker / headphone analog output
 ```
 
-There is also HDMI audio on card 1, but the current YoyoPod music runtime is using the WM8960 path, not HDMI.
+There is also HDMI audio on card 1, but the current YoYoPod music runtime is using the WM8960 path, not HDMI.
 
 ## Call Audio Relationship
 
@@ -212,7 +212,7 @@ They are separate software paths that meet at the same codec/hardware.
 - There is no Mopidy or GStreamer dependency in the current production music path.
 - `mpv` is spawned by the app and dies with the app.
 - If music works but is quiet, check both:
-  - YoyoPod shared volume
+  - YoYoPod shared volume
   - ALSA `Speaker` / `Headphone` mixer levels
 - If `Now Playing` is wrong, the most relevant layers are:
   - `LocalMusicService`

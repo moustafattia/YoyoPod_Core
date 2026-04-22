@@ -14,7 +14,7 @@ That branch note is preserved for context only.
 
 ## Goal
 
-Implement local voice commands and spoken feedback for YoyoPod with:
+Implement local voice commands and spoken feedback for YoYoPod with:
 
 - `vosk` small for offline STT
 - `espeak-ng` for offline TTS

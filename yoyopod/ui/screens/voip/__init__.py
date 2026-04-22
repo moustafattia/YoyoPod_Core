@@ -1,4 +1,4 @@
-"""VoIP screens for YoyoPod."""
+"""VoIP screens for YoYoPod."""
 
 from __future__ import annotations
 

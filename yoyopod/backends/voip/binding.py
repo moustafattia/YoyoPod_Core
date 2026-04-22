@@ -1,4 +1,4 @@
-"""Low-level cffi binding for the native YoyoPod Liblinphone shim."""
+"""Low-level cffi binding for the native YoYoPod Liblinphone shim."""
 
 from __future__ import annotations
 

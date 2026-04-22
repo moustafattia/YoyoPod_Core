@@ -15,7 +15,7 @@ class CommunicationAccountConfig:
     sip_username: str = config_value(default="", env="YOYOPOD_SIP_USERNAME")
     sip_identity: str = config_value(default="", env="YOYOPOD_SIP_IDENTITY")
     transport: str = config_value(default="tcp", env="YOYOPOD_SIP_TRANSPORT")
-    display_name: str = "YoyoPod"
+    display_name: str = "YoYoPod"
 
 
 @dataclass(slots=True)

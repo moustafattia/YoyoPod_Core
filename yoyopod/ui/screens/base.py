@@ -1,5 +1,5 @@
 """
-Screen management for YoyoPod UI.
+Screen management for YoYoPod UI.
 
 Provides base Screen class and concrete screen implementations
 for different application states.

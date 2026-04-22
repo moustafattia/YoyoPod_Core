@@ -1,4 +1,4 @@
-"""Canonical application object for YoyoPod."""
+"""Canonical application object for YoYoPod."""
 
 from __future__ import annotations
 
@@ -227,7 +227,7 @@ class YoyoPodApp:
         self.event_subscriptions.register()
 
         logger.info("=" * 60)
-        logger.info("YoyoPod Application Initializing")
+        logger.info("YoYoPod Application Initializing")
         logger.info("=" * 60)
 
     @property

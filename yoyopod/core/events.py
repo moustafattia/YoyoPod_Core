@@ -1,4 +1,4 @@
-"""Typed application events for YoyoPod orchestration and scaffold work."""
+"""Typed application events for YoYoPod orchestration and scaffold work."""
 
 from __future__ import annotations
 

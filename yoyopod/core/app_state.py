@@ -1,4 +1,4 @@
-"""Shared derived app state for YoyoPod."""
+"""Shared derived app state for YoYoPod."""
 
 from __future__ import annotations
 

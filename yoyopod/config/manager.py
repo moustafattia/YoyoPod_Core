@@ -1,4 +1,4 @@
-"""Canonical config composition for YoyoPod."""
+"""Canonical config composition for YoYoPod."""
 
 from __future__ import annotations
 

@@ -1,5 +1,5 @@
 """
-Declarative screen routing for YoyoPod.
+Declarative screen routing for YoYoPod.
 """
 
 from __future__ import annotations
@@ -62,7 +62,7 @@ class ScreenRouter:
         return None
 
     def _default_routes(self) -> Dict[str, Dict[str, NavigationRequest]]:
-        """Return the default route map for current YoyoPod screens."""
+        """Return the default route map for current YoYoPod screens."""
         return {
             "hub": {
                 "select:Listen": NavigationRequest.push("listen"),

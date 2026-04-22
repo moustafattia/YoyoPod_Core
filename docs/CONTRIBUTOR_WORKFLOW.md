@@ -1,6 +1,6 @@
 # Contributor Workflow
 
-This guide is the shortest path from fresh checkout to a credible YoyoPod contribution.
+This guide is the shortest path from fresh checkout to a credible YoYoPod contribution.
 
 It is not a full architecture document and it is not a board bringup manual.
 
@@ -146,7 +146,7 @@ If your change is outside the currently gated surface, say so plainly in the PR 
 
 ## What a good PR looks like here
 
-A good YoyoPod PR:
+A good YoYoPod PR:
 
 - stays within one coherent problem slice
 - updates docs when the contract changes

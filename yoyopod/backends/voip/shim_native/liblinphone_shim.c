@@ -1455,7 +1455,7 @@ static LinphoneChatRoomParams *yoyopod_create_preferred_chat_room_params(void) {
     if (file_transfer_server[0] != '\0' || lime_server[0] != '\0') {
         linphone_chat_room_params_set_backend(params, LinphoneChatRoomBackendFlexisipChat);
 #if YOYOPOD_HAS_LINPHONE_ACCOUNT_API
-        linphone_chat_room_params_set_subject(params, "YoyoPod");
+        linphone_chat_room_params_set_subject(params, "YoYoPod");
 #endif
     }
     if (lime_server[0] != '\0') {

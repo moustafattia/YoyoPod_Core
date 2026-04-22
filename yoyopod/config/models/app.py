@@ -12,7 +12,7 @@ from yoyopod.config.models.power import PimoroniGpioConfig, PimoroniGpioInputCon
 class AppMetadataConfig:
     """Top-level application identity settings."""
 
-    name: str = "YoyoPod"
+    name: str = "YoYoPod"
     version: str = "1.0.0"
     simulate: bool = config_value(default=False, env="YOYOPOD_SIMULATE")
     device_id: str = config_value(default="", env="YOYOPOD_DEVICE_ID")

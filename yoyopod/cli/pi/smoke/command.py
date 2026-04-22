@@ -108,7 +108,7 @@ def smoke(
     ] = 0.5,
     verbose: Annotated[bool, typer.Option("--verbose", help="Enable DEBUG logging.")] = False,
 ) -> None:
-    """Run the legacy combined Raspberry Pi smoke validation flow for YoyoPod."""
+    """Run the legacy combined Raspberry Pi smoke validation flow for YoYoPod."""
     from loguru import logger
 
     configure_logging(verbose)

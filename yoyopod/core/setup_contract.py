@@ -1,4 +1,4 @@
-"""Shared setup and boot-time config contract for YoyoPod."""
+"""Shared setup and boot-time config contract for YoYoPod."""
 
 from __future__ import annotations
 

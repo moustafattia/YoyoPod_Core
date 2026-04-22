@@ -1,7 +1,7 @@
 # Ask Screen Design Specification
 
 **Status:** Design target for the unified `Ask` experience, not the standalone current implementation contract
-**Source:** Figma YoyoPod-Design, node `43:4677` (Ask section)
+**Source:** Figma YoYoPod-Design, node `43:4677` (Ask section)
 **Extracted:** 2026-04-10
 **Target:** 240x280 Whisplay portrait display
 **Rendering path:** LVGL-driven Ask scene in `yoyopod/ui/screens/navigation/ask/__init__.py`

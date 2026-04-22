@@ -10,7 +10,7 @@ The display system uses the following architecture:
 
 This allows the rest of the application to remain hardware-independent.
 
-Author: YoyoPod Team
+Author: YoYoPod Team
 Date: 2025-11-30
 """
 

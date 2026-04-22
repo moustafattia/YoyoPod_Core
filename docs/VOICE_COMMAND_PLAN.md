@@ -8,7 +8,7 @@
 
 ## Goal
 
-Add local voice commands and spoken device responses to YoyoPod using:
+Add local voice commands and spoken device responses to YoYoPod using:
 
 - `vosk` small model for offline speech-to-text
 - `espeak-ng` for offline text-to-speech

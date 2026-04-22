@@ -1,4 +1,4 @@
-"""Theme rendering primitives for YoyoPod screens.
+"""Theme rendering primitives for YoYoPod screens.
 
 Kept as a package to preserve the legacy import path while splitting internal
 concerns into focused submodules.

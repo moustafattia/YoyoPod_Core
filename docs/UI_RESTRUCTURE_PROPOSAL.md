@@ -1,4 +1,4 @@
-# YoyoPod UI Refactor Status
+# YoYoPod UI Refactor Status
 
 **Last updated:** 2026-04-02
 **Status:** Historical implementation record, mostly implemented

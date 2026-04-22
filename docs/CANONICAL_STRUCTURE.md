@@ -87,7 +87,7 @@ overlay shapes.
 
 ## Canonical Package Ownership
 
-YoyoPod uses a hybrid ownership model:
+YoYoPod uses a hybrid ownership model:
 
 - domain packages own domain behavior and models
 - app/runtime composition owns app wiring and lifecycle

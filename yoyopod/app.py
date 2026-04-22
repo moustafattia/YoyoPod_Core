@@ -1,4 +1,4 @@
-"""Thin compatibility surface for the canonical YoyoPod app object."""
+"""Thin compatibility surface for the canonical YoYoPod app object."""
 
 from yoyopod.core.application import YoyoPodApp
 

@@ -37,11 +37,11 @@ class HomeScreen(Screen):
         super().__init__(display, context, "Home", app=app)
 
     def render(self) -> None:
-        """Render the YoyoPod splash screen."""
+        """Render the YoYoPod splash screen."""
         render_backdrop(self.display, "setup")
         render_status_bar(self.display, self.context, show_time=False)
 
-        title = "YoyoPod"
+        title = "YoYoPod"
         subtitle = "Tiny talk. Big adventures."
         title_width, title_height = self.display.get_text_size(title, 30)
         self.display.text(

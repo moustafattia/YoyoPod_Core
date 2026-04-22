@@ -103,7 +103,7 @@ class RuntimeBootService:
             self.app.shutdown_service.register_power_shutdown_hooks()
             self.app.power_runtime.poll_status(force=True, now=time.monotonic())
 
-            logger.info("YoyoPod setup complete")
+            logger.info("YoYoPod setup complete")
             return True
         except Exception:
             logger.exception("Setup failed")

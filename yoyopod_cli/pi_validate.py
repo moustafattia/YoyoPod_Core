@@ -55,7 +55,7 @@ class _CheckResult:
 def _print_summary(name: str, results: list[_CheckResult]) -> None:
     """Print a compact summary table for one validation command."""
     print("")
-    print(f"YoyoPod target validation summary: {name}")
+    print(f"YoYoPod target validation summary: {name}")
     print("=" * 48)
     for result in results:
         print(f"[{result.status.upper():4}] {result.name}: {result.details}")
@@ -322,7 +322,7 @@ def _display_check(
             _render_lvgl_probe(display, ui_backend)
         else:
             display.clear(display.COLOR_BLACK)
-            display.text("YoyoPod Pi smoke", 10, 40, color=display.COLOR_WHITE, font_size=18)
+            display.text("YoYoPod Pi smoke", 10, 40, color=display.COLOR_WHITE, font_size=18)
             display.text("Display OK", 10, 75, color=display.COLOR_GREEN, font_size=18)
             display.update()
 
@@ -1994,7 +1994,7 @@ def lvgl(
     ] = False,
     verbose: Annotated[bool, typer.Option("--verbose", help="Enable DEBUG logging.")] = False,
 ) -> None:
-    """Run a deterministic LVGL navigation and idle soak pass against YoyoPod."""
+    """Run a deterministic LVGL navigation and idle soak pass against YoYoPod."""
     from loguru import logger
 
     configure_logging(verbose)

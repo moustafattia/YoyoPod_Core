@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Repository-root launcher for the top-level YoyoPod package."""
+"""Repository-root launcher for the top-level YoYoPod package."""
 
 from __future__ import annotations
 

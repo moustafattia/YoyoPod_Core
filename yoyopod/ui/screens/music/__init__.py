@@ -1,4 +1,4 @@
-"""Music screens for YoyoPod."""
+"""Music screens for YoYoPod."""
 
 from __future__ import annotations
 

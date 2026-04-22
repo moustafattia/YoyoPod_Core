@@ -1,4 +1,4 @@
-"""People-first Talk home screen for YoyoPod."""
+"""People-first Talk home screen for YoYoPod."""
 
 from __future__ import annotations
 

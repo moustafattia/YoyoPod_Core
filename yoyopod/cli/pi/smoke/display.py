@@ -51,7 +51,7 @@ def _display_check(
             binding.ask_build()
             binding.ask_sync(
                 icon_key="setup",
-                title_text="YoyoPod Pi smoke",
+                title_text="YoYoPod Pi smoke",
                 subtitle_text="Display OK",
                 footer="LVGL alive",
                 voip_state=0,

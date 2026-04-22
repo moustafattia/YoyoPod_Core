@@ -870,7 +870,7 @@ def test_liblinphone_shim_wires_incoming_message_debug_paths() -> None:
     assert (
         "linphone_core_enable_auto_download_voice_recordings(g_state.core, FALSE);" in shim_source
     )
-    assert 'linphone_chat_room_params_set_subject(params, "YoyoPod");' in shim_source
+    assert 'linphone_chat_room_params_set_subject(params, "YoYoPod");' in shim_source
     assert "linphone_core_delete_chat_room(g_state.core, chat_room);" in shim_source
     assert shim_source.count("chat_room = yoyopod_get_direct_chat_room(sip_address);") >= 2
 

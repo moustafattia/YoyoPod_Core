@@ -1,4 +1,4 @@
-"""Core orchestration primitives for YoyoPod."""
+"""Core orchestration primitives for YoYoPod."""
 
 from __future__ import annotations
 

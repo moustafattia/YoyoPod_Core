@@ -183,7 +183,7 @@ class ShutdownLifecycleService:
         if self.app._stopped:
             return
 
-        logger.info("Stopping YoyoPod...")
+        logger.info("Stopping YoYoPod...")
         self.app._stopping = True
 
         if disable_watchdog:
@@ -239,5 +239,5 @@ class ShutdownLifecycleService:
             time.sleep(1)
             self.app.display.cleanup()
 
-        logger.info("YoyoPod stopped")
+        logger.info("YoYoPod stopped")
         self.app._stopped = True

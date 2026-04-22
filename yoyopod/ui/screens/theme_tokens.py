@@ -1,4 +1,4 @@
-"""Shared theme tokens for YoyoPod screen rendering."""
+"""Shared theme tokens for YoYoPod screen rendering."""
 
 from __future__ import annotations
 

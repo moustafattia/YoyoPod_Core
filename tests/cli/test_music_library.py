@@ -15,7 +15,7 @@ from yoyopod_cli.music_fixtures import (
 def test_provision_test_music_library_writes_expected_assets(tmp_path: Path) -> None:
     """Provisioning should create the full known-good validation library."""
 
-    library = provision_test_music_library(tmp_path / "YoyoPod_Test_Music")
+    library = provision_test_music_library(tmp_path / "YoYoPod_Test_Music")
 
     expected_relative = set(expected_test_music_relative_paths())
     actual_relative = {
@@ -36,7 +36,7 @@ def test_provision_test_music_library_writes_expected_assets(tmp_path: Path) -> 
 def test_provision_test_music_library_replaces_managed_assets_only(tmp_path: Path) -> None:
     """Reprovisioning should refresh managed files without deleting unrelated ones."""
 
-    library = provision_test_music_library(tmp_path / "YoyoPod_Test_Music")
+    library = provision_test_music_library(tmp_path / "YoYoPod_Test_Music")
     extra_file = library.target_dir / "keep-me.txt"
     extra_file.write_text("user-media-stays\n", encoding="utf-8")
 

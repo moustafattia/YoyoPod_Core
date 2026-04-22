@@ -1,4 +1,4 @@
-# YoyoPod Display HAL Architecture
+# YoYoPod Display HAL Architecture
 
 **Last updated:** 2026-04-22
 **Status:** Current implementation

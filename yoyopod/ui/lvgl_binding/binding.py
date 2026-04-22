@@ -1,4 +1,4 @@
-"""Low-level cffi binding for the native YoyoPod LVGL shim."""
+"""Low-level cffi binding for the native YoYoPod LVGL shim."""
 
 from __future__ import annotations
 

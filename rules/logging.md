@@ -35,8 +35,8 @@ Written to `/tmp/yoyopod.pid` on startup, cleaned up via `atexit`. Used by `/yoy
 ## Startup/Shutdown Markers
 
 ```
-===== YoyoPod starting (version=X, pid=Y) =====
-===== YoyoPod shutting down (pid=Y) =====
+===== YoYoPod starting (version=X, pid=Y) =====
+===== YoYoPod shutting down (pid=Y) =====
 ```
 
 Used by deploy commands to verify the app started successfully.

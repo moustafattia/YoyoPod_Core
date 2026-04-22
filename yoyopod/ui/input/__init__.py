@@ -1,5 +1,5 @@
 """
-Input HAL for YoyoPod.
+Input HAL for YoYoPod.
 
 Provides hardware abstraction for various input methods:
 - PTT button (Whisplay HAT)

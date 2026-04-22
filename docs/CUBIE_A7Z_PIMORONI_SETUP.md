@@ -4,15 +4,15 @@
 > It is kept for board-history context only and is not part of the current
 > supported LVGL-only product runtime.
 
-This document covers the one-time board setup required to run YoyoPod with the Pimoroni Display HAT Mini (320x240, 4-button, RGB LED) on the Radxa Cubie A7Z.
+This document covers the one-time board setup required to run YoYoPod with the Pimoroni Display HAT Mini (320x240, 4-button, RGB LED) on the Radxa Cubie A7Z.
 
-The Pimoroni HAT was designed for the Raspberry Pi. On the Cubie, the Pi-specific `displayhatmini` library does not work. YoyoPod uses a custom driver that talks to the ST7789 display controller directly over `spidev` and reads buttons via `gpiod`.
+The Pimoroni HAT was designed for the Raspberry Pi. On the Cubie, the Pi-specific `displayhatmini` library does not work. YoYoPod uses a custom driver that talks to the ST7789 display controller directly over `spidev` and reads buttons via `gpiod`.
 
 ## Prerequisites
 
 - Radxa Cubie A7Z with Debian Bullseye and vendor BSP kernel `5.15.147-18-a733`
 - SPI1 enabled via `sun60iw2p1-spi1-spidev.dtbo` overlay (see `docs/CUBIE_A7Z_BRINGUP.md`)
-- YoyoPod project deployed at `~/YoyoPod_Core` with Python 3.12 venv
+- YoYoPod project deployed at `~/yoyopod-core` with Python 3.12 venv
 - `dtc` (device tree compiler) installed: `sudo apt install device-tree-compiler`
 
 ## Pin Mapping
@@ -196,7 +196,7 @@ sudo systemctl disable disable-i2s0.service
 sudo reboot
 ```
 
-## Step 3: Configure YoyoPod
+## Step 3: Configure YoYoPod
 
 The GPIO pin mapping is already configured in the tracked board overlays under
 `config/boards/radxa-cubie-a7z/`, especially `device/hardware.yaml`. No manual
@@ -205,7 +205,7 @@ config changes are needed.
 ### Launch with Pimoroni display
 
 ```bash
-cd ~/YoyoPod_Core
+cd ~/yoyopod-core
 YOYOPOD_DISPLAY=pimoroni YOYOPOD_CONFIG_BOARD=radxa-cubie-a7z .venv/bin/python yoyopod.py
 ```
 
@@ -233,7 +233,7 @@ The following has been validated on-device:
 - Backlight on/off via gpiod
 - All 4 buttons (A, B, X, Y) read via gpiod with debounce and long-press
 - RGB LED toggle via gpiod
-- Full YoyoPod app: menu screen, navigation, screen transitions
+- Full YoYoPod app: menu screen, navigation, screen transitions
 - Screen timeout and wake via button press
 - PIL-based rendering path (not LVGL)
 

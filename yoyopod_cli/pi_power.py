@@ -20,7 +20,7 @@ def battery(
     ] = "config",
     verbose: Annotated[bool, typer.Option("--verbose", help="Enable DEBUG logging.")] = False,
 ) -> None:
-    """Inspect PiSugar power telemetry through YoyoPod's power module."""
+    """Inspect PiSugar power telemetry through YoYoPod's power module."""
     from loguru import logger
 
     from yoyopod.config import ConfigManager

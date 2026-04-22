@@ -53,7 +53,7 @@ def test_load_pi_deploy_config_uses_tracked_defaults_without_local_override(tmp_
             [
                 "host: rpi-zero",
                 "user: pi",
-                "project_dir: ~/YoyoPod_Core",
+                "project_dir: ~/yoyopod-core",
                 "branch: main",
                 "venv: .venv",
                 "start_cmd: python yoyopod.py",
@@ -61,7 +61,7 @@ def test_load_pi_deploy_config_uses_tracked_defaults_without_local_override(tmp_
                 "log_file: logs/yoyopod.log",
                 "error_log_file: logs/yoyopod_errors.log",
                 "pid_file: /tmp/yoyopod.pid",
-                'startup_marker: "YoyoPod starting"',
+                'startup_marker: "YoYoPod starting"',
                 "screenshot_path: /tmp/yoyopod_screenshot.png",
                 "rsync_exclude: [.git/, .cache/, build/, logs/]",
             ]
@@ -74,7 +74,7 @@ def test_load_pi_deploy_config_uses_tracked_defaults_without_local_override(tmp_
         local_path=Path(tmp_path / "missing.local.yaml"),
     )
 
-    assert pi.project_dir == "~/YoyoPod_Core"
+    assert pi.project_dir == "~/yoyopod-core"
     assert pi.test_music_target_dir == DEFAULT_TEST_MUSIC_TARGET_DIR
     assert REMOTE_CONFIG_TEST_MUSIC_DIR == DEFAULT_TEST_MUSIC_TARGET_DIR
 
