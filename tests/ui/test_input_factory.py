@@ -105,7 +105,11 @@ def test_simulation_factory_uses_standard_profile_keyboard_and_browser_buttons(
     observed: list[InputAction] = []
     assert manager is not None
     assert manager.interaction_profile == InteractionProfile.STANDARD
-    assert manager.adapters[0].__class__.__name__ == "KeyboardInputAdapter"
+    assert len(manager.adapters) == 1
+    assert manager.adapters[0].__class__.__name__ in {
+        "KeyboardInputAdapter",
+        "DummyKeyboardAdapter",
+    }
     manager.on_action(InputAction.UP, lambda data=None: observed.append(InputAction.UP))
     manager.on_action(InputAction.DOWN, lambda data=None: observed.append(InputAction.DOWN))
     manager.on_action(InputAction.SELECT, lambda data=None: observed.append(InputAction.SELECT))

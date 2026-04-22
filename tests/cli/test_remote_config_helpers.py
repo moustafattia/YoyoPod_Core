@@ -91,7 +91,7 @@ def test_remote_config_imports_cleanly_in_fresh_interpreter() -> None:
         ],
         capture_output=True,
         check=False,
-        cwd=Path(__file__).resolve().parents[1],
+        cwd=Path(__file__).resolve().parents[2],
         text=True,
     )
 
