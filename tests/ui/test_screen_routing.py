@@ -435,6 +435,96 @@ def test_ask_screen_back_pops() -> None:
     assert ask.consume_navigation_request() == NavigationRequest.route("back")
 
 
+class _DeferredScheduler:
+    def __init__(self) -> None:
+        self.callbacks: list[Callable[[], None]] = []
+
+    def post(self, callback: Callable[[], None]) -> None:
+        self.callbacks.append(callback)
+
+
+class _StubVoiceRuntime:
+    def __init__(self) -> None:
+        self.state = SimpleNamespace(
+            phase="idle",
+            headline="Ask",
+            body="Ask me anything...",
+            capture_in_flight=False,
+            ptt_active=False,
+            generation=0,
+        )
+        self.begin_entry_cycle_calls: list[tuple[bool, bool]] = []
+
+    def bind(self, **_: object) -> None:
+        return
+
+    def cancel(self) -> None:
+        return
+
+    def begin_entry_cycle(self, *, quick_command: bool, async_capture: bool) -> None:
+        self.begin_entry_cycle_calls.append((quick_command, async_capture))
+
+    def begin_listening(self, *, async_capture: bool) -> None:
+        return
+
+    def finish_ptt_capture(self) -> None:
+        return
+
+    def handle_transcript(self, transcript: str) -> None:
+        return
+
+    def settings(self) -> VoiceSettings:
+        return VoiceSettings()
+
+    def defaults(self) -> VoiceSettings:
+        return VoiceSettings()
+
+
+def test_ask_screen_defers_entry_cycle_when_scheduler_is_available() -> None:
+    """Ask entry should render first and queue auto-listen to the next main-thread turn."""
+
+    scheduler = _DeferredScheduler()
+    runtime = _StubVoiceRuntime()
+    ask = AskScreen(
+        display=object(),
+        context=AppContext(),
+        app=SimpleNamespace(scheduler=scheduler),
+        voice_runtime=runtime,
+    )
+    manager = SimpleNamespace(current_screen=ask, action_scheduler=None)
+    ask.set_screen_manager(manager)
+
+    ask.enter()
+
+    assert runtime.begin_entry_cycle_calls == []
+    assert len(scheduler.callbacks) == 1
+
+    scheduler.callbacks.pop()()
+
+    assert runtime.begin_entry_cycle_calls == [(False, True)]
+
+
+def test_ask_screen_skips_deferred_entry_cycle_after_navigation_away() -> None:
+    """Deferred auto-listen should not start after Ask stops being the current screen."""
+
+    scheduler = _DeferredScheduler()
+    runtime = _StubVoiceRuntime()
+    ask = AskScreen(
+        display=object(),
+        context=AppContext(),
+        app=SimpleNamespace(scheduler=scheduler),
+        voice_runtime=runtime,
+    )
+    manager = SimpleNamespace(current_screen=ask, action_scheduler=None)
+    ask.set_screen_manager(manager)
+
+    ask.enter()
+    manager.current_screen = object()
+    scheduler.callbacks.pop()()
+
+    assert runtime.begin_entry_cycle_calls == []
+
+
 class _FakeContact:
     def __init__(self, name: str, sip_address: str, notes: str = "") -> None:
         self.name = name

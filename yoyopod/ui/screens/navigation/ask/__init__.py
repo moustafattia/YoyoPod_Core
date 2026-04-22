@@ -132,6 +132,7 @@ class AskScreen(Screen):
         self._ptt_active = False
         self._auto_return_timer = None
         self._lvgl_view: "ScreenView | None" = None
+        self._entry_cycle_token = 0
         self._bind_voice_runtime()
 
     def enter(self) -> None:
@@ -139,15 +140,13 @@ class AskScreen(Screen):
 
         super().enter()
         self._cancel_auto_return()
-        self.voice_runtime.begin_entry_cycle(
-            quick_command=self._quick_command,
-            async_capture=self._async_voice_capture,
-        )
         self._ensure_lvgl_view()
+        self._schedule_entry_cycle()
 
     def exit(self) -> None:
         """Invalidate any in-flight result before leaving the screen."""
 
+        self._entry_cycle_token += 1
         self.voice_runtime.cancel()
         self._cancel_auto_return()
         self._quick_command = False
@@ -211,6 +210,31 @@ class AskScreen(Screen):
             dispatcher=dispatcher,
         )
         self._on_voice_runtime_state_changed(self.voice_runtime.state)
+
+    def _schedule_entry_cycle(self) -> None:
+        """Defer the default Ask entry cycle off the navigation hot path when possible."""
+
+        self._entry_cycle_token += 1
+        token = self._entry_cycle_token
+
+        def start_entry_cycle() -> None:
+            if token != self._entry_cycle_token:
+                return
+            if (
+                self.screen_manager is not None
+                and getattr(self.screen_manager, "current_screen", None) is not self
+            ):
+                return
+            self.voice_runtime.begin_entry_cycle(
+                quick_command=self._quick_command,
+                async_capture=self._async_voice_capture,
+            )
+
+        scheduler = getattr(self.app, "scheduler", None)
+        if scheduler is not None and hasattr(scheduler, "post"):
+            scheduler.post(start_entry_cycle)
+            return
+        start_entry_cycle()
 
     def _on_voice_runtime_state_changed(self, state: "VoiceInteractionState") -> None:
         """Mirror shared voice runtime state into Ask presentation fields."""
