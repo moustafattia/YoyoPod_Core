@@ -194,7 +194,7 @@ def _build_screenshot_clear(pi: PiPaths) -> str:
 def _build_screenshot_signal(pi: PiPaths, *, readback: bool) -> str:
     """Remote shell that signals the app to capture a screenshot.
 
-    SIGUSR1 = LVGL readback (hardware-accurate); SIGUSR2 = PIL shadow buffer.
+    SIGUSR1 = LVGL readback (hardware-accurate); SIGUSR2 = RGB565 framebuffer.
     """
     signal_name = "USR1" if readback else "USR2"
     pid = shell_quote(pi.pid_file)

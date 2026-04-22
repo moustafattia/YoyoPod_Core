@@ -78,6 +78,9 @@ def test_semantic_input_navigation() -> None:
     home = HomeScreen(display, context)
     menu = MenuScreen(display, context, items=["Now Playing", "Back"])
     now_playing = NowPlayingScreen(display, context)
+    home.render = lambda: None
+    menu.render = lambda: None
+    now_playing.render = lambda: None
 
     screen_manager.register_screen("home", home)
     screen_manager.register_screen("menu", menu)

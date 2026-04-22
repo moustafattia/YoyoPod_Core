@@ -44,27 +44,8 @@ class ManagersBoot:
 
         self.logger.info("Initializing managers...")
 
-        assert self.app.display is not None
         assert self.app.config_manager is not None
-        display = self.app.display
         config_manager = self.app.config_manager
-
-        display.clear(display.COLOR_BLACK)
-        display.text(
-            "Connecting VoIP...",
-            10,
-            80,
-            color=display.COLOR_WHITE,
-            font_size=16,
-        )
-        display.text(
-            "Starting Music...",
-            10,
-            110,
-            color=display.COLOR_WHITE,
-            font_size=16,
-        )
-        display.update()
 
         try:
             self.logger.info("  - VoIPManager")

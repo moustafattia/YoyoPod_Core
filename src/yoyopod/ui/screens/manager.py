@@ -310,7 +310,7 @@ class ScreenManager:
 
     def _refresh_after_navigation(self) -> None:
         """Refresh immediately or defer to the LVGL pump after a navigation change."""
-        if getattr(self.display, "backend_kind", "pil") == "lvgl":
+        if getattr(self.display, "backend_kind", "unavailable") == "lvgl":
             self._navigation_refresh_pending = self.current_screen is not None
             return
         self.refresh_current_screen()

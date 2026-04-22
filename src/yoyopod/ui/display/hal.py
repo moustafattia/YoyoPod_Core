@@ -3,7 +3,7 @@ Hardware Abstraction Layer (HAL) for YoyoPod display subsystem.
 
 This module defines the abstract interface that all display hardware
 adapters must implement, enabling support for multiple display types
-(Pimoroni Display HAT Mini, Whisplay HAT, etc.) with a unified API.
+(Whisplay hardware and Whisplay-profile simulation) with a unified API.
 
 Author: YoyoPod Team
 Date: 2025-11-30
@@ -18,7 +18,7 @@ class DisplayHAL(ABC):
     """
     Abstract base class for display hardware adapters.
 
-    All display implementations (Pimoroni, Whisplay, etc.) must inherit
+    All display implementations must inherit
     from this class and implement all abstract methods.
 
     This ensures a consistent API across different hardware backends,
@@ -263,7 +263,7 @@ class DisplayHAL(ABC):
     def get_backend_kind(self) -> str:
         """Return the active UI backend kind for this display adapter."""
 
-        return "pil"
+        return "unavailable"
 
     def get_ui_backend(self) -> Any | None:
         """Return an optional backend-specific UI bridge."""

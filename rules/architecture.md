@@ -20,18 +20,18 @@ yoyopod.py / src/yoyopod/main.py  (entry points)
     |  `- MpvIpcClient (backends/music/ipc.py) -- mpv JSON IPC
     |- VoIPManager (integrations/call/manager.py)
     |  `- LiblinphoneBackend (backends/voip/backend.py)
-    |- Display HAL (ui/display/) -- factory pattern, 3 adapters
-    |- Input HAL (ui/input/) -- semantic actions, 3 adapters
+    |- Display HAL (ui/display/) -- Whisplay LVGL hardware + Whisplay-profile simulation
+    |- Input HAL (ui/input/) -- one-button Whisplay input + simulation input
     `- ScreenManager (ui/screens/manager.py) -- stack-based navigation
 ```
 
 ## Display HAL
 
-`ui/display/`: `DisplayHAL` interface -> factory -> adapters (pimoroni, whisplay, simulation). The `Display` facade hides hardware-specific rendering details.
+`ui/display/`: `DisplayHAL` interface -> factory -> Whisplay LVGL adapter, with simulation reusing the same Whisplay render contract. The `Display` facade hides hardware-specific rendering details.
 
 ## Input HAL
 
-`ui/input/`: semantic actions such as `SELECT`, `BACK`, `UP`, `DOWN`, `PTT_PRESS`, and `PTT_RELEASE`. Adapters include `four_button.py`, `ptt_button.py`, and `keyboard.py`. `InputManager` dispatches actions to the active screen.
+`ui/input/`: semantic actions such as `SELECT`, `BACK`, `UP`, `DOWN`, `PTT_PRESS`, and `PTT_RELEASE`. The live runtime is Whisplay-first: `ptt_button.py` is the canonical hardware path, while simulation/browser input mirrors that profile. `InputManager` dispatches actions to the active screen.
 
 ## Screen System
 
@@ -87,7 +87,7 @@ yoyopod.py / src/yoyopod/main.py  (entry points)
 ### Hardware abstraction
 
 - Raw hardware behavior stays behind `ui/display/`, `ui/input/`, or the relevant subsystem backend.
-- Keep Pimoroni, Whisplay, GPIO, LVGL, PiSugar, and modem-specific details out of generic UI and orchestration layers.
+- Keep Whisplay, GPIO, LVGL, PiSugar, and modem-specific details out of generic UI and orchestration layers.
 - Raw LVGL usage should remain confined to `src/yoyopod/ui/lvgl_binding/` and LVGL-specific view code.
 
 ### State and models

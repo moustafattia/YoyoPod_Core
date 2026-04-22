@@ -9,14 +9,14 @@ from yoyopod.ui.screens.theme_tokens import Color
 
 
 def _get_draw(display: Display) -> Any | None:
-    """Return the underlying PIL draw surface when available."""
+    """Return an optional adapter-native draw surface when available."""
 
     adapter = display.get_adapter() if hasattr(display, "get_adapter") else None
     return getattr(adapter, "draw", None)
 
 
 def _get_buffer(display: Display):
-    """Return the underlying PIL image buffer when available."""
+    """Return an optional adapter-native image buffer when available."""
 
     adapter = display.get_adapter() if hasattr(display, "get_adapter") else None
     return getattr(adapter, "buffer", None)
@@ -79,7 +79,7 @@ def _rounded_shape(
     width: int,
     draw: Any,
 ) -> None:
-    """Draw a rounded rectangle with a PIL fallback."""
+    """Draw a rounded rectangle using native helpers when available."""
 
     if draw is not None and hasattr(draw, "rounded_rectangle"):
         draw.rounded_rectangle(

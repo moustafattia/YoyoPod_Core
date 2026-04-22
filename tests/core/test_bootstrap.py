@@ -31,12 +31,21 @@ class _FakeDisplay:
         self.simulate = simulate
         self.whisplay_renderer = whisplay_renderer
         self.whisplay_lvgl_buffer_lines = whisplay_lvgl_buffer_lines
-        self.backend_kind = "pil"
+        self.backend_kind = "unavailable"
+        self._ui_backend = SimpleNamespace(
+            initialized=False,
+            initialize=self._initialize_backend,
+        )
+
+    def _initialize_backend(self) -> bool:
+        self._ui_backend.initialized = True
+        return True
 
     def get_ui_backend(self):
-        return None
+        return self._ui_backend
 
     def refresh_backend_kind(self) -> str:
+        self.backend_kind = "lvgl" if self._ui_backend.initialized else "unavailable"
         return self.backend_kind
 
     def clear(self, *_args, **_kwargs) -> None:
@@ -107,7 +116,7 @@ class _FakeApp:
         self.app_settings = SimpleNamespace(
             display=SimpleNamespace(
                 hardware="auto",
-                whisplay_renderer="pil",
+                whisplay_renderer="lvgl",
                 lvgl_buffer_lines=40,
             ),
             input=SimpleNamespace(),
@@ -215,8 +224,8 @@ class _FakeMusicRuntime:
         return None
 
 
-def test_init_core_components_schedules_screen_actions_for_pil_backend(monkeypatch) -> None:
-    """Boot wiring should serialize screen actions on the shared scheduler for pil displays."""
+def test_init_core_components_schedules_screen_actions_for_lvgl_backend(monkeypatch) -> None:
+    """Boot wiring should serialize screen actions on the shared scheduler for LVGL displays."""
 
     scheduled_callback = object()
     fake_input_manager = _FakeInputManager()
@@ -244,7 +253,7 @@ def test_init_core_components_schedules_screen_actions_for_pil_backend(monkeypat
     app = _FakeApp(scheduler=scheduled_callback)
 
     assert RuntimeBootService(app).init_core_components() is True
-    assert captured["display"].backend_kind == "pil"
+    assert captured["display"].backend_kind == "lvgl"
     assert captured["input_manager"] is fake_input_manager
     assert captured["action_scheduler"] is scheduled_callback
     assert fake_input_manager.started is True
@@ -256,6 +265,9 @@ def test_init_core_components_refuses_whisplay_when_lvgl_backend_does_not_start(
     """Production Whisplay startup should fail instead of downgrading to PIL."""
 
     class _FakeLvglBackend:
+        def __init__(self) -> None:
+            self.initialized = False
+
         def initialize(self) -> bool:
             return False
 
@@ -274,11 +286,12 @@ def test_init_core_components_refuses_whisplay_when_lvgl_backend_does_not_start(
                 whisplay_renderer=whisplay_renderer,
                 whisplay_lvgl_buffer_lines=whisplay_lvgl_buffer_lines,
             )
-            self.backend_kind = "pil"
+            self.backend_kind = "unavailable"
             self._adapter = SimpleNamespace(DISPLAY_TYPE="whisplay")
+            self._ui_backend = _FakeLvglBackend()
 
         def get_ui_backend(self):
-            return _FakeLvglBackend()
+            return self._ui_backend
 
         def get_adapter(self) -> object:
             return self._adapter

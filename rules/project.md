@@ -2,7 +2,7 @@
 
 YoyoPod is an iPod-inspired Raspberry Pi application combining SIP calling and mpv-based local music playback behind a small-screen, button-driven UI. Target hardware is Raspberry Pi Zero 2W (416 MB RAM).
 
-Three display/input modes are supported today: Pimoroni Display HAT Mini, PiSugar Whisplay, and browser-based simulation.
+Two display/input modes are supported today: PiSugar Whisplay hardware and browser-based Whisplay-profile simulation.
 
 ## Common Commands
 

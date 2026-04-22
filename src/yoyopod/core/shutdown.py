@@ -231,15 +231,11 @@ class ShutdownLifecycleService:
         if self.app.display:
             logger.info("  - Clearing display")
             self.app.display.set_backlight(self.app._active_brightness)
-            self.app.display.clear(self.app.display.COLOR_BLACK)
-            self.app.display.text(
-                "Goodbye!",
-                70,
-                120,
-                color=self.app.display.COLOR_CYAN,
-                font_size=20,
+            self.app.screen_power_service.render_power_overlay(
+                "Goodbye",
+                "Stopping services...",
+                self.app.display.COLOR_CYAN,
             )
-            self.app.display.update()
             time.sleep(1)
             self.app.display.cleanup()
 

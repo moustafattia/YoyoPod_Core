@@ -1931,7 +1931,7 @@ def test_status_uses_cached_output_volume_without_touching_system_mixer() -> Non
     assert status["volume"] == 61
 
 
-def test_raw_user_activity_wakes_screen_without_rerendering_current_pil_screen() -> None:
+def test_raw_user_activity_wakes_screen_without_rerendering_current_screen() -> None:
     """Raw button activity should wake the screen without flashing the current view."""
 
     app, _, _ = _build_app(playback_state="stopped")

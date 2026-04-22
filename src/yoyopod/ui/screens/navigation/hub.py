@@ -9,7 +9,6 @@ from yoyopod.ui.display import Display
 from yoyopod.ui.screens.lvgl_lifecycle import current_retained_view
 from yoyopod.ui.screens.base import Screen
 from yoyopod.ui.screens.navigation.lvgl import LvglHubView
-from yoyopod.ui.screens.navigation.hub_pil_view import render_hub_pil
 from yoyopod.ui.screens.theme import (
     BACKGROUND,
     format_battery_compact,
@@ -69,7 +68,7 @@ class HubScreen(Screen):
 
     def _ensure_lvgl_view(self) -> "ScreenView | None":
         """Create an LVGL view when the Whisplay renderer is active."""
-        if getattr(self.display, "backend_kind", "pil") != "lvgl":
+        if getattr(self.display, "backend_kind", "unavailable") != "lvgl":
             self._lvgl_view = None
             return None
 
@@ -171,10 +170,9 @@ class HubScreen(Screen):
     def render(self) -> None:
         """Render the selected root card."""
         lvgl_view = self._ensure_lvgl_view()
-        if lvgl_view is not None:
-            lvgl_view.sync()
-            return
-        render_hub_pil(self)
+        if lvgl_view is None:
+            raise RuntimeError("HubScreen requires an initialized LVGL backend")
+        lvgl_view.sync()
 
     def on_advance(self, data=None) -> None:
         """Cycle to the next card."""

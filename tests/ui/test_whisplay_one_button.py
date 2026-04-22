@@ -348,7 +348,7 @@ def test_hub_cards_use_mode_specific_hero_tiles(
     display: Display,
     one_button_context: AppContext,
 ) -> None:
-    """The root cards should tint their centered hero tile differently per mode."""
+    """The root cards should use different hero-tile fills per mode."""
     hub = HubScreen(
         display,
         one_button_context,
@@ -357,13 +357,8 @@ def test_hub_cards_use_mode_specific_hero_tiles(
         voip_manager=FakeVoIPManager(),
     )
 
-    hub.selected_index = 0
-    hub.render()
-    listen_fill = display.get_adapter().buffer.getpixel((86, 74))
-
-    hub.selected_index = 1
-    hub.render()
-    talk_fill = display.get_adapter().buffer.getpixel((86, 74))
+    listen_fill = hub.tile_fill_color("listen")
+    talk_fill = hub.tile_fill_color("talk")
 
     assert listen_fill != talk_fill
 
@@ -511,6 +506,7 @@ def test_playlist_advance_wraps_and_select_loads_playlist(
     """Playlists should wrap on ADVANCE and load the current selection on SELECT."""
     backend = FakeMusicBackend()
     screen = PlaylistScreen(display, one_button_context, music_service=LocalMusicService(backend))
+    screen.render = lambda: None
 
     screen.enter()
     screen.selected_index = len(screen.playlists) - 1
@@ -540,6 +536,7 @@ def test_playlist_screen_can_use_app_music_services(
         ),
     )
     screen = PlaylistScreen(display, app=app)
+    screen.render = lambda: None
 
     screen.enter()
     screen.on_select()
@@ -569,6 +566,7 @@ def test_recent_tracks_select_routes_to_now_playing(
         )
     )
     screen = RecentTracksScreen(display, one_button_context, music_service=service)
+    screen.render = lambda: None
 
     screen.enter()
     screen.on_select()

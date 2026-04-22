@@ -1,5 +1,9 @@
 # Cubie A7Z + Pimoroni Display HAT Mini Setup
 
+> Historical note: this document describes an older non-Whisplay bringup path.
+> It is kept for board-history context only and is not part of the current
+> supported LVGL-only product runtime.
+
 This document covers the one-time board setup required to run YoyoPod with the Pimoroni Display HAT Mini (320x240, 4-button, RGB LED) on the Radxa Cubie A7Z.
 
 The Pimoroni HAT was designed for the Raspberry Pi. On the Cubie, the Pi-specific `displayhatmini` library does not work. YoyoPod uses a custom driver that talks to the ST7789 display controller directly over `spidev` and reads buttons via `gpiod`.

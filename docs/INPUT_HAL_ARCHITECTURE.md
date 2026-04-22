@@ -17,7 +17,6 @@ This document describes the input abstraction layer that now exists in the UI pa
 - `src/yoyopod/ui/input/hal.py`: `InputAction` and `InputHAL`
 - `src/yoyopod/ui/input/manager.py`: action dispatcher
 - `src/yoyopod/ui/input/factory.py`: adapter selection
-- `src/yoyopod/ui/input/adapters/four_button.py`
 - `src/yoyopod/ui/input/adapters/ptt_button.py`
 - `src/yoyopod/ui/input/adapters/keyboard.py`
 
@@ -31,20 +30,11 @@ This document describes the input abstraction layer that now exists in the UI pa
 
 ## Adapter Mapping
 
-### FourButtonInputAdapter
-
-Default mapping:
-
-- `A -> SELECT`
-- `B -> BACK`
-- `X -> UP`
-- `Y -> DOWN`
-- long press `B -> HOME`
-
 ### PTTInputAdapter
 
 - button press and release emit `PTT_PRESS` and `PTT_RELEASE`
 - optional click patterns can emit `SELECT` and `BACK`
+- this is the canonical runtime path for Whisplay hardware and the Whisplay-profile simulation flow
 
 ### KeyboardInputAdapter
 
@@ -54,6 +44,10 @@ Used in simulation mode:
 - `Esc` or `Backspace -> BACK`
 - `Up` or `K -> UP`
 - `Down` or `J -> DOWN`
+
+The current product runtime is Whisplay-first. Four-button/Pimoroni helpers may
+still exist as legacy support or test seams, but they are not part of the
+supported display/input product surface anymore.
 
 ## How ScreenManager Uses It
 

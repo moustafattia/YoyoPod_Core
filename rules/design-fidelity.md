@@ -1,6 +1,6 @@
 # Design Fidelity Workflow
 
-Applies to: Figma-driven UI work for Whisplay, PIL fallback screens, and LVGL hardware scenes
+Applies to: Figma-driven UI work for Whisplay, Whisplay-profile simulation, and LVGL hardware scenes
 
 ## Goal
 
@@ -10,7 +10,7 @@ When implementing or refining Whisplay UI from Figma, preserve the product's exi
 
 - Whisplay is the canonical small-screen target for this workflow: `240x280` portrait.
 - Treat rounded display corners and edge clipping as real constraints. Leave visual safety margin at the top, sides, and footer.
-- A screen is only "done" after it has been checked on the Pi, not just in local PIL output.
+- A screen is only "done" after it has been checked on the Pi, not just in local browser preview or LVGL readback output.
 
 ## Figma Intake Rules
 
@@ -23,7 +23,7 @@ When implementing or refining Whisplay UI from Figma, preserve the product's exi
 ## Implementation Split
 
 - Shared visual tokens belong in `src/yoyopod/ui/screens/theme.py`.
-- PIL fallback rendering belongs in the Python screen implementations under `src/yoyopod/ui/screens/**`.
+- Screen controller behavior belongs in the Python screen implementations under `src/yoyopod/ui/screens/**`.
 - LVGL screen lifecycle stays in `src/yoyopod/ui/screens/**/lvgl/*.py`.
 - Native Whisplay scene parity belongs in:
   - `src/yoyopod/ui/lvgl_binding/binding.py`
@@ -42,7 +42,7 @@ When implementing or refining Whisplay UI from Figma, preserve the product's exi
    - preserve safe margins
    - shorten helper text if it clips on real hardware
 3. Update shared theme primitives first.
-4. Update the Python screen behavior and PIL fallback.
+4. Update the Python screen behavior.
 5. Update the LVGL view layer.
 6. Update the native LVGL scene when hardware parity requires it.
 7. Validate locally.
@@ -87,13 +87,13 @@ Use `yoyopod remote sync` only if the user explicitly wants a dirty-tree hardwar
 
 ## Screenshot Interpretation
 
-- Shadow buffer screenshot: what the app tried to send to the display path.
+- Framebuffer screenshot: what the app tried to send to the display path.
 - LVGL readback screenshot: what LVGL rendered internally.
 - Real device photo: what the physical glass actually showed.
 
 Use all three appropriately:
 
-- Use shadow buffer for fast layout validation.
+- Use framebuffer screenshots for fast layout validation.
 - Use LVGL readback when validating the native LVGL scene itself.
 - Use a real device photo when checking rounded-corner safety, physical edge clipping, brightness, or suspected panel-transfer issues.
 

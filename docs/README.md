@@ -37,11 +37,11 @@ Plan docs are useful, but they are not automatically the current implementation 
 - [`DEVELOPMENT_GUIDE.md`](DEVELOPMENT_GUIDE.md), main developer setup guide
 - [`SETUP_CONTRACT.md`](SETUP_CONTRACT.md), repo-owned setup and dependency contract
 - [`QUALITY_GATES.md`](QUALITY_GATES.md), current staged quality gate and audit contract
+- [`PI_PROFILING_WORKFLOW.md`](PI_PROFILING_WORKFLOW.md), bounded profiling and Pi investigation workflow
 - [`DEPLOYED_PI_DEPENDENCIES.md`](DEPLOYED_PI_DEPENDENCIES.md), deployed/runtime dependency inventory
 - [`PI_DEV_WORKFLOW.md`](PI_DEV_WORKFLOW.md), day-to-day Raspberry Pi workflow
 - [`RPI_SMOKE_VALIDATION.md`](RPI_SMOKE_VALIDATION.md), validation checklist for CI-safe and on-device checks
 - [`CUBIE_A7Z_BRINGUP.md`](CUBIE_A7Z_BRINGUP.md), Cubie board bringup notes
-- [`CUBIE_A7Z_PIMORONI_SETUP.md`](CUBIE_A7Z_PIMORONI_SETUP.md), Cubie + Pimoroni setup notes
 
 ### Core runtime architecture
 
@@ -83,6 +83,7 @@ These are useful when you need to understand how the repo got here, but they are
 - [`INTEGRATION_PLAN.md`](INTEGRATION_PLAN.md), implemented milestone record for VoIP + local music integration
 - [`UI_RESTRUCTURE_PROPOSAL.md`](UI_RESTRUCTURE_PROPOSAL.md), refactor status record for the UI split and remaining cleanup
 - [`PHASE2_SUMMARY.md`](PHASE2_SUMMARY.md), milestone summary for early screen integration
+- [`CUBIE_A7Z_PIMORONI_SETUP.md`](CUBIE_A7Z_PIMORONI_SETUP.md), historical non-Whisplay bringup notes
 
 ## Generated planning workspace
 

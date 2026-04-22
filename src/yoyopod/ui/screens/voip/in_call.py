@@ -10,7 +10,6 @@ from yoyopod.integrations.call import HangupCommand, MuteCommand, UnmuteCommand
 from yoyopod.ui.display import Display
 from yoyopod.ui.screens.base import Screen
 from yoyopod.ui.screens.lvgl_lifecycle import current_retained_view
-from yoyopod.ui.screens.voip.in_call_pil_view import render_in_call_pil
 from yoyopod.ui.screens.voip.lvgl import LvglInCallView
 
 if TYPE_CHECKING:
@@ -54,7 +53,7 @@ class InCallScreen(Screen):
     def _ensure_lvgl_view(self) -> "ScreenView | None":
         """Create an LVGL view when the Whisplay renderer is active."""
 
-        if getattr(self.display, "backend_kind", "pil") != "lvgl":
+        if getattr(self.display, "backend_kind", "unavailable") != "lvgl":
             self._lvgl_view = None
             return None
 
@@ -123,10 +122,9 @@ class InCallScreen(Screen):
         """Render the active-call screen."""
 
         lvgl_view = self._ensure_lvgl_view()
-        if lvgl_view is not None:
-            lvgl_view.sync()
-            return
-        render_in_call_pil(self)
+        if lvgl_view is None:
+            raise RuntimeError("InCallScreen requires an initialized LVGL backend")
+        lvgl_view.sync()
 
     @staticmethod
     def wants_visible_tick_refresh() -> bool:

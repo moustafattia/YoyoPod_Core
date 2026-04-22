@@ -86,7 +86,7 @@ def main() -> int:
                         "Running without physical hardware",
                         "Web server will start on http://localhost:5000",
                         "Open the URL in your browser to view the display",
-                        "Use keyboard (Arrow keys, Enter, Esc) or web buttons for input",
+                        "Use the browser controls to drive the Whisplay-profile preview",
                         "=" * 60,
                     )
                 )

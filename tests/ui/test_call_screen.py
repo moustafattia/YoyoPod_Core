@@ -437,6 +437,7 @@ def test_voice_note_screen_render_syncs_manager_terminal_state(display: Display)
         state_provider=build_voice_note_state_provider(context=context, voip_manager=voip_manager),
         actions=build_voice_note_actions(voip_manager=voip_manager),
     )
+    screen._ensure_lvgl_view = lambda: SimpleNamespace(sync=lambda: None)
 
     screen.enter()
     voip_manager.active_voice_note.send_state = "failed"

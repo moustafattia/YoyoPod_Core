@@ -12,7 +12,6 @@ from yoyopod.ui.display import Display
 from yoyopod.ui.screens.base import Screen
 from yoyopod.ui.screens.lvgl_lifecycle import current_retained_view
 from yoyopod.ui.screens.music.lvgl import LvglPlaylistView
-from yoyopod.ui.screens.music.recent_pil_view import render_recent_tracks_pil
 
 if TYPE_CHECKING:
     from yoyopod.core import AppContext
@@ -51,7 +50,7 @@ class RecentTracksScreen(Screen):
 
     def _ensure_lvgl_view(self) -> "ScreenView | None":
         """Create an LVGL view when the Whisplay renderer is active."""
-        if getattr(self.display, "backend_kind", "pil") != "lvgl":
+        if getattr(self.display, "backend_kind", "unavailable") != "lvgl":
             self._lvgl_view = None
             return None
 
@@ -158,10 +157,9 @@ class RecentTracksScreen(Screen):
     def render(self) -> None:
         """Render the recent-track browser."""
         lvgl_view = self._ensure_lvgl_view()
-        if lvgl_view is not None:
-            lvgl_view.sync()
-            return
-        render_recent_tracks_pil(self)
+        if lvgl_view is None:
+            raise RuntimeError("RecentTracksScreen requires an initialized LVGL backend")
+        lvgl_view.sync()
 
     def on_select(self, data=None) -> None:
         """Load and play the selected recent track."""

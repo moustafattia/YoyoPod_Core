@@ -1,184 +1,81 @@
 #!/usr/bin/env python3
-"""Smoke tests for current display and screen rendering paths."""
+"""Smoke tests for the LVGL-only display/runtime contract."""
 
 from types import SimpleNamespace
 
-import pytest
-
-from yoyopod.core import AppContext
 from yoyopod.backends.music import MockMusicBackend, Track
+from yoyopod.core import AppContext
 from yoyopod.ui.display import Display, get_hardware_info
-from yoyopod.ui.display.adapters.pimoroni import PimoroniDisplayAdapter
 from yoyopod.ui.screens.music.now_playing import NowPlayingScreen
-from yoyopod.ui.screens.navigation.home import HomeScreen
-from yoyopod.ui.screens.navigation.menu import MenuScreen
 from yoyopod.ui.screens.voip.in_call import InCallScreen
 
 
-@pytest.fixture
-def display():
-    """Create a simulation display and clean it up after the test."""
-    test_display = Display(simulate=True)
-    try:
-        yield test_display
-    finally:
-        test_display.cleanup()
+class FakeServer:
+    """Minimal browser-preview double."""
+
+    def __init__(self) -> None:
+        self.started = False
+        self.images: list[str] = []
+
+    def start(self) -> None:
+        self.started = True
+
+    def send_display_update(self, image: str) -> None:
+        self.images.append(image)
 
 
-@pytest.fixture
-def context() -> AppContext:
-    """Create an app context with a demo playlist loaded."""
-    app_context = AppContext()
-    playlist = app_context.create_demo_playlist()
-    app_context.set_playlist(playlist)
-    app_context.update_system_status(battery=85, signal=3, connected=True)
-    app_context.play()
-    app_context.media.playback.position = 45.0
-    return app_context
-
-
-def test_core_screens_render_without_hardware(display: Display, context: AppContext) -> None:
-    """Core screens should render cleanly in simulation mode."""
-    screens = [
-        HomeScreen(display, context),
-        MenuScreen(display, context, items=["Music", "Podcasts", "Stories", "Settings"]),
-        NowPlayingScreen(display, context),
-    ]
-
-    for screen in screens:
-        screen.enter()
-        screen.render()
-        screen.exit()
-
-
-def test_rendering_still_works_after_state_changes(display: Display, context: AppContext) -> None:
-    """Menu and now playing screens should still render after local state changes."""
-    menu_screen = MenuScreen(display, context, items=["Music", "Podcasts", "Stories", "Settings"])
-    now_playing_screen = NowPlayingScreen(display, context)
-
-    menu_screen.select_next()
-    menu_screen.select_next()
-    menu_screen.render()
-
-    context.next_track()
-    context.pause()
-    now_playing_screen.render()
-
-
-def test_now_playing_screen_only_requests_visible_ticks_while_playing(
-    display: Display,
-    context: AppContext,
-) -> None:
-    """Now-playing should only opt into periodic visible ticks during active playback."""
-
-    backend = MockMusicBackend()
-    backend.start()
-    backend.current_track = Track(
-        uri="demo.mp3",
-        name="Demo",
-        artists=["Artist"],
-        album="Album",
-        length=180,
-    )
-    app = SimpleNamespace(context=context, music_backend=backend)
-    screen = NowPlayingScreen(display, context, app=app)
-
-    assert screen.wants_visible_tick_refresh() is False
-
-    backend.play()
-
-    assert screen.wants_visible_tick_refresh() is True
-
-
-def test_in_call_screen_always_requests_visible_tick_refresh(
-    display: Display,
-    context: AppContext,
-) -> None:
-    """In-call should keep opting into visible ticks for live duration updates."""
-
-    screen = InCallScreen(display, context)
-
-    assert screen.wants_visible_tick_refresh() is True
-
-
-def test_simulate_mode_uses_whisplay_sized_simulation_adapter() -> None:
-    """Simulation mode should use the dedicated Whisplay-like simulation adapter."""
-
-    class FakeServer:
-        def start(self) -> None:
-            pass
-
-    import yoyopod.ui.display.adapters.simulation_web.server as web_server
-
-    original_get_server = web_server.get_server
-    web_server.get_server = lambda *args, **kwargs: FakeServer()
-    try:
-        display = Display(simulate=True)
-    finally:
-        web_server.get_server = original_get_server
-
-    try:
-        adapter = display.get_adapter()
-        assert adapter.DISPLAY_TYPE == "simulation"
-        assert adapter.SIMULATED_HARDWARE == "whisplay"
-        assert display.WIDTH == 240
-        assert display.HEIGHT == 280
-        assert display.ORIENTATION == "portrait"
-    finally:
-        display.cleanup()
-
-
-def test_simulate_flag_overrides_explicit_hardware_to_simulation_adapter() -> None:
-    """The simulate flag should override the configured hardware selection."""
-
-    class FakeServer:
-        def start(self) -> None:
-            pass
-
-    import yoyopod.ui.display.adapters.simulation_web.server as web_server
-
-    original_get_server = web_server.get_server
-    web_server.get_server = lambda *args, **kwargs: FakeServer()
-    try:
-        display = Display(hardware="whisplay", simulate=True)
-    finally:
-        web_server.get_server = original_get_server
-
-    try:
-        adapter = display.get_adapter()
-        assert adapter.DISPLAY_TYPE == "simulation"
-        assert adapter.SIMULATED_HARDWARE == "whisplay"
-        assert display.WIDTH == 240
-        assert display.HEIGHT == 280
-        assert display.ORIENTATION == "portrait"
-    finally:
-        display.cleanup()
-
-
-def test_simulation_display_update_pushes_browser_preview() -> None:
-    """The simulation adapter should remain the only browser-preview owner."""
-
-    class FakeServer:
-        def __init__(self) -> None:
-            self.started = False
-            self.images: list[str] = []
-
-        def start(self) -> None:
-            self.started = True
-
-        def send_display_update(self, image: str) -> None:
-            self.images.append(image)
-
+def _patch_fake_server(monkeypatch) -> FakeServer:
     fake_server = FakeServer()
-
     import yoyopod.ui.display.adapters.simulation_web.server as web_server
 
-    original_get_server = web_server.get_server
-    web_server.get_server = lambda *args, **kwargs: fake_server
+    monkeypatch.setattr(web_server, "get_server", lambda *args, **kwargs: fake_server)
+    return fake_server
+
+
+def test_simulate_mode_uses_whisplay_lvgl_adapter(monkeypatch) -> None:
+    """Simulation should mirror the Whisplay LVGL profile instead of a PIL adapter."""
+
+    fake_server = _patch_fake_server(monkeypatch)
+    display = Display(simulate=True)
+
     try:
-        display = Display(simulate=True)
+        adapter = display.get_adapter()
+        info = get_hardware_info(adapter)
+
+        assert adapter.DISPLAY_TYPE == "whisplay"
+        assert adapter.SIMULATED_HARDWARE == "whisplay"
+        assert display.WIDTH == 240
+        assert display.HEIGHT == 280
+        assert display.ORIENTATION == "portrait"
+        assert info["display_type"] == "whisplay"
+        assert info["simulated_hardware"] == "whisplay"
+        assert info["simulated"] is True
+        assert info["renderer"] == "unavailable"
+        assert fake_server.started is True
     finally:
-        web_server.get_server = original_get_server
+        display.cleanup()
+
+
+def test_simulate_flag_overrides_explicit_hardware_to_whisplay_simulation(monkeypatch) -> None:
+    """The simulate flag should still resolve to the Whisplay-profile adapter."""
+
+    _patch_fake_server(monkeypatch)
+    display = Display(hardware="whisplay", simulate=True)
+
+    try:
+        adapter = display.get_adapter()
+        assert adapter.DISPLAY_TYPE == "whisplay"
+        assert adapter.SIMULATED_HARDWARE == "whisplay"
+        assert adapter.simulate is True
+    finally:
+        display.cleanup()
+
+
+def test_simulation_display_update_pushes_browser_preview(monkeypatch) -> None:
+    """Simulation mode should keep the browser-preview transport alive."""
+
+    fake_server = _patch_fake_server(monkeypatch)
+    display = Display(simulate=True)
 
     try:
         display.clear()
@@ -191,13 +88,32 @@ def test_simulation_display_update_pushes_browser_preview() -> None:
         display.cleanup()
 
 
-def test_pimoroni_hardware_info_reports_explicit_display_type() -> None:
-    """Display info should expose Pimoroni's typed adapter identity."""
+def test_now_playing_screen_only_requests_visible_ticks_while_playing() -> None:
+    """Now-playing should only opt into periodic visible ticks during active playback."""
 
-    adapter = PimoroniDisplayAdapter(simulate=True)
-    try:
-        info = get_hardware_info(adapter)
-        assert info["display_type"] == "pimoroni"
-        assert info["simulated_hardware"] is None
-    finally:
-        adapter.cleanup()
+    context = AppContext()
+    backend = MockMusicBackend()
+    backend.start()
+    backend.current_track = Track(
+        uri="demo.mp3",
+        name="Demo",
+        artists=["Artist"],
+        album="Album",
+        length=180,
+    )
+    app = SimpleNamespace(context=context, music_backend=backend)
+    screen = NowPlayingScreen(object(), context, app=app)
+
+    assert screen.wants_visible_tick_refresh() is False
+
+    backend.play()
+
+    assert screen.wants_visible_tick_refresh() is True
+
+
+def test_in_call_screen_always_requests_visible_tick_refresh() -> None:
+    """In-call should keep opting into visible ticks for live duration updates."""
+
+    screen = InCallScreen(object(), AppContext())
+
+    assert screen.wants_visible_tick_refresh() is True

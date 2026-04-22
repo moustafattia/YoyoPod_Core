@@ -1,9 +1,8 @@
-"""Theme icon dispatch and asset-aware rasterization."""
+"""Theme icon dispatch for lightweight vector-style screen icons."""
 
 from __future__ import annotations
 
 from yoyopod.ui.display import Display
-from yoyopod.ui.screens.theme_assets import PHOSPHOR_ICON_FILES, load_icon_variant
 from yoyopod.ui.screens.theme_tokens import Color
 
 from .primitives import _get_buffer, _get_draw
@@ -30,9 +29,6 @@ from .icons_bespoke import (
 
 def draw_icon(display: Display, icon: str, x: int, y: int, size: int, color: Color) -> None:
     """Draw a lightweight doodle icon."""
-
-    if _paste_phosphor_icon(display, icon, x, y, size, color):
-        return
 
     draw = _get_draw(display)
     if icon == "listen":
@@ -82,24 +78,3 @@ def draw_icon(display: Display, icon: str, x: int, y: int, size: int, color: Col
         _draw_mic_off_icon(display, draw, x, y, size, color)
     else:
         display.circle(x + (size // 2), y + (size // 2), size // 3, outline=color, width=3)
-
-
-def _paste_phosphor_icon(
-    display: Display, icon: str, x: int, y: int, size: int, color: Color
-) -> bool:
-    """Paste a tinted Phosphor PNG icon when a PIL buffer is available."""
-
-    filename = PHOSPHOR_ICON_FILES.get(icon)
-    if filename is None:
-        return False
-
-    buffer = _get_buffer(display)
-    if buffer is None:
-        return False
-
-    rendered = load_icon_variant(filename, size, color)
-    if rendered is None:
-        return False
-
-    buffer.paste(rendered, (x, y), rendered)
-    return True

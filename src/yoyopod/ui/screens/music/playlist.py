@@ -12,7 +12,6 @@ from yoyopod.ui.display import Display
 from yoyopod.ui.screens.lvgl_lifecycle import current_retained_view
 from yoyopod.ui.screens.base import Screen
 from yoyopod.ui.screens.music.lvgl import LvglPlaylistView
-from yoyopod.ui.screens.music.playlist_pil_view import render_playlist_pil
 
 if TYPE_CHECKING:
     from yoyopod.core import AppContext
@@ -52,7 +51,7 @@ class PlaylistScreen(Screen):
 
     def _ensure_lvgl_view(self) -> "ScreenView | None":
         """Create an LVGL view when the Whisplay renderer is active."""
-        if getattr(self.display, "backend_kind", "pil") != "lvgl":
+        if getattr(self.display, "backend_kind", "unavailable") != "lvgl":
             self._lvgl_view = None
             return None
 
@@ -165,10 +164,9 @@ class PlaylistScreen(Screen):
     def render(self) -> None:
         """Render the local playlist browser."""
         lvgl_view = self._ensure_lvgl_view()
-        if lvgl_view is not None:
-            lvgl_view.sync()
-            return
-        render_playlist_pil(self)
+        if lvgl_view is None:
+            raise RuntimeError("PlaylistScreen requires an initialized LVGL backend")
+        lvgl_view.sync()
 
     def select_next(self) -> None:
         """Move to the next playlist."""

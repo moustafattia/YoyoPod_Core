@@ -114,7 +114,7 @@ class CallScreen(Screen):
     def _ensure_lvgl_view(self) -> "ScreenView | None":
         """Create an LVGL view when the Whisplay renderer is active."""
 
-        if getattr(self.display, "backend_kind", "pil") != "lvgl":
+        if getattr(self.display, "backend_kind", "unavailable") != "lvgl":
             self._lvgl_view = None
             return None
 
@@ -210,7 +210,7 @@ class CallScreen(Screen):
         return self.deck_cards[self.selected_index]
 
     def current_card_model(self) -> dict[str, object]:
-        """Return the active Talk card content for both PIL and LVGL paths."""
+        """Return the active Talk card content for the live screen paths."""
 
         selected_card = self._selected_card()
         if selected_card is None:
@@ -266,9 +266,10 @@ class CallScreen(Screen):
         """Render the Talk contact deck."""
 
         lvgl_view = self._ensure_lvgl_view()
-        if lvgl_view is not None:
-            lvgl_view.sync()
-            return
+        if lvgl_view is None:
+            raise RuntimeError("CallScreen requires an initialized LVGL backend")
+        lvgl_view.sync()
+        return
 
         theme = render_backdrop(self.display, "talk")
         render_status_bar(self.display, self.context, show_time=True)

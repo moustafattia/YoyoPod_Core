@@ -74,7 +74,6 @@ No separate Mopidy process or music daemon is part of the stack anymore.
 These are the declared application-level Python dependencies relevant to the current product:
 
 - `cffi`
-- `pillow`
 - `requests`
 - `loguru`
 - `pyyaml`
@@ -82,7 +81,6 @@ These are the declared application-level Python dependencies relevant to the cur
 
 Present in the project but not central to the current Whisplay Pi runtime:
 
-- `displayhatmini` for Pimoroni hardware mode
 - `flask`
 - `flask-socketio`
 - `flask-cors`

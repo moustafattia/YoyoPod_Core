@@ -1,10 +1,9 @@
 """
 Display HAL for YoyoPod.
 
-Provides hardware abstraction for various display types:
-- Pimoroni Display HAT Mini (320×240 landscape)
+Provides hardware abstraction for the LVGL-backed display runtime:
 - PiSugar Whisplay HAT (240×280 portrait)
-- Simulation mode (for development without hardware)
+- Simulation mode that mirrors the Whisplay LVGL profile
 
 The Display class provides a unified interface that works with any supported hardware.
 """

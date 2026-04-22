@@ -12,8 +12,8 @@ For the Figma-to-Whisplay implementation workflow, screen extraction order, and 
 
 - Non-simulated Whisplay runs are a production LVGL path.
 - `display.whisplay_renderer: lvgl` is the only supported production setting for Whisplay hardware.
-- If the Whisplay driver, hardware init, or LVGL shim/backend is unavailable, startup must fail loudly instead of silently degrading to PIL or simulation mode.
-- PIL rendering remains acceptable for simulation and other local debug workflows such as `python yoyopod.py --simulate`.
+- If the Whisplay driver, hardware init, or LVGL shim/backend is unavailable, startup must fail loudly instead of silently degrading to another renderer.
+- `python yoyopod.py --simulate` reuses the Whisplay LVGL render contract and browser preview transport; it is not a separate PIL renderer.
 
 ## Rendering Pipeline
 
@@ -23,7 +23,7 @@ LVGL object tree
   -> flush callback (RGB565_SWAPPED)
   -> LvglDisplayBackend._flush_callback() [Python]
   -> Rgb565FlushTarget.draw_rgb565_region() [adapter]
-  -> hardware SPI + PIL shadow buffer (dual-write)
+  -> hardware SPI + RGB565 framebuffer/browser preview
 ```
 
 ## C Shim (`native/lvgl_shim.c`)
@@ -68,4 +68,4 @@ Must rebuild on Pi after changing `lv_conf.h` or `lvgl_shim.c`.
   - a structured runtime snapshot logged before the screenshot is queued
 - To confirm which path actually succeeded, check the app log:
   - `Saved screenshot via LVGL readback` means native LVGL snapshotting succeeded.
-  - `Saved screenshot via shadow buffer` means the shadow path was used instead.
+  - `Saved screenshot via shadow buffer` means the RGB565 framebuffer path was used instead.

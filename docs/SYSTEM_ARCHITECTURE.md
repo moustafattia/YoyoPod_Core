@@ -134,9 +134,9 @@ yoyopod.py / yoyopod.main
      -> Bus
       -> Display facade
          -> Display factory
-            -> PimoroniDisplayAdapter | WhisplayDisplayAdapter | SimulationDisplayAdapter
+            -> WhisplayDisplayAdapter (hardware or simulation profile)
      -> InputManager
-        -> FourButtonInputAdapter | PTTInputAdapter | KeyboardInputAdapter
+        -> PTTInputAdapter | KeyboardInputAdapter
      -> ScreenManager
         -> navigation screens
         -> music screens
@@ -231,9 +231,8 @@ yoyopod.py / yoyopod.main
 
 Supported adapters:
 
-- `PimoroniDisplayAdapter`: 320x240 landscape
-- `WhisplayDisplayAdapter`: 240x280 portrait
-- `SimulationDisplayAdapter`: browser-rendered portrait simulation
+- `WhisplayDisplayAdapter`: 240x280 portrait hardware path
+- Whisplay-profile simulation: browser preview transport backed by the same LVGL/RGB565 adapter contract
 
 Selection happens in `src/yoyopod/ui/display/factory.py` using:
 
@@ -245,8 +244,8 @@ Selection happens in `src/yoyopod/ui/display/factory.py` using:
 Whisplay has one extra contract on top of the general selection rules:
 
 - non-simulated Whisplay startup requires `display.whisplay_renderer=lvgl`
-- if the Whisplay driver, board init, or LVGL backend is unavailable, startup stops instead of silently degrading to PIL or simulation
-- PIL remains a simulation and local debug path, not a supported production Whisplay mode
+- if the Whisplay driver, board init, or LVGL backend is unavailable, startup stops instead of silently degrading to another renderer
+- simulation reuses the Whisplay LVGL/framebuffer path; there is no supported PIL renderer anymore
 
 ## Input Architecture
 
@@ -261,9 +260,8 @@ Core semantic actions:
 
 Current adapters:
 
-- `FourButtonInputAdapter`: Pimoroni A/B/X/Y mapping
-- `PTTInputAdapter`: Whisplay single-button mapping
-- `KeyboardInputAdapter`: simulation keyboard controls
+- `PTTInputAdapter`: Whisplay single-button mapping, including the live browser-preview simulation path
+- `KeyboardInputAdapter`: retained for explicit simulation/test doubles and local debugging helpers
 
 ## Screen Architecture
 

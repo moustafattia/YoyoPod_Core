@@ -1,112 +1,51 @@
-"""
-PiSugar Whisplay HAT adapter for YoyoPod.
-
-This adapter implements the DisplayHAL interface for the PiSugar Whisplay HAT,
-featuring a 240×280 pixel portrait display with ST7789P3 driver.
-
-Hardware Specs:
-- Display: 240×280 pixels (portrait orientation)
-- Driver: ST7789P3 (SPI interface)
-- Button: 1 mouse click button (GPIO 11, BOARD mode)
-- LED: RGB LED
-- Audio: WM8960 codec with dual MEMS microphones
-- Library: WhisPlay (custom driver)
-
-Author: YoyoPod Team
-Date: 2025-11-30
-"""
+"""PiSugar Whisplay HAT adapter with an LVGL-only render path."""
 
 from __future__ import annotations
 
-from collections import OrderedDict
-from functools import lru_cache
 from importlib import import_module
 from pathlib import Path
 import time
-from types import ModuleType
-from typing import TYPE_CHECKING, Optional, Tuple
 
 from loguru import logger
 
+from yoyopod.ui.display.adapters.whisplay_gpiod_shim import _patch_vendor_gpiod_compat
+from yoyopod.ui.display.adapters.whisplay_paths import ensure_whisplay_driver_on_path
 from yoyopod.ui.display.contracts import (
     WhisplayProductionRenderContractError,
     build_whisplay_production_contract_message,
 )
-from yoyopod.ui.display.adapters.whisplay_paths import ensure_whisplay_driver_on_path
-from yoyopod.ui.display.adapters.whisplay_gpiod_shim import (
-    _patch_vendor_gpiod_compat,
-)
 from yoyopod.ui.display.hal import DisplayHAL
-
-if TYPE_CHECKING:
-    from PIL.Image import Image as PillowImage
-    from PIL.ImageDraw import ImageDraw as PillowImageDraw
+from yoyopod.ui.display.rgb565 import Rgb565FrameBuffer, rgb565_bytes_to_png
 
 DRIVER_PATH = ensure_whisplay_driver_on_path()
-DEFAULT_FONT_PATH = Path("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf")
-_RGB565_HIGH_RED_LUT = tuple(value & 0xF8 for value in range(256))
-_RGB565_HIGH_GREEN_LUT = tuple(value >> 5 for value in range(256))
-_RGB565_LOW_GREEN_LUT = tuple((value & 0x1C) << 3 for value in range(256))
-_RGB565_LOW_BLUE_LUT = tuple(value >> 3 for value in range(256))
-
-
-@lru_cache(maxsize=1)
-def _load_pillow_modules() -> tuple[ModuleType, ModuleType, ModuleType, ModuleType]:
-    """Import Pillow lazily so LVGL boot does not pay the PIL startup cost."""
-
-    try:
-        image_module = import_module("PIL.Image")
-        image_chops_module = import_module("PIL.ImageChops")
-        image_draw_module = import_module("PIL.ImageDraw")
-        image_font_module = import_module("PIL.ImageFont")
-    except ImportError as exc:
-        raise RuntimeError("Pillow is required for PIL-backed Whisplay rendering") from exc
-    return image_module, image_chops_module, image_draw_module, image_font_module
-
 
 try:
     _whisplay_driver = import_module("WhisPlay")
     _patch_vendor_gpiod_compat(_whisplay_driver)
     WhisPlayBoard = _whisplay_driver.WhisPlayBoard
-
     HAS_HARDWARE = True
 except ImportError:
     HAS_HARDWARE = False
     if DRIVER_PATH:
         logger.warning(
-            f"WhisPlay library not importable from {DRIVER_PATH.parent} - adapter will run in simulation mode"
+            "WhisPlay library not importable from {} - adapter will require simulation mode",
+            DRIVER_PATH.parent,
         )
     else:
-        logger.warning("WhisPlay library not available - adapter will run in simulation mode")
+        logger.warning("WhisPlay library not available - adapter will require simulation mode")
 
 
 class WhisplayDisplayAdapter(DisplayHAL):
-    """
-    Hardware adapter for PiSugar Whisplay HAT.
+    """Hardware adapter for the PiSugar Whisplay LVGL runtime."""
 
-    This adapter wraps the WhisPlay driver and implements the standard
-    DisplayHAL interface, enabling hardware-independent code in the rest
-    of the application.
-
-    The Whisplay HAT features a 240×280 pixel portrait display, making it
-    ideal for vertical layouts and content stacking.
-
-    Technical Notes:
-    - Uses RGB565 color format (converted from RGB888)
-    - Display updates require full-screen buffer transfer
-    - Backlight control: 0-100 scale (converted from 0.0-1.0)
-    """
-
-    # Display configuration
     DISPLAY_TYPE = "whisplay"
     WIDTH = 240
     HEIGHT = 280
     ORIENTATION = "portrait"
-    STATUS_BAR_HEIGHT = 25  # Slightly taller for portrait mode
+    STATUS_BAR_HEIGHT = 25
     _SLOW_FULL_FRAME_UPDATE_THRESHOLD_SECONDS = 0.03
     _SLOW_REGION_FLUSH_THRESHOLD_SECONDS = 0.008
     _PARTIAL_FLUSH_TIMING_LOG_INTERVAL = 60
-    _FONT_CACHE_MAX_SIZE = 16
 
     def __init__(
         self,
@@ -114,200 +53,89 @@ class WhisplayDisplayAdapter(DisplayHAL):
         renderer: str = "lvgl",
         lvgl_buffer_lines: int = 40,
         *,
-        # Keep this override narrow. The intended non-test caller is
-        # `yoyopod pi validate lvgl`, which builds its own throwaway LVGL backend.
         enforce_production_contract: bool | None = None,
     ) -> None:
-        """
-        Initialize the Whisplay HAT display.
-
-        Args:
-            simulate: If True, run in simulation mode without hardware
-        """
         requested_simulation = bool(simulate)
         self._production_contract_enforced = (
             not requested_simulation
             if enforce_production_contract is None
             else bool(enforce_production_contract)
         )
-        self.requested_renderer = renderer.lower().strip() or "pil"
-        self.renderer = self.requested_renderer
-        if self._production_contract_enforced and self.renderer != "lvgl":
-            self._raise_production_contract_error(
-                "Configured Whisplay renderer is not LVGL",
-            )
-        if self._production_contract_enforced and not HAS_HARDWARE:
-            self._raise_production_contract_error(
-                "Whisplay driver is unavailable on this host",
-            )
+        self.requested_renderer = renderer.lower().strip() or "lvgl"
+        if self.requested_renderer != "lvgl":
+            self._raise_production_contract_error("The Whisplay adapter now requires LVGL")
 
+        if self._production_contract_enforced and not HAS_HARDWARE:
+            self._raise_production_contract_error("Whisplay driver is unavailable on this host")
+
+        self.renderer = "lvgl"
         self.simulate = requested_simulation or not HAS_HARDWARE
-        self.buffer: PillowImage | None = None
-        self.draw: PillowImageDraw | None = None
+        self.SIMULATED_HARDWARE = "whisplay" if self.simulate else None
         self.device = None
+        self.web_server = None
         self.lvgl_buffer_lines = max(1, int(lvgl_buffer_lines))
         self.ui_backend = None
         self._force_shadow_buffer_sync = False
-        self._font_cache: OrderedDict[tuple[str, int], object] = OrderedDict()
+        self._framebuffer = Rgb565FrameBuffer(self.WIDTH, self.HEIGHT)
         self._timing_metrics: dict[str, float | int] = {
             "full_frame_updates": 0,
-            "last_full_frame_convert_ms": 0.0,
             "last_full_frame_device_ms": 0.0,
             "last_full_frame_total_ms": 0.0,
             "max_full_frame_total_ms": 0.0,
             "partial_flushes": 0,
-            "partial_flush_shadow_syncs": 0,
+            "framebuffer_updates": 0,
             "last_partial_flush_device_ms": 0.0,
-            "last_partial_flush_shadow_ms": 0.0,
+            "last_partial_flush_framebuffer_ms": 0.0,
             "last_partial_flush_total_ms": 0.0,
             "max_partial_flush_total_ms": 0.0,
             "partial_flush_total_ms": 0.0,
         }
 
-        if self._shadow_buffer_required_at_startup():
-            self._create_buffer()
-
         if not self.simulate:
             try:
-                # Initialize WhisPlay board
-                # Note: Button event detection is disabled in driver
                 self.device = WhisPlayBoard()
-                self.device.set_backlight(100)  # Full brightness (0-100 scale)
-                self.device.set_rgb(0, 100, 200)  # Blue LED indicator
-                logger.info("Whisplay HAT initialized (240×280 portrait)")
-            except Exception as e:
+                self.device.set_backlight(100)
+                self.device.set_rgb(0, 100, 200)
+                logger.info("Whisplay HAT initialized (240x280 portrait)")
+            except Exception as exc:  # pragma: no cover - hardware-only path
                 if self._production_contract_enforced:
                     self._raise_production_contract_error(
-                        f"Whisplay hardware initialization failed: {e}",
+                        f"Whisplay hardware initialization failed: {exc}",
                     )
-                logger.error(f"Failed to initialize Whisplay display hardware: {e}")
-                logger.info("Falling back to simulation mode")
+                logger.error("Failed to initialize Whisplay hardware: {}", exc)
                 self.simulate = True
                 self.device = None
-                self._ensure_shadow_buffer()
         else:
-            logger.info("Whisplay display adapter running in local render-only simulation mode")
+            logger.info("Whisplay display adapter running in LVGL simulation mode")
 
-        if self.renderer == "lvgl":
-            try:
-                from yoyopod.ui.lvgl_binding import LvglDisplayBackend
+        from yoyopod.ui.lvgl_binding import LvglDisplayBackend
 
-                self.ui_backend = LvglDisplayBackend(
-                    self,
-                    buffer_lines=self.lvgl_buffer_lines,
-                )
-                if not self.ui_backend.available:
-                    if self._production_contract_enforced:
-                        self._raise_production_contract_error(
-                            "Whisplay LVGL shim is unavailable during startup",
-                        )
-                    logger.warning(
-                        "Whisplay LVGL renderer requested but native shim is unavailable"
-                    )
-            except Exception as e:
-                if self._production_contract_enforced:
-                    self._raise_production_contract_error(
-                        f"Failed to prepare the Whisplay LVGL backend: {e}",
-                    )
-                logger.warning(f"Failed to prepare LVGL backend: {e}")
-                self.ui_backend = None
-                self.renderer = "pil"
-                self._ensure_shadow_buffer()
+        self.ui_backend = LvglDisplayBackend(
+            self,
+            buffer_lines=self.lvgl_buffer_lines,
+        )
+        if self._production_contract_enforced and not self.ui_backend.available:
+            self._raise_production_contract_error("Whisplay LVGL shim is unavailable during startup")
 
     @staticmethod
     def _raise_production_contract_error(reason: str) -> None:
-        """Fail loudly instead of silently degrading on production Whisplay hardware."""
-
         message = build_whisplay_production_contract_message(reason)
         logger.error(message)
         raise WhisplayProductionRenderContractError(message)
 
-    @property
-    def shadow_buffer_sync_enabled(self) -> bool:
-        """Return True when screenshots should rely on the PIL shadow buffer.
-
-        This must follow the adapter's effective runtime mode instead of the
-        initial constructor arguments, because hardware/LVGL setup can fall
-        back to simulation or PIL later in __init__.
-        """
-
-        if self.simulate or self.renderer != "lvgl":
-            return True
-        if self.ui_backend is None:
-            return True
-        if self._force_shadow_buffer_sync:
-            return True
-        return not bool(getattr(self.ui_backend, "available", False))
-
-    def _shadow_buffer_required_at_startup(self) -> bool:
-        """Return True when the initial runtime mode needs a PIL shadow buffer."""
-
-        return self.simulate or self.renderer == "pil"
-
-    def _ensure_shadow_buffer(self) -> None:
-        """Allocate the PIL shadow buffer on first use."""
-
-        if self.buffer is not None and self.draw is not None:
-            return
-        self._create_buffer()
-
-    def _create_buffer(self) -> None:
-        """Create a new PIL drawing buffer."""
-        image_module, _, image_draw_module, _ = _load_pillow_modules()
-        self.buffer = image_module.new("RGB", (self.WIDTH, self.HEIGHT), self.COLOR_BLACK)
-        self.draw = image_draw_module.Draw(self.buffer)
-
-    def _load_font(
-        self,
-        font_size: int,
-        font_path: Optional[Path] = None,
-    ) -> object:
-        """Load and cache the requested font once per path/size pair."""
-
-        _, _, _, image_font_module = _load_pillow_modules()
-        resolved_path: Path | None = None
-        if font_path is not None and font_path.exists():
-            resolved_path = font_path
-        elif DEFAULT_FONT_PATH.exists():
-            resolved_path = DEFAULT_FONT_PATH
-
-        cache_key = (
-            str(resolved_path.resolve()) if resolved_path is not None else "__pil_default__",
-            font_size,
+    def _raise_immediate_draw_error(self, operation: str) -> None:
+        raise RuntimeError(
+            f"WhisplayDisplayAdapter.{operation}() was retired with the LVGL-only cut; "
+            "render via LVGL scenes instead"
         )
-        cached_font = self._font_cache.get(cache_key)
-        if cached_font is not None:
-            self._font_cache.move_to_end(cache_key)
-            return cached_font
 
+    def _sync_simulation_preview(self) -> None:
+        if self.web_server is None:
+            return
         try:
-            if resolved_path is not None:
-                font = image_font_module.truetype(str(resolved_path), font_size)
-            else:
-                font = image_font_module.load_default()
-        except Exception as e:
-            logger.warning("Failed to load font {} at {} px: {}", resolved_path, font_size, e)
-            cache_key = ("__pil_default__", font_size)
-            cached_font = self._font_cache.get(cache_key)
-            if cached_font is not None:
-                self._font_cache.move_to_end(cache_key)
-                return cached_font
-            font = image_font_module.load_default()
-
-        self._font_cache[cache_key] = font
-        if len(self._font_cache) > self._FONT_CACHE_MAX_SIZE:
-            self._font_cache.popitem(last=False)
-        return font
-
-    @staticmethod
-    def _rgb565_to_image(width: int, height: int, pixel_data: bytes) -> PillowImage:
-        """Decode big-endian RGB565 bytes into a PIL image."""
-
-        image_module, _, _, _ = _load_pillow_modules()
-        swapped = bytearray(len(pixel_data))
-        swapped[0::2] = pixel_data[1::2]
-        swapped[1::2] = pixel_data[0::2]
-        return image_module.frombytes("RGB", (width, height), bytes(swapped), "raw", "BGR;16")
+            self.web_server.send_display_update(self._framebuffer.to_png_base64())
+        except Exception as exc:
+            logger.warning("Failed to send simulation preview update: {}", exc)
 
     def _record_partial_flush_timing(
         self,
@@ -317,18 +145,14 @@ class WhisplayDisplayAdapter(DisplayHAL):
         width: int,
         height: int,
         device_seconds: float,
-        shadow_seconds: float,
+        framebuffer_seconds: float,
         total_seconds: float,
-        shadow_synced: bool,
     ) -> None:
-        """Record lightweight timing visibility for LVGL partial flushes."""
-
         metrics = self._timing_metrics
         metrics["partial_flushes"] = int(metrics["partial_flushes"]) + 1
-        if shadow_synced:
-            metrics["partial_flush_shadow_syncs"] = int(metrics["partial_flush_shadow_syncs"]) + 1
+        metrics["framebuffer_updates"] = int(metrics["framebuffer_updates"]) + 1
         metrics["last_partial_flush_device_ms"] = device_seconds * 1000.0
-        metrics["last_partial_flush_shadow_ms"] = shadow_seconds * 1000.0
+        metrics["last_partial_flush_framebuffer_ms"] = framebuffer_seconds * 1000.0
         metrics["last_partial_flush_total_ms"] = total_seconds * 1000.0
         metrics["partial_flush_total_ms"] = float(metrics["partial_flush_total_ms"]) + (
             total_seconds * 1000.0
@@ -340,15 +164,14 @@ class WhisplayDisplayAdapter(DisplayHAL):
 
         if total_seconds >= self._SLOW_REGION_FLUSH_THRESHOLD_SECONDS:
             logger.warning(
-                "Slow Whisplay RGB565 flush: area={}x{} at {},{} total_ms={:.1f} device_ms={:.1f} shadow_ms={:.1f} shadow_sync={}",
+                "Slow Whisplay RGB565 flush: area={}x{} at {},{} total_ms={:.1f} device_ms={:.1f} framebuffer_ms={:.1f}",
                 width,
                 height,
                 x,
                 y,
                 total_seconds * 1000.0,
                 device_seconds * 1000.0,
-                shadow_seconds * 1000.0,
-                shadow_synced,
+                framebuffer_seconds * 1000.0,
             )
             return
 
@@ -356,25 +179,20 @@ class WhisplayDisplayAdapter(DisplayHAL):
         if flush_count % self._PARTIAL_FLUSH_TIMING_LOG_INTERVAL == 0:
             average_ms = float(metrics["partial_flush_total_ms"]) / max(1, flush_count)
             logger.debug(
-                "Whisplay RGB565 flush timing: flushes={} avg_ms={:.1f} max_ms={:.1f} shadow_syncs={}",
+                "Whisplay RGB565 flush timing: flushes={} avg_ms={:.1f} max_ms={:.1f}",
                 flush_count,
                 average_ms,
                 float(metrics["max_partial_flush_total_ms"]),
-                int(metrics["partial_flush_shadow_syncs"]),
             )
 
     def _record_full_frame_timing(
         self,
         *,
-        convert_seconds: float,
         device_seconds: float,
         total_seconds: float,
     ) -> None:
-        """Record timing visibility for the PIL full-frame update path."""
-
         metrics = self._timing_metrics
         metrics["full_frame_updates"] = int(metrics["full_frame_updates"]) + 1
-        metrics["last_full_frame_convert_ms"] = convert_seconds * 1000.0
         metrics["last_full_frame_device_ms"] = device_seconds * 1000.0
         metrics["last_full_frame_total_ms"] = total_seconds * 1000.0
         metrics["max_full_frame_total_ms"] = max(
@@ -384,74 +202,18 @@ class WhisplayDisplayAdapter(DisplayHAL):
 
         if total_seconds >= self._SLOW_FULL_FRAME_UPDATE_THRESHOLD_SECONDS:
             logger.warning(
-                "Slow Whisplay full-frame update: convert_ms={:.1f} device_ms={:.1f} total_ms={:.1f}",
-                convert_seconds * 1000.0,
+                "Slow Whisplay full-frame update: device_ms={:.1f} total_ms={:.1f}",
                 device_seconds * 1000.0,
                 total_seconds * 1000.0,
             )
-            return
-
-        logger.debug(
-            "Whisplay full-frame update timing: convert_ms={:.1f} device_ms={:.1f} total_ms={:.1f}",
-            convert_seconds * 1000.0,
-            device_seconds * 1000.0,
-            total_seconds * 1000.0,
-        )
 
     def timing_snapshot(self) -> dict[str, float | int]:
-        """Return the most recent Whisplay render/update timing metrics."""
-
         metrics = dict(self._timing_metrics)
         flush_count = int(metrics["partial_flushes"])
         metrics["avg_partial_flush_ms"] = (
             float(metrics["partial_flush_total_ms"]) / max(1, flush_count) if flush_count else 0.0
         )
         return metrics
-
-    def _convert_to_rgb565(self) -> bytes:
-        """
-        Convert PIL RGB888 buffer to RGB565 byte array for Whisplay display.
-
-        RGB565 format:
-        - 5 bits for red
-        - 6 bits for green
-        - 5 bits for blue
-        - Total: 16 bits (2 bytes) per pixel
-
-        Returns:
-            Byte array in RGB565 format (big-endian)
-        """
-        if self.buffer is None:
-            return b""
-
-        image_module, image_chops_module, _, _ = _load_pillow_modules()
-        red, green, blue = self.buffer.split()
-        high = image_chops_module.add(
-            red.point(_RGB565_HIGH_RED_LUT),
-            green.point(_RGB565_HIGH_GREEN_LUT),
-        )
-        low = image_chops_module.add(
-            green.point(_RGB565_LOW_GREEN_LUT),
-            blue.point(_RGB565_LOW_BLUE_LUT),
-        )
-
-        # ``LA`` stores two 8-bit channels interleaved, which matches the
-        # adapter's big-endian RGB565 byte contract without a Python pixel loop.
-        return image_module.merge("LA", (high, low)).tobytes()
-
-    def _paste_rgb565_region(
-        self,
-        x: int,
-        y: int,
-        width: int,
-        height: int,
-        pixel_data: bytes,
-    ) -> None:
-        """Paste an RGB565 region into the PIL buffer for simulation/debugging."""
-
-        self._ensure_shadow_buffer()
-        region = self._rgb565_to_image(width, height, pixel_data)
-        self.buffer.paste(region, (x, y))
 
     def draw_rgb565_region(
         self,
@@ -461,21 +223,19 @@ class WhisplayDisplayAdapter(DisplayHAL):
         height: int,
         pixel_data: bytes,
     ) -> None:
-        """Write an RGB565 region to hardware and optionally the PIL shadow buffer."""
-
         started_at = time.monotonic()
+
         device_started_at = started_at
-        if not self.simulate and self.device:
+        if not self.simulate and self.device is not None:
             self.device.draw_image(x, y, width, height, pixel_data)
         device_seconds = max(0.0, time.monotonic() - device_started_at)
 
-        # Keep the PIL buffer in sync only when it is the active renderer or simulation target.
-        # Doing this for every LVGL partial flush on hardware is too expensive on the Pi.
-        shadow_started_at = time.monotonic()
-        shadow_synced = self.shadow_buffer_sync_enabled
-        if shadow_synced:
-            self._paste_rgb565_region(x, y, width, height, pixel_data)
-        shadow_seconds = max(0.0, time.monotonic() - shadow_started_at) if shadow_synced else 0.0
+        framebuffer_started_at = time.monotonic()
+        self._framebuffer.paste_region(x, y, width, height, pixel_data)
+        if self.simulate:
+            self._sync_simulation_preview()
+        framebuffer_seconds = max(0.0, time.monotonic() - framebuffer_started_at)
+
         total_seconds = max(0.0, time.monotonic() - started_at)
         self._record_partial_flush_timing(
             x=x,
@@ -483,36 +243,23 @@ class WhisplayDisplayAdapter(DisplayHAL):
             width=width,
             height=height,
             device_seconds=device_seconds,
-            shadow_seconds=shadow_seconds,
+            framebuffer_seconds=framebuffer_seconds,
             total_seconds=total_seconds,
-            shadow_synced=shadow_synced,
         )
 
-    def clear(self, color: Optional[Tuple[int, int, int]] = None) -> None:
-        """Clear the display with specified color."""
-        if color is None:
-            color = self.COLOR_BLACK
-
-        self._ensure_shadow_buffer()
-        self.draw.rectangle([(0, 0), (self.WIDTH, self.HEIGHT)], fill=color)
-        logger.debug(f"Whisplay display cleared with color {color}")
+    def clear(self, color: tuple[int, int, int] | None = None) -> None:
+        self._framebuffer.clear(self.COLOR_BLACK if color is None else color)
 
     def text(
         self,
         text: str,
         x: int,
         y: int,
-        color: Optional[Tuple[int, int, int]] = None,
+        color: tuple[int, int, int] | None = None,
         font_size: int = 16,
-        font_path: Optional[Path] = None,
+        font_path: Path | None = None,
     ) -> None:
-        """Draw text at specified position."""
-        if color is None:
-            color = self.COLOR_WHITE
-
-        self._ensure_shadow_buffer()
-        font = self._load_font(font_size, font_path)
-        self.draw.text((x, y), text, fill=color, font=font)
+        self._raise_immediate_draw_error("text")
 
     def rectangle(
         self,
@@ -520,27 +267,22 @@ class WhisplayDisplayAdapter(DisplayHAL):
         y1: int,
         x2: int,
         y2: int,
-        fill: Optional[Tuple[int, int, int]] = None,
-        outline: Optional[Tuple[int, int, int]] = None,
+        fill: tuple[int, int, int] | None = None,
+        outline: tuple[int, int, int] | None = None,
         width: int = 1,
     ) -> None:
-        """Draw a rectangle."""
-        self._ensure_shadow_buffer()
-        self.draw.rectangle([(x1, y1), (x2, y2)], fill=fill, outline=outline, width=width)
+        self._raise_immediate_draw_error("rectangle")
 
     def circle(
         self,
         x: int,
         y: int,
         radius: int,
-        fill: Optional[Tuple[int, int, int]] = None,
-        outline: Optional[Tuple[int, int, int]] = None,
+        fill: tuple[int, int, int] | None = None,
+        outline: tuple[int, int, int] | None = None,
         width: int = 1,
     ) -> None:
-        """Draw a circle."""
-        self._ensure_shadow_buffer()
-        bbox = [x - radius, y - radius, x + radius, y + radius]
-        self.draw.ellipse(bbox, fill=fill, outline=outline, width=width)
+        self._raise_immediate_draw_error("circle")
 
     def line(
         self,
@@ -548,36 +290,20 @@ class WhisplayDisplayAdapter(DisplayHAL):
         y1: int,
         x2: int,
         y2: int,
-        color: Optional[Tuple[int, int, int]] = None,
+        color: tuple[int, int, int] | None = None,
         width: int = 1,
     ) -> None:
-        """Draw a line."""
-        if color is None:
-            color = self.COLOR_WHITE
-
-        self._ensure_shadow_buffer()
-        self.draw.line([(x1, y1), (x2, y2)], fill=color, width=width)
+        self._raise_immediate_draw_error("line")
 
     def image(
         self,
         image_path: Path,
         x: int,
         y: int,
-        width: Optional[int] = None,
-        height: Optional[int] = None,
+        width: int | None = None,
+        height: int | None = None,
     ) -> None:
-        """Draw an image from file."""
-        try:
-            image_module, _, _, _ = _load_pillow_modules()
-            self._ensure_shadow_buffer()
-            img = image_module.open(image_path)
-
-            if width and height:
-                img = img.resize((width, height), image_module.Resampling.LANCZOS)
-
-            self.buffer.paste(img, (x, y))
-        except Exception as e:
-            logger.error(f"Failed to load image {image_path}: {e}")
+        self._raise_immediate_draw_error("image")
 
     def status_bar(
         self,
@@ -588,181 +314,34 @@ class WhisplayDisplayAdapter(DisplayHAL):
         external_power: bool = False,
         power_available: bool = True,
     ) -> None:
-        """
-        Draw status bar at top of screen.
-
-        Portrait layout uses slightly taller status bar (25px vs 20px)
-        to accommodate the narrower width.
-        """
-        # Draw background
-        self.rectangle(0, 0, self.WIDTH, self.STATUS_BAR_HEIGHT, fill=self.COLOR_DARK_GRAY)
-
-        # Draw time (centered) - adjusted for narrower width
-        time_x = (self.WIDTH - len(time_str) * 7) // 2
-        self.text(time_str, time_x, 4, color=self.COLOR_WHITE, font_size=14)
-
-        # Draw battery indicator (right side) - scaled for portrait
-        battery_x = self.WIDTH - 45
-        battery_y = 6
-        battery_width = 35
-        battery_height = 12
-
-        # Battery outline
-        self.rectangle(
-            battery_x,
-            battery_y,
-            battery_x + battery_width,
-            battery_y + battery_height,
-            outline=self.COLOR_WHITE,
-            width=1,
-        )
-
-        # Battery tip
-        self.rectangle(
-            battery_x + battery_width,
-            battery_y + 3,
-            battery_x + battery_width + 3,
-            battery_y + battery_height - 3,
-            fill=self.COLOR_WHITE,
-        )
-
-        # Battery fill
-        fill_width = int((battery_width - 4) * (battery_percent / 100))
-        if fill_width > 0:
-            battery_color = self.COLOR_GREEN if battery_percent > 20 else self.COLOR_RED
-            self.rectangle(
-                battery_x + 2,
-                battery_y + 2,
-                battery_x + 2 + fill_width,
-                battery_y + battery_height - 2,
-                fill=battery_color,
-            )
-
-        indicator = ""
-        if not power_available:
-            indicator = "?"
-        elif charging:
-            indicator = "C"
-        elif external_power:
-            indicator = "P"
-
-        if indicator:
-            self.text(
-                indicator,
-                battery_x - 14,
-                battery_y - 1,
-                color=self.COLOR_YELLOW if indicator == "?" else self.COLOR_WHITE,
-                font_size=12,
-            )
-
-        # Draw signal strength (left side)
-        signal_x = 5
-        signal_y = 10
-        bar_width = 3
-        bar_spacing = 2
-
-        for i in range(4):
-            bar_height = 4 + (i * 2)
-            bar_color = self.COLOR_WHITE if i < signal_strength else self.COLOR_DARK_GRAY
-
-            self.rectangle(
-                signal_x + (i * (bar_width + bar_spacing)),
-                signal_y + (12 - bar_height),
-                signal_x + (i * (bar_width + bar_spacing)) + bar_width,
-                signal_y + 12,
-                fill=bar_color,
-            )
+        self._raise_immediate_draw_error("status_bar")
 
     def update(self) -> None:
-        """
-        Flush buffer to physical display.
-
-        Converts RGB888 PIL buffer to RGB565 format and sends to Whisplay display.
-        """
-        if self.buffer is None:
-            logger.warning("No buffer to display")
-            return
-
-        if not self.simulate and self.device:
-            try:
-                started_at = time.monotonic()
-                convert_started_at = started_at
-                pixel_data = self._convert_to_rgb565()
-                convert_seconds = max(0.0, time.monotonic() - convert_started_at)
-
-                device_started_at = time.monotonic()
-                self.device.draw_image(0, 0, self.WIDTH, self.HEIGHT, pixel_data)
-                device_seconds = max(0.0, time.monotonic() - device_started_at)
-                total_seconds = max(0.0, time.monotonic() - started_at)
-                self._record_full_frame_timing(
-                    convert_seconds=convert_seconds,
-                    device_seconds=device_seconds,
-                    total_seconds=total_seconds,
-                )
-            except Exception as e:
-                logger.error(f"Failed to update Whisplay display: {e}")
-        else:
-            logger.debug("Whisplay display update (simulated)")
+        started_at = time.monotonic()
+        device_started_at = started_at
+        if not self.simulate and self.device is not None:
+            self.device.draw_image(0, 0, self.WIDTH, self.HEIGHT, bytes(self._framebuffer.data))
+        device_seconds = max(0.0, time.monotonic() - device_started_at)
+        if self.simulate:
+            self._sync_simulation_preview()
+        total_seconds = max(0.0, time.monotonic() - started_at)
+        self._record_full_frame_timing(device_seconds=device_seconds, total_seconds=total_seconds)
 
     def save_screenshot(self, path: str) -> bool:
-        """Save the current PIL shadow buffer as a PNG screenshot.
-
-        The shadow buffer is kept in sync with every LVGL flush callback,
-        so this captures what the app most recently sent to the display.
-
-        Args:
-            path: File path to write the PNG image to.
-
-        Returns:
-            True if the screenshot was saved, False if no buffer exists.
-        """
-        if not self.shadow_buffer_sync_enabled:
-            if self.ui_backend is None or not getattr(self.ui_backend, "initialized", False):
-                logger.info(
-                    "Shadow-buffer screenshots are disabled for hardware LVGL; using LVGL readback instead"
-                )
-                return self.save_screenshot_readback(path)
-
-            logger.info(
-                "Shadow-buffer screenshots are disabled for hardware LVGL; forcing one redraw into the PIL buffer"
-            )
-            self._force_shadow_buffer_sync = True
-            try:
-                self.ui_backend.force_refresh()
-            except Exception as e:
-                logger.error("Failed to refresh the LVGL scene for shadow screenshot: {}", e)
-                return False
-            finally:
-                self._force_shadow_buffer_sync = False
-
-        if self.buffer is None:
-            logger.warning("No buffer available for screenshot")
-            return False
         try:
-            self.buffer.save(path, "PNG")
-            logger.info("Shadow buffer screenshot saved to {}", path)
+            Path(path).write_bytes(self._framebuffer.to_png_bytes())
+            logger.info("Framebuffer screenshot saved to {}", path)
             return True
-        except Exception as e:
-            logger.error("Failed to save screenshot to {}: {}", path, e)
+        except Exception as exc:
+            logger.error("Failed to save framebuffer screenshot to {}: {}", path, exc)
             return False
 
     def save_screenshot_readback(self, path: str) -> bool:
-        """Save a screenshot by reading back from LVGL's internal object tree.
-
-        Uses lv_snapshot_take() via the C shim to capture what LVGL has
-        actually rendered, regardless of the shadow buffer state.
-
-        Args:
-            path: File path to write the PNG image to.
-
-        Returns:
-            True if the screenshot was saved, False on failure.
-        """
-        if self.ui_backend is None or not self.ui_backend.initialized:
+        if self.ui_backend is None or not getattr(self.ui_backend, "initialized", False):
             logger.warning("LVGL backend not available for readback screenshot")
             return False
 
-        binding = self.ui_backend.binding
+        binding = getattr(self.ui_backend, "binding", None)
         if binding is None:
             logger.warning("LVGL binding not available for readback screenshot")
             return False
@@ -773,72 +352,45 @@ class WhisplayDisplayAdapter(DisplayHAL):
                 logger.error("LVGL snapshot returned no data")
                 return False
 
-            img = self._rgb565_to_image(self.WIDTH, self.HEIGHT, pixel_data)
-            img.save(path, "PNG")
+            Path(path).write_bytes(rgb565_bytes_to_png(self.WIDTH, self.HEIGHT, pixel_data))
             logger.info("LVGL readback screenshot saved to {}", path)
             return True
-        except Exception as e:
-            logger.error("Failed to save LVGL readback screenshot: {}", e)
+        except Exception as exc:
+            logger.error("Failed to save LVGL readback screenshot: {}", exc)
             return False
 
     def get_backend_kind(self) -> str:
-        """Return the active UI rendering backend."""
-
-        if (
-            self.ui_backend is not None
-            and self.renderer == "lvgl"
-            and getattr(self.ui_backend, "initialized", False)
-        ):
+        if self.ui_backend is not None and getattr(self.ui_backend, "initialized", False):
             return "lvgl"
-        return "pil"
+        return "unavailable"
 
     def get_ui_backend(self):
-        """Return the optional Whisplay LVGL backend."""
-
         return self.ui_backend
 
     def reset_ui_backend(self) -> None:
-        """Reset any active LVGL scene before handing off to another renderer."""
-
         if self.ui_backend is not None:
             self.ui_backend.reset()
 
     def set_backlight(self, brightness: float) -> None:
-        """
-        Set backlight brightness (0.0 to 1.0).
-
-        Whisplay uses 0-100 scale internally, so we convert.
-        """
-        if not self.simulate and self.device:
+        if not self.simulate and self.device is not None:
             try:
-                # Convert 0.0-1.0 to 0-100
-                whisplay_brightness = int(brightness * 100)
-                self.device.set_backlight(whisplay_brightness)
-                logger.debug(f"Whisplay backlight set to {brightness} ({whisplay_brightness}%)")
-            except Exception as e:
-                logger.error(f"Failed to set Whisplay backlight: {e}")
+                self.device.set_backlight(int(max(0.0, min(1.0, brightness)) * 100))
+            except Exception as exc:  # pragma: no cover - hardware-only path
+                logger.error("Failed to set Whisplay backlight: {}", exc)
 
-    def get_text_size(self, text: str, font_size: int = 16) -> Tuple[int, int]:
-        """Calculate rendered text dimensions."""
-        self._ensure_shadow_buffer()
-        font = self._load_font(font_size)
-
-        bbox = self.draw.textbbox((0, 0), text, font=font)
-        return (bbox[2] - bbox[0], bbox[3] - bbox[1])
+    def get_text_size(self, text: str, font_size: int = 16) -> tuple[int, int]:
+        return (int(len(text) * max(6, font_size * 0.6)), font_size)
 
     def cleanup(self) -> None:
-        """Cleanup Whisplay display resources."""
         if self.ui_backend is not None:
             try:
                 self.ui_backend.cleanup()
-            except Exception as e:
-                logger.error(f"Error during LVGL backend cleanup: {e}")
-
-        if self.device:
+            except Exception as exc:
+                logger.error("Error during LVGL backend cleanup: {}", exc)
+        if self.device is not None:
             try:
-                self.device.set_backlight(0)  # Turn off backlight
-                self.device.set_rgb(0, 0, 0)  # Turn off LED
-                self.device.cleanup()  # Call driver cleanup
-                logger.info("Whisplay display cleaned up")
-            except Exception as e:
-                logger.error(f"Error during Whisplay cleanup: {e}")
+                self.device.set_backlight(0)
+                self.device.set_rgb(0, 0, 0)
+                self.device.cleanup()
+            except Exception as exc:  # pragma: no cover - hardware-only path
+                logger.error("Error during Whisplay cleanup: {}", exc)

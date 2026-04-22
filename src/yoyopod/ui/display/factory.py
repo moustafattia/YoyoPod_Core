@@ -1,9 +1,4 @@
-"""
-Display hardware factory for YoyoPod.
-
-This module provides factory functions to create the appropriate display
-adapter based on hardware detection or configuration.
-"""
+"""Display hardware factory for the LVGL-only Whisplay runtime."""
 
 from __future__ import annotations
 
@@ -11,22 +6,10 @@ import os
 
 from loguru import logger
 
-from yoyopod.config.models import PimoroniGpioConfig
 from yoyopod.ui.display.hal import DisplayHAL
 from yoyopod.ui.display.adapters.whisplay_paths import find_whisplay_driver
 
-VALID_DISPLAY_TYPES = {"auto", "whisplay", "pimoroni", "simulation"}
-
-
-def _get_pimoroni_gpio_config() -> PimoroniGpioConfig | None:
-    """Return PimoroniGpioConfig from the active board config, or None."""
-    try:
-        from yoyopod.config.manager import ConfigManager
-
-        mgr = ConfigManager()
-        return mgr.app_settings.display.pimoroni_gpio
-    except Exception:
-        return None
+VALID_DISPLAY_TYPES = {"auto", "whisplay", "simulation"}
 
 
 def _normalize_display_hardware(hardware: str) -> str:
@@ -54,15 +37,7 @@ def detect_hardware() -> str:
         logger.info("Detected Whisplay HAT (driver found at {})", whisplay_driver_path)
         return "whisplay"
 
-    try:
-        import displayhatmini  # noqa: F401
-
-        logger.info("Detected Pimoroni Display HAT Mini (library imported successfully)")
-        return "pimoroni"
-    except Exception as exc:
-        logger.debug("DisplayHATMini import failed during detection: {}", exc)
-
-    logger.warning("No display hardware detected - defaulting to simulation mode")
+    logger.warning("No Whisplay hardware detected - defaulting to simulation mode")
     logger.info("To force hardware type, set YOYOPOD_DISPLAY environment variable")
     return "simulation"
 
@@ -129,37 +104,18 @@ def get_display(
             lvgl_buffer_lines=whisplay_lvgl_buffer_lines,
         )
 
-    if hardware == "pimoroni":
-        # Try Pi-native displayhatmini first
-        try:
-            import displayhatmini  # noqa: F401
-
-            logger.info("Creating Pimoroni display adapter (320x240 landscape, displayhatmini)")
-            from yoyopod.ui.display.adapters.pimoroni import PimoroniDisplayAdapter
-
-            return PimoroniDisplayAdapter(simulate=False)
-        except Exception:
-            pass
-
-        # Fallback: Cubie-native spidev + gpiod adapter
-        gpio_config = _get_pimoroni_gpio_config()
-        if gpio_config is not None and (gpio_config.dc is not None or gpio_config.cs is not None):
-            logger.info("Creating Cubie Pimoroni display adapter (320x240 landscape, spidev + gpiod)")
-            from yoyopod.ui.display.adapters.cubie_pimoroni import CubiePimoroniAdapter
-
-            return CubiePimoroniAdapter(simulate=False, gpio_config=gpio_config)
-
-        logger.warning("Pimoroni requested but no displayhatmini or GPIO config available")
-        logger.info("Falling back to Pimoroni simulation mode")
-        from yoyopod.ui.display.adapters.cubie_pimoroni import CubiePimoroniAdapter
-
-        return CubiePimoroniAdapter(simulate=True)
-
     if hardware == "simulation":
-        logger.info("Creating simulation display adapter (240x280 portrait, Whisplay profile)")
-        from yoyopod.ui.display.adapters.simulation import SimulationDisplayAdapter
+        logger.info("Creating simulated Whisplay LVGL adapter (240x280 portrait)")
+        from yoyopod.ui.display.adapters.whisplay import WhisplayDisplayAdapter
 
-        return _attach_simulation_preview(SimulationDisplayAdapter())
+        return _attach_simulation_preview(
+            WhisplayDisplayAdapter(
+                simulate=True,
+                renderer="lvgl",
+                lvgl_buffer_lines=whisplay_lvgl_buffer_lines,
+                enforce_production_contract=False,
+            )
+        )
 
     valid_types = ", ".join(sorted(VALID_DISPLAY_TYPES))
     raise ValueError(f"Unknown display hardware type: '{hardware}'. Valid options: {valid_types}")

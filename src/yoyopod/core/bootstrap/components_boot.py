@@ -75,7 +75,7 @@ class ComponentsBoot:
             whisplay_renderer = (
                 self.app.app_settings.display.whisplay_renderer
                 if self.app.app_settings is not None
-                else "pil"
+                else "lvgl"
             )
             self.logger.info(f"    Hardware: {display_hardware}")
             self.logger.info(f"    Whisplay renderer: {whisplay_renderer}")
@@ -95,25 +95,13 @@ class ComponentsBoot:
             else:
                 self.app._lvgl_backend = None
                 display.refresh_backend_kind()
+                error_message = "Whisplay LVGL backend initialization failed during startup"
                 if self._whisplay_production_contract_required(
                     requested_renderer=whisplay_renderer,
                 ):
-                    raise self.contract_error_cls(
-                        self.build_contract_message_fn(
-                            "Whisplay LVGL backend initialization failed during startup",
-                        )
-                    )
+                    raise self.contract_error_cls(self.build_contract_message_fn(error_message))
+                raise RuntimeError(error_message)
             self.logger.info(f"    Active UI backend: {display.backend_kind}")
-
-            display.clear(display.COLOR_BLACK)
-            display.text(
-                "YoyoPod Starting...",
-                10,
-                100,
-                color=display.COLOR_WHITE,
-                font_size=16,
-            )
-            display.update()
             self.app.screen_power_service.configure_screen_power(initial_now=time.monotonic())
 
             self.logger.info("  - AppContext")

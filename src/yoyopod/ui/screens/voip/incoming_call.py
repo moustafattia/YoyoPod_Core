@@ -10,7 +10,6 @@ from yoyopod.integrations.call import AnswerCommand, RejectCommand
 from yoyopod.ui.display import Display
 from yoyopod.ui.screens.base import Screen
 from yoyopod.ui.screens.lvgl_lifecycle import current_retained_view
-from yoyopod.ui.screens.voip.incoming_call_pil_view import render_incoming_call_pil
 from yoyopod.ui.screens.voip.lvgl import LvglIncomingCallView
 
 if TYPE_CHECKING:
@@ -86,7 +85,7 @@ class IncomingCallScreen(Screen):
 
     def _ensure_lvgl_view(self) -> "ScreenView | None":
         """Create an LVGL view when the Whisplay renderer is active."""
-        if getattr(self.display, "backend_kind", "pil") != "lvgl":
+        if getattr(self.display, "backend_kind", "unavailable") != "lvgl":
             self._lvgl_view = None
             return None
 
@@ -108,10 +107,9 @@ class IncomingCallScreen(Screen):
     def render(self) -> None:
         """Render the incoming call screen."""
         lvgl_view = self._ensure_lvgl_view()
-        if lvgl_view is not None:
-            lvgl_view.sync()
-            return
-        render_incoming_call_pil(self)
+        if lvgl_view is None:
+            raise RuntimeError("IncomingCallScreen requires an initialized LVGL backend")
+        lvgl_view.sync()
 
     def _answer_call(self) -> None:
         """Answer the incoming call."""

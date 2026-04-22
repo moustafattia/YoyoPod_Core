@@ -2,8 +2,8 @@
 Input HAL for YoyoPod.
 
 Provides hardware abstraction for various input methods:
-- 4-button interface (Pimoroni Display HAT Mini)
 - PTT button (Whisplay HAT)
+- Simulation keyboard/web controls
 - Voice commands (future)
 - Touch screen (future)
 """

@@ -180,6 +180,8 @@ def test_screen_manager_routes_menu_labels_through_stack(display: Display) -> No
     menu = MenuScreen(display, context, items=["Load Playlist", "Back"])
     playlists = RoutableStubScreen(display, context)
     power = RoutableStubScreen(display, context)
+    home.render = lambda: None
+    menu.render = lambda: None
 
     screen_manager.register_screen("home", home)
     screen_manager.register_screen("menu", menu)
@@ -211,6 +213,7 @@ def test_screen_manager_routes_power_status_through_stack(display: Display) -> N
 
     menu = MenuScreen(display, context, items=["Power Status"])
     power = RoutableStubScreen(display, context)
+    menu.render = lambda: None
 
     screen_manager.register_screen("menu", menu)
     screen_manager.register_screen("power", power)
@@ -345,6 +348,7 @@ def test_screen_manager_routes_whisplay_hub_cards_through_stack(display: Display
     call = RoutableStubScreen(display, context)
     ask = RoutableStubScreen(display, context)
     power = RoutableStubScreen(display, context)
+    hub.render = lambda: None
 
     screen_manager.register_screen("hub", hub)
     screen_manager.register_screen("listen", listen)
@@ -388,6 +392,7 @@ def test_screen_manager_can_schedule_actions_for_main_thread(display: Display) -
 
     hub = HubScreen(display, context)
     listen = RoutableStubScreen(display, context)
+    hub.render = lambda: None
 
     screen_manager.register_screen("hub", hub)
     screen_manager.register_screen("listen", listen)
@@ -1041,6 +1046,8 @@ def test_hub_back_triggers_hold_ask_route(display: Display) -> None:
 
     hub = HubScreen(display, context)
     ask = AskScreen(display=display, context=context)
+    hub.render = lambda: None
+    ask.render = lambda: None
 
     screen_manager.register_screen("hub", hub)
     screen_manager.register_screen("ask", ask)

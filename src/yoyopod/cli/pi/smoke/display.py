@@ -35,11 +35,32 @@ def _display_check(
     try:
         display = Display(hardware=resolved_hardware, simulate=False)
         adapter = display.get_adapter()
+        ui_backend = display.get_ui_backend()
+        if ui_backend is None or not ui_backend.initialize():
+            return (
+                CheckResult(
+                    name="display",
+                    status="fail",
+                    details="LVGL backend failed to initialize",
+                ),
+                display,
+            )
 
-        display.clear(display.COLOR_BLACK)
-        display.text("YoyoPod Pi smoke", 10, 40, color=display.COLOR_WHITE, font_size=18)
-        display.text("Display OK", 10, 75, color=display.COLOR_GREEN, font_size=18)
-        display.update()
+        binding = ui_backend.binding
+        if binding is not None:
+            binding.ask_build()
+            binding.ask_sync(
+                icon_key="setup",
+                title_text="YoyoPod Pi smoke",
+                subtitle_text="Display OK",
+                footer="LVGL alive",
+                voip_state=0,
+                battery_percent=100,
+                charging=False,
+                power_available=True,
+                accent=display.COLOR_GREEN,
+            )
+            ui_backend.force_refresh()
 
         if hold_seconds > 0:
             time.sleep(hold_seconds)

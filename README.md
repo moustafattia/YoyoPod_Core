@@ -18,9 +18,8 @@ Approved contacts are now backend-synced policy data:
   when the backend household contact list is still empty
 
 Supported display/input modes:
-- Pimoroni Display HAT Mini: `320x240` landscape with four buttons
 - PiSugar Whisplay HAT: `240x280` portrait with a single PTT-style button
-- Simulation mode: browser display with keyboard and web-button input
+- Simulation mode: Whisplay-profile browser preview with web-button input
 
 ## Call And Music Contract
 
@@ -85,6 +84,7 @@ Start here:
 Setup and operations:
 - [Setup Contract](docs/SETUP_CONTRACT.md)
 - [Quality Gates](docs/QUALITY_GATES.md)
+- [Pi Profiling Workflow](docs/PI_PROFILING_WORKFLOW.md)
 - [Pi Dev Workflow](docs/PI_DEV_WORKFLOW.md)
 - [Pi Smoke Validation](docs/RPI_SMOKE_VALIDATION.md)
 - [Deployed Pi Dependencies](docs/DEPLOYED_PI_DEPENDENCIES.md)

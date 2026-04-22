@@ -151,7 +151,6 @@ These are not universal for every contributor machine, but the repo should still
 See:
 
 - `docs/CUBIE_A7Z_BRINGUP.md`
-- `docs/CUBIE_A7Z_PIMORONI_SETUP.md`
 
 ## Repo-owned configuration contract
 

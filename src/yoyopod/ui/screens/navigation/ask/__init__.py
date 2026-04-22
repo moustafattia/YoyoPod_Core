@@ -305,7 +305,7 @@ class AskScreen(Screen):
     def _ensure_lvgl_view(self) -> "ScreenView | None":
         """Create an LVGL view when the Whisplay renderer is active."""
 
-        if getattr(self.display, "backend_kind", "pil") != "lvgl":
+        if getattr(self.display, "backend_kind", "unavailable") != "lvgl":
             self._lvgl_view = None
             return None
 
@@ -336,14 +336,9 @@ class AskScreen(Screen):
         """Render the current Ask state."""
 
         lvgl_view = self._ensure_lvgl_view()
-        if lvgl_view is not None:
-            lvgl_view.sync()
-            return
-
-        if self._state == "reply":
-            self._render_reply()
-        else:
-            self._render_icon_state()
+        if lvgl_view is None:
+            raise RuntimeError("AskScreen requires an initialized LVGL backend")
+        lvgl_view.sync()
 
     def _render_icon_state(self) -> None:
         """Render idle / listening / thinking states with centered icon circle."""

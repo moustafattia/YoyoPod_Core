@@ -6,7 +6,6 @@ concerns into focused submodules.
 
 from __future__ import annotations
 
-from yoyopod.ui.screens.theme_assets import ICON_ASSET_DIR, PHOSPHOR_ICON_FILES
 from yoyopod.ui.screens.theme_text import mix, text_fit, wrap_text
 from yoyopod.ui.screens.theme_tokens import (
     ASK,
@@ -55,14 +54,12 @@ __all__ = [
     "FOOTER_SAFE_HEIGHT_PORTRAIT",
     "HEADER_SIDE_INSET_LANDSCAPE",
     "HEADER_SIDE_INSET_PORTRAIT",
-    "ICON_ASSET_DIR",
     "INK",
     "LISTEN",
     "ModeTheme",
     "MUTED",
     "MUTED_DIM",
     "NEUTRAL",
-    "PHOSPHOR_ICON_FILES",
     "SETUP",
     "SUCCESS",
     "SURFACE",

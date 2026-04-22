@@ -10,7 +10,6 @@ from yoyopod.integrations.call import DialCommand, MarkHistorySeenCommand
 from yoyopod.ui.display import Display
 from yoyopod.ui.screens.base import Screen
 from yoyopod.ui.screens.lvgl_lifecycle import current_retained_view
-from yoyopod.ui.screens.voip.call_history_pil_view import render_call_history_pil
 from yoyopod.ui.screens.voip.lvgl.call_history_view import LvglCallHistoryView
 
 if TYPE_CHECKING:
@@ -74,7 +73,7 @@ class CallHistoryScreen(Screen):
         super().exit()
 
     def _ensure_lvgl_view(self) -> "ScreenView | None":
-        if getattr(self.display, "backend_kind", "pil") != "lvgl":
+        if getattr(self.display, "backend_kind", "unavailable") != "lvgl":
             self._lvgl_view = None
             return None
 
@@ -146,10 +145,9 @@ class CallHistoryScreen(Screen):
     def render(self) -> None:
         """Render the recent-calls list."""
         lvgl_view = self._ensure_lvgl_view()
-        if lvgl_view is not None:
-            lvgl_view.sync()
-            return
-        render_call_history_pil(self)
+        if lvgl_view is None:
+            raise RuntimeError("CallHistoryScreen requires an initialized LVGL backend")
+        lvgl_view.sync()
 
     def get_visible_window(self) -> tuple[list[str], list[str], int]:
         """Return the visible recent-call titles for the shared LVGL list scene."""

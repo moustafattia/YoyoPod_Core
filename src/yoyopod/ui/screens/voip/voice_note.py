@@ -17,7 +17,6 @@ from yoyopod.ui.screens.voip.voice_note_models import (
     build_voice_note_state_provider,
 )
 from yoyopod.ui.screens.voip.voice_note_recording import VoiceNoteRecordingController
-from yoyopod.ui.screens.voip.voice_note_pil_view import render_voice_note_pil
 from yoyopod.ui.screens.voip.voice_note_viewmodel import VoiceNoteViewModel
 
 if TYPE_CHECKING:
@@ -72,7 +71,7 @@ class VoiceNoteScreen(Screen):
         super().exit()
 
     def _ensure_lvgl_view(self) -> LvglVoiceNoteView | None:
-        if getattr(self.display, "backend_kind", "pil") != "lvgl":
+        if getattr(self.display, "backend_kind", "unavailable") != "lvgl":
             self._lvgl_view = None
             return None
 
@@ -244,10 +243,9 @@ class VoiceNoteScreen(Screen):
 
         self._sync_state_from_provider(default_state=self._state)
         lvgl_view = self._ensure_lvgl_view()
-        if lvgl_view is not None:
-            lvgl_view.sync()
-            return
-        render_voice_note_pil(self)
+        if lvgl_view is None:
+            raise RuntimeError("VoiceNoteScreen requires an initialized LVGL backend")
+        lvgl_view.sync()
 
     def _selected_action(self) -> VoiceNoteAction | None:
         """Return the currently highlighted voice-note action."""

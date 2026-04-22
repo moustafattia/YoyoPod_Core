@@ -18,13 +18,17 @@ class WhisplayDisplayAdapter:
 
     def __init__(self) -> None:
         self.device = None
+        self.simulate = False
 
 
-class SimulationDisplayAdapter:
+class SimulatedWhisplayDisplayAdapter(WhisplayDisplayAdapter):
     """Minimal simulation display-adapter double mirroring Whisplay."""
 
-    DISPLAY_TYPE = "simulation"
     SIMULATED_HARDWARE = "whisplay"
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.simulate = True
 
 
 def test_whisplay_factory_applies_one_button_profile_and_custom_timings() -> None:
@@ -69,8 +73,10 @@ def test_whisplay_factory_keeps_standard_profile_when_navigation_disabled() -> N
     assert adapter.enable_navigation is False
 
 
-def test_simulation_factory_uses_whisplay_profile_and_browser_buttons(monkeypatch) -> None:
-    """Simulation should keep standard keyboard/web controls despite Whisplay sizing."""
+def test_simulated_whisplay_factory_uses_one_button_profile_and_browser_buttons(
+    monkeypatch,
+) -> None:
+    """Simulation should mirror Whisplay one-button browser controls."""
 
     class FakeServer:
         def __init__(self) -> None:
@@ -90,15 +96,15 @@ def test_simulation_factory_uses_whisplay_profile_and_browser_buttons(monkeypatc
     )
 
     manager = get_input_manager(
-        SimulationDisplayAdapter(),
+        SimulatedWhisplayDisplayAdapter(),
         config={"input": {"ptt_navigation": True}},
-        simulate=False,
+        simulate=True,
     )
 
     observed: list[InputAction] = []
     assert manager is not None
-    assert manager.interaction_profile == InteractionProfile.STANDARD
-    manager.on_action(InputAction.UP, lambda data=None: observed.append(InputAction.UP))
+    assert manager.interaction_profile == InteractionProfile.ONE_BUTTON
+    manager.on_action(InputAction.ADVANCE, lambda data=None: observed.append(InputAction.ADVANCE))
     manager.on_action(InputAction.SELECT, lambda data=None: observed.append(InputAction.SELECT))
     manager.on_action(InputAction.BACK, lambda data=None: observed.append(InputAction.BACK))
 
@@ -108,6 +114,7 @@ def test_simulation_factory_uses_whisplay_profile_and_browser_buttons(monkeypatc
     server.callback("BACK")
 
     assert observed == [
+        InputAction.ADVANCE,
         InputAction.SELECT,
         InputAction.BACK,
     ]
@@ -118,7 +125,7 @@ def test_simulation_factory_uses_whisplay_profile_and_browser_buttons(monkeypatc
     server.callback("BACK")
 
     assert observed == [
-        InputAction.UP,
+        InputAction.ADVANCE,
         InputAction.SELECT,
         InputAction.BACK,
     ]

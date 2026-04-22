@@ -10,6 +10,7 @@ from loguru import logger
 from yoyopod.core.events import ScreenChangedEvent, UserActivityEvent
 from yoyopod.integrations.power import PowerAlert
 from yoyopod.integrations.power.events import LowBatteryWarningRaised
+from yoyopod.ui.screens.lvgl_status import sync_network_status
 
 if TYPE_CHECKING:
     from yoyopod.core.application import YoyoPodApp
@@ -212,32 +213,43 @@ class ScreenPowerService:
         subtitle: str,
         color: tuple[int, int, int],
     ) -> None:
-        """Render a simple fullscreen power-status overlay."""
+        """Render a simple fullscreen power-status overlay via LVGL."""
         if self.app.display is None:
             return
+        ui_backend = self.app.display.get_ui_backend()
+        binding = getattr(ui_backend, "binding", None) if ui_backend is not None else None
+        if ui_backend is None or not getattr(ui_backend, "initialized", False) or binding is None:
+            logger.warning("Skipping power overlay because the LVGL backend is unavailable")
+            return
 
-        self.app.display.clear(self.app.display.COLOR_BLACK)
-        title_size = 24
-        subtitle_size = 14
-        title_width, title_height = self.app.display.get_text_size(title, title_size)
-        subtitle_width, _ = self.app.display.get_text_size(subtitle, subtitle_size)
-        title_x = (self.app.display.WIDTH - title_width) // 2
-        subtitle_x = (self.app.display.WIDTH - subtitle_width) // 2
-        title_y = max(
-            self.app.display.STATUS_BAR_HEIGHT + 30,
-            (self.app.display.HEIGHT // 2) - 30,
-        )
-        subtitle_y = title_y + title_height + 18
+        try:
+            if hasattr(binding, "ask_destroy"):
+                binding.ask_destroy()
+        except Exception:
+            logger.debug("Ignoring LVGL ask scene destroy failure before power overlay")
 
-        self.app.display.text(title, title_x, title_y, color=color, font_size=title_size)
-        self.app.display.text(
-            subtitle,
-            subtitle_x,
-            subtitle_y,
-            color=self.app.display.COLOR_WHITE,
-            font_size=subtitle_size,
+        sync_network_status(binding, self.app.context)
+        binding.ask_build()
+        binding.ask_sync(
+            icon_key="battery" if "battery" in title.lower() else "care",
+            title_text=title,
+            subtitle_text=subtitle,
+            footer="Power alert",
+            voip_state=(1 if self.app.context is not None and self.app.context.voip.ready else 0),
+            battery_percent=(
+                max(0, min(100, int(self.app.context.power.battery_percent)))
+                if self.app.context is not None
+                else 100
+            ),
+            charging=(
+                self.app.context.power.battery_charging if self.app.context is not None else False
+            ),
+            power_available=(
+                self.app.context.power.available if self.app.context is not None else True
+            ),
+            accent=color,
         )
-        self.app.display.update()
+        ui_backend.force_refresh()
 
     def update_power_overlays(self, now: float) -> bool:
         """Render pending power overlays and return True when one is active."""

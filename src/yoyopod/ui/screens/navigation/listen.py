@@ -10,7 +10,6 @@ from yoyopod.ui.display import Display
 from yoyopod.ui.screens.base import Screen
 from yoyopod.ui.screens.lvgl_lifecycle import current_retained_view
 from yoyopod.ui.screens.navigation.lvgl import LvglListenView
-from yoyopod.ui.screens.navigation.listen_pil_view import render_listen_pil
 
 if TYPE_CHECKING:
     from yoyopod.core import AppContext
@@ -46,7 +45,7 @@ class ListenScreen(Screen):
 
     def _ensure_lvgl_view(self) -> "ScreenView | None":
         """Create an LVGL view when the Whisplay renderer is active."""
-        if getattr(self.display, "backend_kind", "pil") != "lvgl":
+        if getattr(self.display, "backend_kind", "unavailable") != "lvgl":
             self._lvgl_view = None
             return None
 
@@ -84,10 +83,9 @@ class ListenScreen(Screen):
     def render(self) -> None:
         """Render the local library menu."""
         lvgl_view = self._ensure_lvgl_view()
-        if lvgl_view is not None:
-            lvgl_view.sync()
-            return
-        render_listen_pil(self)
+        if lvgl_view is None:
+            raise RuntimeError("ListenScreen requires an initialized LVGL backend")
+        lvgl_view.sync()
 
     @staticmethod
     def item_icon_key(key: str) -> str:

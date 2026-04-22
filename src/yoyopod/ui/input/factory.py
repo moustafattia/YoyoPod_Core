@@ -24,10 +24,6 @@ def _get_display_type(display_adapter: object) -> str:
     adapter_name = display_adapter.__class__.__name__
     if adapter_name == "WhisplayDisplayAdapter":
         return "whisplay"
-    if adapter_name == "PimoroniDisplayAdapter":
-        return "pimoroni"
-    if adapter_name == "SimulationDisplayAdapter":
-        return "simulation"
     return adapter_name.lower()
 
 

@@ -1,11 +1,11 @@
-"""Focused tests for the Whisplay adapter hot paths."""
+"""Focused tests for the LVGL-only Whisplay adapter hot paths."""
 
 from __future__ import annotations
 
-from types import SimpleNamespace
-
 import pytest
-from PIL import Image, ImageDraw, ImageFont
+from pathlib import Path
+from struct import unpack
+from types import SimpleNamespace
 
 from yoyopod.ui.display.contracts import WhisplayProductionRenderContractError
 from yoyopod.ui.display.adapters.whisplay import (
@@ -29,6 +29,15 @@ class FakeDevice:
         pixel_data: bytes,
     ) -> None:
         self.draw_calls.append((x, y, width, height, pixel_data))
+
+
+def _read_png_dimensions(path: Path) -> tuple[int, int]:
+    """Return `(width, height)` from a PNG file without third-party dependencies."""
+
+    payload = path.read_bytes()
+    assert payload.startswith(b"\x89PNG\r\n\x1a\n")
+    assert payload[12:16] == b"IHDR"
+    return unpack(">II", payload[16:24])
 
 
 def test_vendor_gpiod_compat_aliases_pypi_module_shapes() -> None:
@@ -104,7 +113,7 @@ def test_vendor_gpiod_compat_retries_existing_chip_with_dev_prefix() -> None:
 
 
 def test_production_whisplay_rejects_non_lvgl_renderer() -> None:
-    """Real Whisplay runs must not silently keep the historical PIL path."""
+    """Real Whisplay runs must not silently keep the retired raster path."""
 
     with pytest.raises(WhisplayProductionRenderContractError, match="require the LVGL renderer"):
         WhisplayDisplayAdapter(simulate=False, renderer="pil")
@@ -121,162 +130,51 @@ def test_production_whisplay_refuses_missing_driver(monkeypatch) -> None:
         WhisplayDisplayAdapter(simulate=False, renderer="lvgl")
 
 
-def test_hardware_lvgl_flush_skips_shadow_buffer_sync(monkeypatch) -> None:
-    """Hardware LVGL flushes should not mirror every region into PIL."""
+def test_rgb565_region_flush_updates_device_and_framebuffer() -> None:
+    """RGB565 flushes should update both the hardware device and framebuffer."""
 
     adapter = WhisplayDisplayAdapter(simulate=True, renderer="lvgl")
     adapter.simulate = False
     adapter.ui_backend = type("Backend", (), {"available": True})()
     adapter.device = FakeDevice()
 
-    mirrored: list[tuple[int, int, int, int, bytes]] = []
-    monkeypatch.setattr(
-        adapter,
-        "_paste_rgb565_region",
-        lambda x, y, width, height, pixel_data: mirrored.append((x, y, width, height, pixel_data)),
-    )
+    payload = bytes.fromhex("f80007e0")
+    adapter.draw_rgb565_region(0, 0, 2, 1, payload)
 
-    payload = b"\x12\x34" * 8
-    adapter.draw_rgb565_region(1, 2, 4, 2, payload)
-
-    assert adapter.device.draw_calls == [(1, 2, 4, 2, payload)]
-    assert mirrored == []
+    assert adapter.device.draw_calls == [(0, 0, 2, 1, payload)]
+    assert bytes(adapter._framebuffer.data[:4]) == payload
 
 
-def test_hardware_lvgl_defers_shadow_buffer_until_needed(monkeypatch) -> None:
-    """Hardware LVGL should skip allocating the PIL shadow buffer at startup."""
-
-    import yoyopod.ui.display.adapters.whisplay as whisplay_module
-    import yoyopod.ui.lvgl_binding as lvgl_module
-
-    monkeypatch.setattr(whisplay_module, "HAS_HARDWARE", True)
-
-    class Board:
-        def set_backlight(self, _value: int) -> None:
-            return None
-
-        def set_rgb(self, _red: int, _green: int, _blue: int) -> None:
-            return None
-
-        def cleanup(self) -> None:
-            return None
-
-    class Backend:
-        def __init__(self, _adapter, *, buffer_lines: int) -> None:
-            self.available = True
-            self.buffer_lines = buffer_lines
-
-        def cleanup(self) -> None:
-            return None
-
-        def reset(self) -> None:
-            return None
-
-    monkeypatch.setattr(whisplay_module, "WhisPlayBoard", Board, raising=False)
-    monkeypatch.setattr(lvgl_module, "LvglDisplayBackend", Backend)
-
-    adapter = WhisplayDisplayAdapter(
-        simulate=False,
-        renderer="lvgl",
-        enforce_production_contract=False,
-    )
-
-    try:
-        assert adapter.buffer is None
-        assert adapter.draw is None
-    finally:
-        adapter.cleanup()
-
-
-def test_simulated_lvgl_flush_keeps_shadow_buffer_for_debug(monkeypatch) -> None:
-    """Simulation still needs the PIL shadow buffer for local inspection."""
+def test_simulated_whisplay_flush_pushes_browser_preview() -> None:
+    """Simulation should surface flushes through the attached browser preview."""
 
     adapter = WhisplayDisplayAdapter(simulate=True, renderer="lvgl")
+    preview_updates: list[str] = []
+    adapter.web_server = type(
+        "Server",
+        (),
+        {"send_display_update": lambda _self, image: preview_updates.append(image)},
+    )()
 
-    mirrored: list[tuple[int, int, int, int, bytes]] = []
-    monkeypatch.setattr(
-        adapter,
-        "_paste_rgb565_region",
-        lambda x, y, width, height, pixel_data: mirrored.append((x, y, width, height, pixel_data)),
-    )
+    adapter.draw_rgb565_region(0, 0, 2, 1, bytes.fromhex("f80007e0"))
 
-    payload = b"\xaa\x55" * 8
-    adapter.draw_rgb565_region(0, 0, 4, 2, payload)
-
-    assert mirrored == [(0, 0, 4, 2, payload)]
+    assert len(preview_updates) == 1
+    assert preview_updates[0]
 
 
-def test_shadow_screenshot_forces_one_redraw_into_buffer_when_shadow_sync_is_disabled(
-    tmp_path,
-) -> None:
-    """Hardware LVGL screenshots should force one redraw into the PIL buffer."""
+def test_save_screenshot_writes_png_from_framebuffer(tmp_path) -> None:
+    """Saving a screenshot should emit a PNG from the RGB565 framebuffer."""
 
     adapter = WhisplayDisplayAdapter(simulate=True, renderer="lvgl")
-    adapter.simulate = False
-    adapter.buffer = None
-    adapter.draw = None
-
-    class Backend:
-        available = True
-        initialized = True
-
-        def force_refresh(self) -> None:
-            adapter.draw_rgb565_region(1, 2, 2, 1, bytes.fromhex("f80007e0"))
-
-    adapter.ui_backend = Backend()
-    screenshot_path = tmp_path / "shadow.png"
+    adapter.draw_rgb565_region(0, 0, 2, 1, bytes.fromhex("f80007e0"))
+    screenshot_path = tmp_path / "framebuffer.png"
 
     assert adapter.save_screenshot(str(screenshot_path)) is True
-    assert adapter.buffer is not None
-
-    with Image.open(screenshot_path) as screenshot:
-        assert screenshot.size == (adapter.WIDTH, adapter.HEIGHT)
-        assert screenshot.getpixel((1, 2)) == (255, 0, 0)
-        assert screenshot.getpixel((2, 2)) == (0, 255, 0)
-
-
-def test_shadow_screenshot_falls_back_to_lvgl_readback_when_force_refresh_is_unavailable(
-    monkeypatch,
-) -> None:
-    """Hardware LVGL screenshots should still fall back to readback when needed."""
-
-    adapter = WhisplayDisplayAdapter(simulate=True, renderer="lvgl")
-    adapter.simulate = False
-    adapter.ui_backend = type("Backend", (), {"available": True, "initialized": False})()
-
-    readback_calls: list[str] = []
-    monkeypatch.setattr(
-        adapter,
-        "save_screenshot_readback",
-        lambda path: readback_calls.append(path) or True,
-    )
-
-    assert adapter.save_screenshot("/tmp/test.png") is True
-    assert readback_calls == ["/tmp/test.png"]
-
-
-def test_shadow_sync_mode_tracks_runtime_fallback_state_changes() -> None:
-    """The sync mode should follow later renderer/simulation fallback changes."""
-
-    adapter = WhisplayDisplayAdapter(simulate=True, renderer="lvgl")
-
-    assert adapter.shadow_buffer_sync_enabled is True
-
-    adapter.simulate = False
-    adapter.renderer = "lvgl"
-    adapter.ui_backend = type("Backend", (), {"available": True})()
-    assert adapter.shadow_buffer_sync_enabled is False
-
-    adapter.renderer = "pil"
-    assert adapter.shadow_buffer_sync_enabled is True
-
-    adapter.renderer = "lvgl"
-    adapter.ui_backend = type("Backend", (), {"available": False})()
-    assert adapter.shadow_buffer_sync_enabled is True
+    assert _read_png_dimensions(screenshot_path) == (adapter.WIDTH, adapter.HEIGHT)
 
 
 def test_readback_screenshot_decodes_rgb565_swapped_pixels(tmp_path) -> None:
-    """Readback screenshots should decode the shim's RGB565_SWAPPED contract."""
+    """Readback screenshots should write a valid PNG from shim RGB565 data."""
 
     adapter = WhisplayDisplayAdapter(simulate=True, renderer="lvgl")
     pixel_data = b"\xf8\x00" * (adapter.WIDTH * adapter.HEIGHT)
@@ -299,179 +197,56 @@ def test_readback_screenshot_decodes_rgb565_swapped_pixels(tmp_path) -> None:
     screenshot_path = tmp_path / "readback.png"
 
     assert adapter.save_screenshot_readback(str(screenshot_path)) is True
-
-    with Image.open(screenshot_path) as screenshot:
-        assert screenshot.size == (adapter.WIDTH, adapter.HEIGHT)
-        assert screenshot.getpixel((0, 0)) == (255, 0, 0)
+    assert _read_png_dimensions(screenshot_path) == (adapter.WIDTH, adapter.HEIGHT)
 
 
 def test_simulated_whisplay_adapter_does_not_own_browser_preview() -> None:
     """The hardware adapter should stay independent from the simulation web preview."""
 
-    adapter = WhisplayDisplayAdapter(simulate=True, renderer="pil")
+    adapter = WhisplayDisplayAdapter(simulate=True, renderer="lvgl")
     adapter.clear()
     adapter.update()
 
-    assert not hasattr(adapter, "web_server")
+    assert adapter.web_server is None
 
 
-def test_whisplay_font_cache_reuses_loaded_fonts(monkeypatch, tmp_path) -> None:
-    """Repeated text draws should not reload the same font on every call."""
+def test_get_backend_kind_tracks_lvgl_initialization_state() -> None:
+    """Backend kind should only report LVGL once the retained UI backend is live."""
 
-    adapter = WhisplayDisplayAdapter(simulate=True, renderer="pil")
-    adapter._font_cache.clear()
-    fake_font_path = tmp_path / "cache-font.ttf"
-    fake_font_path.write_text("unused font payload")
+    adapter = WhisplayDisplayAdapter(simulate=True, renderer="lvgl")
 
-    load_calls: list[tuple[str, int]] = []
+    assert adapter.get_backend_kind() == "unavailable"
 
-    def counting_truetype(path: str, size: int, *args, **kwargs):
-        load_calls.append((path, size))
-        return ImageFont.load_default()
+    adapter.ui_backend = type("Backend", (), {"initialized": True})()
 
-    monkeypatch.setattr(
-        "yoyopod.ui.display.adapters.whisplay.DEFAULT_FONT_PATH",
-        fake_font_path,
-    )
-
-    monkeypatch.setattr(
-        "yoyopod.ui.display.adapters.whisplay._load_pillow_modules",
-        lambda: (
-            None,
-            None,
-            None,
-            SimpleNamespace(
-                truetype=counting_truetype,
-                load_default=ImageFont.load_default,
-            ),
-        ),
-    )
-
-    adapter.text("Hello", 4, 4, font_size=16)
-    adapter.text("Again", 4, 24, font_size=16)
-    adapter.get_text_size("Measured", 16)
-
-    assert len(load_calls) == 1
+    assert adapter.get_backend_kind() == "lvgl"
 
 
-def test_whisplay_font_cache_evicts_least_recently_used_fonts(monkeypatch, tmp_path) -> None:
-    """The font cache should stay bounded and evict the stalest entries first."""
+def test_immediate_draw_methods_raise_after_lvgl_only_cut() -> None:
+    """Legacy immediate draw helpers should fail loudly after the LVGL hard cut."""
 
-    adapter = WhisplayDisplayAdapter(simulate=True, renderer="pil")
-    adapter._font_cache.clear()
-    fake_font_path = tmp_path / "bounded-cache.ttf"
-    fake_font_path.write_text("unused font payload")
-    monkeypatch.setattr(
-        "yoyopod.ui.display.adapters.whisplay.DEFAULT_FONT_PATH",
-        fake_font_path,
-    )
+    adapter = WhisplayDisplayAdapter(simulate=True, renderer="lvgl")
 
-    load_calls: list[tuple[str, int]] = []
-
-    def fake_truetype(path: str, size: int, *args, **kwargs) -> object:
-        load_calls.append((path, size))
-        return object()
-
-    monkeypatch.setattr(
-        "yoyopod.ui.display.adapters.whisplay._load_pillow_modules",
-        lambda: (
-            None,
-            None,
-            None,
-            SimpleNamespace(
-                truetype=fake_truetype,
-                load_default=ImageFont.load_default,
-            ),
-        ),
-    )
-
-    oldest_font = adapter._load_font(10)
-    for size in range(11, 26):
-        adapter._load_font(size)
-
-    assert len(adapter._font_cache) == adapter._FONT_CACHE_MAX_SIZE
-    assert oldest_font is adapter._load_font(10)
-
-    adapter._load_font(26)
-
-    assert len(adapter._font_cache) == adapter._FONT_CACHE_MAX_SIZE
-    assert 11 not in [size for _, size in adapter._font_cache.keys()]
-    assert 10 in [size for _, size in adapter._font_cache.keys()]
-
-    reloaded_font = adapter._load_font(11)
-
-    assert reloaded_font is not oldest_font
-    assert load_calls.count((str(fake_font_path.resolve()), 11)) == 2
-
-
-def test_rgb565_conversion_matches_expected_byte_order() -> None:
-    """The optimized conversion should preserve the adapter's big-endian RGB565 contract."""
-
-    adapter = WhisplayDisplayAdapter(simulate=True, renderer="pil")
-    adapter.WIDTH = 2
-    adapter.HEIGHT = 1
-    adapter.buffer = Image.new("RGB", (2, 1))
-    adapter.draw = ImageDraw.Draw(adapter.buffer)
-    adapter.buffer.putdata([(255, 0, 0), (0, 255, 0)])
-
-    assert adapter._convert_to_rgb565() == bytes.fromhex("f80007e0")
-
-
-def test_rgb565_conversion_matches_reference_for_mixed_pixels() -> None:
-    """The bulk conversion should match the historical RGB565 packing rules."""
-
-    adapter = WhisplayDisplayAdapter(simulate=True, renderer="pil")
-    adapter.WIDTH = 4
-    adapter.HEIGHT = 1
-    adapter.buffer = Image.new("RGB", (4, 1))
-    adapter.draw = ImageDraw.Draw(adapter.buffer)
-    pixels = [
-        (255, 255, 255),
-        (0, 0, 255),
-        (17, 34, 51),
-        (123, 231, 45),
-    ]
-    adapter.buffer.putdata(pixels)
-
-    expected = bytearray()
-    for red, green, blue in pixels:
-        rgb565 = ((red & 0xF8) << 8) | ((green & 0xFC) << 3) | (blue >> 3)
-        expected.extend(((rgb565 >> 8) & 0xFF, rgb565 & 0xFF))
-
-    assert adapter._convert_to_rgb565() == bytes(expected)
-
-
-def test_paste_rgb565_region_decodes_into_shadow_buffer() -> None:
-    """Shadow-buffer region pastes should decode RGB565 bytes back into RGB pixels."""
-
-    adapter = WhisplayDisplayAdapter(simulate=True, renderer="pil")
-    adapter.WIDTH = 2
-    adapter.HEIGHT = 1
-    adapter.buffer = Image.new("RGB", (2, 1))
-    adapter.draw = ImageDraw.Draw(adapter.buffer)
-
-    adapter._paste_rgb565_region(0, 0, 2, 1, bytes.fromhex("f80007e0"))
-
-    assert adapter.buffer.getpixel((0, 0)) == (255, 0, 0)
-    assert adapter.buffer.getpixel((1, 0)) == (0, 255, 0)
+    with pytest.raises(RuntimeError, match="retired with the LVGL-only cut"):
+        adapter.text("Hello", 1, 1)
+    with pytest.raises(RuntimeError, match="retired with the LVGL-only cut"):
+        adapter.rectangle(0, 0, 10, 10)
+    with pytest.raises(RuntimeError, match="retired with the LVGL-only cut"):
+        adapter.circle(5, 5, 3)
+    with pytest.raises(RuntimeError, match="retired with the LVGL-only cut"):
+        adapter.line(0, 0, 10, 10)
 
 
 def test_timing_snapshot_tracks_full_frame_and_partial_flushes() -> None:
     """The adapter should expose recent timing metrics for both update paths."""
 
-    adapter = WhisplayDisplayAdapter(simulate=True, renderer="pil")
-    adapter.WIDTH = 2
-    adapter.HEIGHT = 1
-    adapter.buffer = Image.new("RGB", (2, 1))
-    adapter.draw = ImageDraw.Draw(adapter.buffer)
-    adapter.buffer.putdata([(255, 0, 0), (0, 255, 0)])
+    adapter = WhisplayDisplayAdapter(simulate=True, renderer="lvgl")
+    adapter.clear()
+    adapter.draw_rgb565_region(0, 0, 2, 1, bytes.fromhex("f80007e0"))
 
     adapter.simulate = False
     adapter.device = FakeDevice()
     adapter.update()
-
-    adapter.simulate = True
-    adapter.draw_rgb565_region(0, 0, 2, 1, bytes.fromhex("f80007e0"))
 
     snapshot = adapter.timing_snapshot()
 

@@ -3,7 +3,7 @@ Display controller with Hardware Abstraction Layer (HAL).
 
 This module provides the Display class, which acts as a facade for hardware-specific
 display adapters. The class maintains backward compatibility with existing code while
-supporting multiple display hardware types (Pimoroni, Whisplay, etc.).
+supporting the Whisplay LVGL hardware path plus its simulation mirror.
 
 The display system uses the following architecture:
     Display (facade) → DisplayFactory → DisplayHAL → Hardware-specific adapter
@@ -47,9 +47,9 @@ class Display:
         240x280 portrait  # If Whisplay detected
 
         >>> # Force specific hardware
-        >>> display = Display(hardware="pimoroni")
+        >>> display = Display(hardware="whisplay")
         >>> display.WIDTH
-        320
+        240
 
         >>> # Simulation mode
         >>> display = Display(simulate=True)
@@ -71,7 +71,6 @@ class Display:
             hardware: Display hardware type:
                 - "auto": Auto-detect hardware (default)
                 - "whisplay": Force Whisplay HAT
-                - "pimoroni": Force Pimoroni Display HAT Mini
                 - "simulation": Force simulation mode
             simulate: Force simulation mode regardless of hardware parameter
 

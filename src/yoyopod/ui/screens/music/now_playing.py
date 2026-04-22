@@ -16,7 +16,6 @@ from yoyopod.ui.display import Display
 from yoyopod.ui.screens.base import Screen
 from yoyopod.ui.screens.lvgl_lifecycle import current_retained_view
 from yoyopod.ui.screens.music.lvgl import LvglNowPlayingView
-from yoyopod.ui.screens.music.now_playing_pil_view import render_now_playing_pil
 from yoyopod.ui.screens.theme import (
     BACKGROUND,
     ERROR,
@@ -229,7 +228,7 @@ class NowPlayingScreen(Screen):
 
     def _ensure_lvgl_view(self) -> "ScreenView | None":
         """Create an LVGL view when the Whisplay renderer is active."""
-        if getattr(self.display, "backend_kind", "pil") != "lvgl":
+        if getattr(self.display, "backend_kind", "unavailable") != "lvgl":
             self._lvgl_view = None
             return None
 
@@ -251,10 +250,9 @@ class NowPlayingScreen(Screen):
     def render(self) -> None:
         """Render the now-playing view."""
         lvgl_view = self._ensure_lvgl_view()
-        if lvgl_view is not None:
-            lvgl_view.sync()
-            return
-        render_now_playing_pil(self)
+        if lvgl_view is None:
+            raise RuntimeError("NowPlayingScreen requires an initialized LVGL backend")
+        lvgl_view.sync()
 
     def wants_visible_tick_refresh(self) -> bool:
         """Return True while playback progress should keep updating on-screen."""

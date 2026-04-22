@@ -181,7 +181,7 @@ class RuntimeStatusService:
             ),
             "screen_timeout_seconds": self.app._screen_timeout_seconds,
             "display_backend": (
-                getattr(self.app.display, "backend_kind", "pil")
+                getattr(self.app.display, "backend_kind", "unavailable")
                 if self.app.display is not None
                 else "unknown"
             ),

@@ -1,46 +1,43 @@
-"""Tests for display and input factory fallback to Cubie adapters."""
+"""Tests for LVGL display/input factory fallback behavior."""
 
 from unittest.mock import MagicMock
 
-import pytest
 
-
-def test_display_factory_falls_back_to_cubie_pimoroni_simulation():
-    """When displayhatmini and GPIO config are both unavailable, use simulation."""
+def test_display_factory_uses_whisplay_profile_for_simulation(monkeypatch):
+    """Simulation should build the Whisplay LVGL adapter and start browser preview."""
     from yoyopod.ui.display.factory import get_display
 
-    # Without displayhatmini and without board config, pimoroni should fall back
-    display = get_display(hardware="pimoroni", simulate=False)
+    fake_server = MagicMock()
+    import yoyopod.ui.display.adapters.simulation_web.server as web_server
+
+    monkeypatch.setattr(web_server, "get_server", lambda *args, **kwargs: fake_server)
+
+    display = get_display(hardware="simulation", simulate=False)
     try:
-        assert display.DISPLAY_TYPE == "pimoroni"
-        assert display.WIDTH == 320
-        assert display.HEIGHT == 240
-        # Should be in simulate mode since neither displayhatmini nor spidev are available
+        assert display.DISPLAY_TYPE == "whisplay"
+        assert display.SIMULATED_HARDWARE == "whisplay"
+        assert display.WIDTH == 240
+        assert display.HEIGHT == 280
         assert display.simulate is True
+        fake_server.start.assert_called_once()
     finally:
         display.cleanup()
 
 
-def test_input_factory_falls_back_to_gpiod_buttons():
-    """When displayhatmini is unavailable, use GpiodButtonAdapter for pimoroni display."""
-    from yoyopod.ui.input.factory import get_input_manager
+def test_simulate_flag_overrides_hardware_to_whisplay_profile(monkeypatch):
+    """The simulate flag should ignore the requested hardware and build simulation."""
 
-    mock_display = MagicMock()
-    mock_display.DISPLAY_TYPE = "pimoroni"
-    mock_display.__class__.__name__ = "CubiePimoroniAdapter"
-    mock_display.device = None
+    from yoyopod.ui.display.factory import get_display
 
-    config = {
-        "input": {
-            "pimoroni_gpio": {
-                "button_a": {"chip": "gpiochip0", "line": 34},
-                "button_b": {"chip": "gpiochip0", "line": 35},
-                "button_x": {"chip": "gpiochip0", "line": 36},
-                "button_y": {"chip": "gpiochip0", "line": 313},
-            },
-        },
-    }
+    fake_server = MagicMock()
+    import yoyopod.ui.display.adapters.simulation_web.server as web_server
 
-    manager = get_input_manager(mock_display, config=config, simulate=True)
-    assert manager is not None
-    assert len(manager.adapters) > 0
+    monkeypatch.setattr(web_server, "get_server", lambda *args, **kwargs: fake_server)
+
+    display = get_display(hardware="whisplay", simulate=True)
+    try:
+        assert display.DISPLAY_TYPE == "whisplay"
+        assert display.SIMULATED_HARDWARE == "whisplay"
+        assert display.simulate is True
+    finally:
+        display.cleanup()

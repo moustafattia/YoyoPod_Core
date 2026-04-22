@@ -14,7 +14,6 @@ from yoyopod.ui.screens.base import Screen
 from yoyopod.ui.screens.lvgl_lifecycle import current_retained_view
 from yoyopod.ui.screens.theme import talk_monogram
 from yoyopod.ui.screens.voip.lvgl.talk_contact_view import LvglTalkContactView
-from yoyopod.ui.screens.voip.talk_contact_pil_view import render_talk_contact_pil
 
 if TYPE_CHECKING:
     from yoyopod.core import AppContext
@@ -68,7 +67,7 @@ class TalkContactScreen(Screen):
     def _ensure_lvgl_view(self) -> "ScreenView | None":
         """Create an LVGL view when the Whisplay renderer is active."""
 
-        if getattr(self.display, "backend_kind", "pil") != "lvgl":
+        if getattr(self.display, "backend_kind", "unavailable") != "lvgl":
             self._lvgl_view = None
             return None
 
@@ -164,10 +163,9 @@ class TalkContactScreen(Screen):
         """Render the contact action picker."""
 
         lvgl_view = self._ensure_lvgl_view()
-        if lvgl_view is not None:
-            lvgl_view.sync()
-            return
-        render_talk_contact_pil(self)
+        if lvgl_view is None:
+            raise RuntimeError("TalkContactScreen requires an initialized LVGL backend")
+        lvgl_view.sync()
 
     def _selected_action(self) -> TalkAction:
         """Return the active action row."""

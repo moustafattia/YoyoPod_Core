@@ -11,7 +11,6 @@ from yoyopod.ui.display import Display
 from yoyopod.ui.screens.base import Screen
 from yoyopod.ui.screens.lvgl_lifecycle import current_retained_view
 from yoyopod.ui.screens.theme import talk_monogram
-from yoyopod.ui.screens.voip.contact_list_pil_view import render_contact_list_pil
 from yoyopod.ui.screens.voip.lvgl import LvglContactListView
 
 if TYPE_CHECKING:
@@ -94,7 +93,7 @@ class ContactListScreen(Screen):
 
     def _ensure_lvgl_view(self) -> "ScreenView | None":
         """Create an LVGL view when the Whisplay renderer is active."""
-        if getattr(self.display, "backend_kind", "pil") != "lvgl":
+        if getattr(self.display, "backend_kind", "unavailable") != "lvgl":
             self._lvgl_view = None
             return None
 
@@ -128,10 +127,9 @@ class ContactListScreen(Screen):
     def render(self) -> None:
         """Render the contact list."""
         lvgl_view = self._ensure_lvgl_view()
-        if lvgl_view is not None:
-            lvgl_view.sync()
-            return
-        render_contact_list_pil(self)
+        if lvgl_view is None:
+            raise RuntimeError("ContactListScreen requires an initialized LVGL backend")
+        lvgl_view.sync()
 
     def get_page_text(self) -> str | None:
         """Contact lists now intentionally omit page counters."""
