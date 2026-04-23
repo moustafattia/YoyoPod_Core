@@ -103,6 +103,16 @@ def _artifact_sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
+def _collect_built_artifacts(*, exclude_names: set[str] | None = None) -> tuple[BuiltArtifact, ...]:
+    ignored = exclude_names or set()
+    built_paths = tuple(sorted(_DIST_DIR.glob("*")))
+    return tuple(
+        BuiltArtifact(path=path, sha256=_artifact_sha256(path))
+        for path in built_paths
+        if path.is_file() and not path.name.startswith(".") and path.name not in ignored
+    )
+
+
 def _git_sha() -> str:
     return _run(["git", "rev-parse", "HEAD"], capture_output=True).stdout.strip()
 
@@ -260,15 +270,12 @@ def build(
     _run(["uv", "build", "--out-dir", str(_DIST_DIR)])
     tarball, zipball = _build_repo_bundle(version)
 
-    built_paths = tuple(sorted(_DIST_DIR.glob("*")))
-    built_artifacts = tuple(
-        BuiltArtifact(path=path, sha256=_artifact_sha256(path))
-        for path in built_paths
-        if path.is_file() and not path.name.startswith(".")
+    built_artifacts = _collect_built_artifacts(
+        exclude_names={"release-metadata.json", "SHA256SUMS.txt"}
     )
     metadata_path = _write_release_metadata(version, built_artifacts)
-    metadata_artifact = BuiltArtifact(path=metadata_path, sha256=_artifact_sha256(metadata_path))
-    checksums_path = _write_checksums((*built_artifacts, metadata_artifact))
+    checksum_artifacts = _collect_built_artifacts(exclude_names={"SHA256SUMS.txt"})
+    checksums_path = _write_checksums(checksum_artifacts)
 
     typer.echo(f"Built release artifacts for {expected_tag}")
     typer.echo(f"- python dist: {_DIST_DIR}")
