@@ -30,6 +30,7 @@ def preflight(
     slot: Path = typer.Option(..., help="Path to the release slot dir (before flip)."),
 ) -> None:
     """Offline structural check of a release slot. Exit 0 = OK."""
+    slot = slot.resolve()
     errors: list[str] = []
 
     manifest_path = slot / "manifest.json"
