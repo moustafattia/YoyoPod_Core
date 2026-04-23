@@ -107,10 +107,19 @@ def _safe_extract_tarball(artifact: Path, destination: Path) -> None:
 
     destination_root = destination.resolve()
     with tarfile.open(artifact, "r:*") as handle:
-        for member in handle.getmembers():
+        members = handle.getmembers()
+        member_names = [member.name.rstrip("/") for member in members]
+        for member in members:
             if member.issym() or member.islnk():
-                raise ValueError(f"tarball contains unsafe link: {member.name}")
-            if not (member.isdir() or member.isreg()):
+                link_target = ((destination / member.name).parent / member.linkname).resolve()
+                try:
+                    link_target.relative_to(destination_root)
+                except ValueError as exc:
+                    raise ValueError(f"tarball contains unsafe link: {member.name}") from exc
+                prefix = member.name.rstrip("/") + "/"
+                if any(name.startswith(prefix) for name in member_names):
+                    raise ValueError(f"tarball contains unsafe link prefix: {member.name}")
+            elif not (member.isdir() or member.isreg()):
                 raise ValueError(f"tarball contains unsafe member type: {member.name}")
             target = (destination / member.name).resolve()
             try:

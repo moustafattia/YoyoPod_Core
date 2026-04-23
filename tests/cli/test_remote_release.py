@@ -285,6 +285,27 @@ def test_safe_extract_tarball_rejects_symlink_escape_on_legacy_python(
     assert not (outside / "pwned.txt").exists()
 
 
+def test_safe_extract_tarball_allows_internal_venv_symlink(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    from yoyopod_cli.remote_release import _safe_extract_tarball
+
+    artifact = tmp_path / "venv.tar.gz"
+    with tarfile.open(artifact, "w:gz") as handle:
+        python3 = tarfile.TarInfo("slot/venv/bin/python3")
+        python3.size = 0
+        handle.addfile(python3)
+        link = tarfile.TarInfo("slot/venv/bin/python")
+        link.type = tarfile.SYMTYPE
+        link.linkname = "python3"
+        handle.addfile(link)
+
+    monkeypatch.setattr(tarfile.TarFile, "extractall", lambda *args, **kwargs: None)
+
+    _safe_extract_tarball(artifact, tmp_path / "stage")
+
+
 @patch("yoyopod_cli.remote_release._slot_exists_state")
 @patch("yoyopod_cli.remote_release._check_rollback_available")
 @patch("yoyopod_cli.remote_release._conn")

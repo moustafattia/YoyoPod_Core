@@ -101,10 +101,23 @@ if not artifact.is_file():
     raise SystemExit(f"install-release: artifact not found: {artifact}")
 
 with tarfile.open(artifact, "r:*") as handle:
-    for member in handle.getmembers():
+    members = handle.getmembers()
+    member_names = [member.name.rstrip("/") for member in members]
+    for member in members:
         if member.issym() or member.islnk():
-            raise SystemExit(f"install-release: tarball contains unsafe link: {member.name}")
-        if not (member.isdir() or member.isreg()):
+            link_target = ((stage_dir / member.name).parent / member.linkname).resolve()
+            try:
+                link_target.relative_to(stage_dir)
+            except ValueError as exc:
+                raise SystemExit(
+                    f"install-release: tarball contains unsafe link: {member.name}"
+                ) from exc
+            prefix = member.name.rstrip("/") + "/"
+            if any(name.startswith(prefix) for name in member_names):
+                raise SystemExit(
+                    f"install-release: tarball contains unsafe link prefix: {member.name}"
+                )
+        elif not (member.isdir() or member.isreg()):
             raise SystemExit(
                 f"install-release: tarball contains unsafe member type: {member.name}"
             )
