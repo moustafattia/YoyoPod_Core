@@ -6,6 +6,7 @@ CHANNEL="dev"
 DEST_DIR="dist"
 VERSION=""
 ARTIFACT_NAME=""
+CACHE_ARGS=()
 
 for arg in "$@"; do
     case "$arg" in
@@ -13,12 +14,16 @@ for arg in "$@"; do
         --dest=*) DEST_DIR="${arg#--dest=}" ;;
         --version=*) VERSION="${arg#--version=}" ;;
         --artifact-name=*) ARTIFACT_NAME="${arg#--artifact-name=}" ;;
+        --cache-from=*) CACHE_ARGS+=(--cache-from "${arg#--cache-from=}") ;;
+        --cache-to=*) CACHE_ARGS+=(--cache-to "${arg#--cache-to=}") ;;
         --help|-h)
             cat <<'EOF'
 Usage: build_slot_artifact_ci.sh --version=<slot-version>
                                 [--channel=dev|beta|stable]
                                 [--dest=dist]
                                 [--artifact-name=yoyopod-slot-...tar.gz]
+                                [--cache-from=<buildx-cache>]
+                                [--cache-to=<buildx-cache>]
 EOF
             exit 0
             ;;
@@ -47,6 +52,7 @@ docker buildx build \
     --platform linux/arm64 \
     --build-arg "CHANNEL=${CHANNEL}" \
     --build-arg "VERSION=${VERSION}" \
+    "${CACHE_ARGS[@]}" \
     --output "type=local,dest=${RAW_OUT}" \
     -f deploy/docker/slot-builder.Dockerfile \
     .

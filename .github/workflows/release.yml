@@ -62,7 +62,9 @@ jobs:
           ./scripts/build_slot_artifact_ci.sh \
             --channel=stable \
             --version="${SLOT_VERSION}" \
-            --dest=dist
+            --dest=dist \
+            --cache-from=type=gha,scope=yoyopod-slot-arm64 \
+            --cache-to=type=gha,mode=max,scope=yoyopod-slot-arm64,ignore-error=true
 
       - name: Upload workflow artifacts
         uses: actions/upload-artifact@v4

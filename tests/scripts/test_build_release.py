@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import subprocess
 import sys
 from pathlib import Path
 
@@ -154,6 +155,30 @@ def test_build_uses_real_launcher_from_deploy_scripts(tmp_path: Path) -> None:
     # First line should be the bash shebang.
     first_line = bundled.read_text().splitlines()[0]
     assert first_line.startswith("#!/usr/bin/env bash")
+
+
+def test_build_release_script_runs_without_installed_checkout(tmp_path: Path) -> None:
+    """CI slot containers run the script before installing the project package."""
+    real_repo = Path(__file__).resolve().parents[2]
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-S",
+            str(real_repo / "scripts" / "build_release.py"),
+            "--output",
+            str(tmp_path / "out"),
+            "--channel",
+            "dev",
+            "--version",
+            "2026.04.22-no-site",
+        ],
+        cwd=real_repo,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert (tmp_path / "out" / "2026.04.22-no-site" / "manifest.json").is_file()
 
 
 def test_build_normalizes_launcher_to_lf(tmp_path: Path) -> None:

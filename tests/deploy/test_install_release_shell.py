@@ -61,7 +61,11 @@ def test_install_release_uses_slot_state_tmp_and_supports_file_urls(tmp_path: Pa
     version = "test-install-url"
     artifact = _make_slot_artifact(tmp_path, version)
     root = tmp_path / "yoyopod"
-    env = {**os.environ, "YOYOPOD_SKIP_SYSTEMCTL": "1"}
+    env = {
+        **os.environ,
+        "YOYOPOD_INSTALL_RELEASE_ALLOW_NON_ROOT": "1",
+        "YOYOPOD_SKIP_SYSTEMCTL": "1",
+    }
 
     result = subprocess.run(
         [

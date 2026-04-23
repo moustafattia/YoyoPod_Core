@@ -2,9 +2,55 @@ name: CI
 
 on:
   push:
+    branches:
+      - main
   pull_request:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      slot_arm64: ${{ steps.filter.outputs.slot_arm64 }}
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Detect slot artifact inputs
+        id: filter
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PUSH_BEFORE_SHA: ${{ github.event.before }}
+        run: |
+          set -euo pipefail
+
+          if [ "${EVENT_NAME}" = "pull_request" ]; then
+            BASE_SHA="${PR_BASE_SHA}"
+          elif [ -n "${PUSH_BEFORE_SHA}" ] && ! [[ "${PUSH_BEFORE_SHA}" =~ ^0+$ ]]; then
+            BASE_SHA="${PUSH_BEFORE_SHA}"
+          else
+            BASE_SHA="$(git rev-list --max-parents=0 HEAD)"
+          fi
+
+          git cat-file -e "${BASE_SHA}^{commit}" 2>/dev/null || \
+            git fetch --no-tags --depth=1 origin "${BASE_SHA}"
+
+          git diff --name-only "${BASE_SHA}" "${GITHUB_SHA}" > changed-files.txt
+          cat changed-files.txt
+
+          if grep -Eq '^(\.github/workflows/(ci|release)\.yml|\.python-version|pyproject\.toml|yoyopod\.py|config/|deploy/docker/slot-builder\.Dockerfile|deploy/scripts/(install_release|launch)\.sh|scripts/(build_release|build_slot_artifact_ci)\.sh|yoyopod/|yoyopod_cli/)' changed-files.txt; then
+            echo "slot_arm64=true" >> "${GITHUB_OUTPUT}"
+          else
+            echo "slot_arm64=false" >> "${GITHUB_OUTPUT}"
+          fi
+
   quality:
     runs-on: ubuntu-latest
 
@@ -53,7 +99,8 @@ jobs:
 
   slot-arm64:
     runs-on: ubuntu-latest
-    needs: [quality, test]
+    needs: [changes, quality, test]
+    if: needs.changes.outputs.slot_arm64 == 'true'
 
     steps:
       - name: Check out repository
@@ -73,7 +120,9 @@ jobs:
           ./scripts/build_slot_artifact_ci.sh \
             --channel=dev \
             --version="${VERSION}" \
-            --dest=dist
+            --dest=dist \
+            --cache-from=type=gha,scope=yoyopod-slot-arm64 \
+            --cache-to=type=gha,mode=max,scope=yoyopod-slot-arm64,ignore-error=true
 
       - name: Upload ARM64 slot artifact
         uses: actions/upload-artifact@v4

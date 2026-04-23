@@ -29,11 +29,6 @@ import tarfile
 import tomllib
 from pathlib import Path
 
-from yoyopod_cli.slot_contract import (
-    APP_NATIVE_RUNTIME_ARTIFACTS,
-    missing_self_contained_paths,
-)
-
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 
 try:
@@ -43,6 +38,10 @@ try:
         Requirements,
         dump_manifest,
     )
+    from yoyopod_cli.slot_contract import (
+        APP_NATIVE_RUNTIME_ARTIFACTS,
+        missing_self_contained_paths,
+    )
 except ImportError:
     sys.path.insert(0, str(_REPO_ROOT))
     from yoyopod_cli.release_manifest import (  # noqa: E402
@@ -50,6 +49,10 @@ except ImportError:
         ReleaseManifest,
         Requirements,
         dump_manifest,
+    )
+    from yoyopod_cli.slot_contract import (  # noqa: E402
+        APP_NATIVE_RUNTIME_ARTIFACTS,
+        missing_self_contained_paths,
     )
 
 

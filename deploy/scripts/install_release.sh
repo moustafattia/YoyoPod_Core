@@ -34,7 +34,7 @@ EOF
     esac
 done
 
-if [ "${EUID}" -ne 0 ]; then
+if [ "${EUID}" -ne 0 ] && [ "${YOYOPOD_INSTALL_RELEASE_ALLOW_NON_ROOT:-0}" != "1" ]; then
     echo "install-release: must run as root" >&2
     exit 1
 fi
