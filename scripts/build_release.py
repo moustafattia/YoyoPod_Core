@@ -26,14 +26,22 @@ import tarfile
 from pathlib import Path
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(_REPO_ROOT))
 
-from yoyopod_cli.release_manifest import (  # noqa: E402
-    Artifact,
-    ReleaseManifest,
-    Requirements,
-    dump_manifest,
-)
+try:
+    from yoyopod_cli.release_manifest import (
+        Artifact,
+        ReleaseManifest,
+        Requirements,
+        dump_manifest,
+    )
+except ImportError:
+    sys.path.insert(0, str(_REPO_ROOT))
+    from yoyopod_cli.release_manifest import (  # noqa: E402
+        Artifact,
+        ReleaseManifest,
+        Requirements,
+        dump_manifest,
+    )
 
 
 PACKAGE_DIRS: tuple[str, ...] = ("yoyopod", "yoyopod_cli")
@@ -55,7 +63,12 @@ def _copy_sources(repo_root: Path, dest_app: Path) -> None:
         shutil.copytree(
             src,
             dest_app / pkg,
-            ignore=shutil.ignore_patterns("__pycache__", "*.pyc", ".pytest_cache"),
+            ignore=shutil.ignore_patterns(
+                "__pycache__", "*.pyc", "*.pyo",
+                ".pytest_cache", ".mypy_cache", ".ruff_cache",
+                "*.egg-info", "*.dist-info",
+                ".DS_Store",
+            ),
         )
 
 
@@ -72,8 +85,10 @@ def _copy_launcher(repo_root: Path, dest_bin: Path) -> None:
 def _resolve_venv(repo_root: Path, dest_venv: Path, python_version: str) -> None:
     """Resolve aarch64 wheels into dest_venv/ via `uv pip install --target`.
 
-    Requires network access. Callers can skip via skip_venv=True in tests
-    or for a fast local dry-run.
+    Installs the project and its dependencies. The project package itself
+    will appear in dest_venv/ alongside third-party deps; this is harmless
+    because the launcher's PYTHONPATH puts ${SLOT_DIR}/app first.
+    Requires network access. Tests use skip_venv=True to avoid this.
     """
     dest_venv.mkdir(parents=True, exist_ok=True)
     cmd = [
@@ -81,7 +96,7 @@ def _resolve_venv(repo_root: Path, dest_venv: Path, python_version: str) -> None
         "--target", str(dest_venv),
         "--python-version", python_version,
         "--only-binary", ":all:",
-        "--requirement", str(repo_root / "pyproject.toml"),
+        str(repo_root),  # install the project from its source dir
     ]
     subprocess.run(cmd, check=True)
 
@@ -112,6 +127,10 @@ def build(
 
     Returns the slot directory path.
     """
+    valid_channels = ("dev", "beta", "stable")
+    if channel not in valid_channels:
+        raise ValueError(f"channel must be one of {valid_channels}, got {channel!r}")
+
     slot_dir = output_root / version
     if slot_dir.exists():
         raise FileExistsError(f"output slot already exists: {slot_dir}")

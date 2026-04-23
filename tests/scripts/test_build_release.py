@@ -87,3 +87,25 @@ def test_build_refuses_existing_output_dir(tmp_path: Path) -> None:
             repo_root=fake_repo, output_root=out, version="2026.04.22-test",
             channel="dev", skip_venv=True,
         )
+
+
+def test_build_rejects_invalid_channel(tmp_path: Path) -> None:
+    fake_repo = tmp_path / "repo"
+    (fake_repo / "yoyopod").mkdir(parents=True)
+    (fake_repo / "yoyopod" / "__init__.py").write_text("")
+    (fake_repo / "yoyopod_cli").mkdir()
+    (fake_repo / "yoyopod_cli" / "__init__.py").write_text("")
+    (fake_repo / "pyproject.toml").write_text("[project]\nname='x'\nversion='0.0.1'\n")
+    (fake_repo / "deploy" / "scripts").mkdir(parents=True)
+    launch = fake_repo / "deploy" / "scripts" / "launch.sh"
+    launch.write_text("#!/bin/sh\nexit 0\n")
+    launch.chmod(0o755)
+
+    with pytest.raises(ValueError, match="channel"):
+        build_release.build(
+            repo_root=fake_repo,
+            output_root=tmp_path / "out",
+            version="2026.04.22-test",
+            channel="weird",
+            skip_venv=True,
+        )
