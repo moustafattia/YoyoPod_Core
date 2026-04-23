@@ -170,6 +170,27 @@ def test_status_prints_current_and_previous(status: MagicMock, conn: MagicMock) 
     assert "2026.04.20-def" in result.stdout
 
 
+@patch("yoyopod_cli.remote_release.run_remote_capture")
+@patch("yoyopod_cli.remote_release._conn")
+def test_status_surfaces_ssh_failure(
+    conn: MagicMock,
+    capture: MagicMock,
+) -> None:
+    fake_conn = MagicMock()
+    fake_conn.host = "fake-host"
+    fake_conn.user = "user"
+    conn.return_value = fake_conn
+    fake_result = MagicMock()
+    fake_result.returncode = 255
+    fake_result.stdout = ""
+    fake_result.stderr = "ssh: Could not resolve hostname fake-host"
+    capture.return_value = fake_result
+    result = runner.invoke(release_app, ["status"])
+    assert result.exit_code != 0
+    out = (result.stderr or result.stdout).lower()
+    assert "failed" in out or "could not resolve" in out
+
+
 @patch("yoyopod_cli.remote_release._slot_exists_state")
 @patch("yoyopod_cli.remote_release._check_rollback_available")
 @patch("yoyopod_cli.remote_release._conn")

@@ -103,7 +103,7 @@ def _rollback_on_pi(conn: object) -> int:
 
 
 def _status_from_pi(conn: object) -> str:
-    """Retrieve current/previous/health status lines from the Pi."""
+    """Return the status output from the Pi, or raise typer.Exit on SSH failure."""
     current_path = _slots().current_path()
     previous_path = _slots().previous_path()
     cmd = (
@@ -112,8 +112,15 @@ def _status_from_pi(conn: object) -> str:
         f"echo health=$(PYTHONPATH={current_path}/app:{current_path}/venv "
         f"python3 -m yoyopod_cli health live >/dev/null 2>&1 && echo ok || echo fail)"
     )
-    proc = run_remote_capture(conn, cmd)  # type: ignore[arg-type]
-    return proc.stdout
+    result = run_remote_capture(conn, cmd)  # type: ignore[arg-type]
+    if result.returncode != 0:
+        stderr = (result.stderr or "").strip()
+        msg = f"status check failed (exit {result.returncode})"
+        if stderr:
+            msg += f": {stderr}"
+        typer.echo(msg, err=True)
+        raise typer.Exit(code=result.returncode if result.returncode else 1)
+    return result.stdout
 
 
 def _cleanup_remote_slot(conn: object, version: str) -> None:
