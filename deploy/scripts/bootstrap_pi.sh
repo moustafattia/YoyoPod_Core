@@ -66,7 +66,7 @@ fi
 
 # 4. EnvironmentFile with the user/group the slot service should run as.
 cat > "/etc/default/yoyopod-slot" <<EOF
-# /etc/default/yoyopod-slot — written by bootstrap_pi.sh
+# /etc/default/yoyopod-slot - written by bootstrap_pi.sh
 YOYOPOD_ROOT=${ROOT}
 YOYOPOD_STATE_DIR=${ROOT}/state
 EOF
@@ -81,11 +81,11 @@ fi
 
 systemctl daemon-reload
 
-# 5. Optional migration from ~/yoyopod-core/ → /opt/yoyopod/state/
+# 5. Optional migration from ~/yoyopod-core/ -> /opt/yoyopod/state/
 if [ "${MIGRATE}" -eq 1 ]; then
     OLD="/home/${INVOKING_USER}/yoyopod-core"
     if [ -d "${OLD}" ]; then
-        echo "bootstrap: migrating from ${OLD} → ${ROOT}/state/"
+        echo "bootstrap: migrating from ${OLD} -> ${ROOT}/state/"
         for sub in config logs; do
             if [ -d "${OLD}/${sub}" ]; then
                 install -d -o "${INVOKING_USER}" -g "${INVOKING_GROUP}" \
@@ -109,12 +109,12 @@ Next steps on the dev machine:
 Then on the Pi:
   sudo systemctl enable --now yoyopod-slot.service
 
-NOTE: the running app does not yet honour YOYOPOD_STATE_DIR/config/ —
+NOTE: the running app does not yet honour YOYOPOD_STATE_DIR/config/ -
 the config loader still reads from the slot's relative ./config dir.
-Migrated config in ${ROOT}/state/config/ will be unused until that
-follow-up ticket lands. For now, the app runs with default settings.
-This does NOT affect VoIP/music functionality if your old config was
-already merged into the slot's config/ dir at build time.
+Migrated config in ${ROOT}/state/config/ is preserved for reference,
+but the live app uses the config bundled into each slot.
+If your old board relied on local-only config drift, merge those changes
+into the repo's tracked config/ tree before the first slot build.
 
 If you used a non-default --root, ensure slot.root in pi-deploy.local.yaml
 matches: slot.root: ${ROOT}

@@ -2,6 +2,11 @@
 
 This guide covers the normal dev-machine-to-board loop for YoYoPod.
 
+If the board is already on the slot-deploy path, read
+[`docs/SLOT_DEPLOY.md`](SLOT_DEPLOY.md) alongside this file. That document covers
+fresh-board bootstrap, migration from `~/yoyopod-core`, rollback, and the
+operator-facing release flow under `/opt/yoyopod`.
+
 The default contract is:
 
 1. finish the implementation locally

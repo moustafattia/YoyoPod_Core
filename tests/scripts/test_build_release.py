@@ -68,6 +68,37 @@ def test_build_writes_manifest(tmp_path: Path) -> None:
     assert manifest["artifacts"]["full"]["size"] > 0
 
 
+def test_build_writes_runtime_requirements_from_pyproject(tmp_path: Path) -> None:
+    fake_repo = tmp_path / "repo"
+    (fake_repo / "yoyopod").mkdir(parents=True)
+    (fake_repo / "yoyopod" / "__init__.py").write_text("")
+    (fake_repo / "yoyopod_cli").mkdir()
+    (fake_repo / "yoyopod_cli" / "__init__.py").write_text("")
+    (fake_repo / "pyproject.toml").write_text(
+        "[project]\n"
+        "name='x'\n"
+        "version='0.0.1'\n"
+        'dependencies=["typer>=0.12.0", "gpiod<2; platform_system == \'Linux\'"]\n'
+    )
+    (fake_repo / "deploy" / "scripts").mkdir(parents=True)
+    launch = fake_repo / "deploy" / "scripts" / "launch.sh"
+    launch.write_text("#!/bin/sh\nexit 0\n")
+    launch.chmod(0o755)
+    (fake_repo / "config" / "app").mkdir(parents=True)
+    (fake_repo / "config" / "app" / "core.yaml").write_text("test: true\n")
+
+    slot = build_release.build(
+        repo_root=fake_repo,
+        output_root=tmp_path / "out",
+        version="2026.04.22-reqs",
+        channel="dev",
+        skip_venv=True,
+    )
+
+    requirements = (slot / "runtime-requirements.txt").read_text(encoding="utf-8").splitlines()
+    assert requirements == ["typer>=0.12.0", "gpiod<2; platform_system == 'Linux'"]
+
+
 def test_build_refuses_existing_output_dir(tmp_path: Path) -> None:
     fake_repo = tmp_path / "repo"
     (fake_repo / "yoyopod").mkdir(parents=True)
@@ -115,6 +146,34 @@ def test_build_uses_real_launcher_from_deploy_scripts(tmp_path: Path) -> None:
     # First line should be the bash shebang.
     first_line = bundled.read_text().splitlines()[0]
     assert first_line.startswith("#!/usr/bin/env bash")
+
+
+def test_build_normalizes_launcher_to_lf(tmp_path: Path) -> None:
+    fake_repo = tmp_path / "repo"
+    (fake_repo / "yoyopod").mkdir(parents=True)
+    (fake_repo / "yoyopod" / "__init__.py").write_text("")
+    (fake_repo / "yoyopod_cli").mkdir()
+    (fake_repo / "yoyopod_cli" / "__init__.py").write_text("")
+    (fake_repo / "pyproject.toml").write_text("[project]\nname='x'\nversion='0.0.1'\n")
+    (fake_repo / "config" / "app").mkdir(parents=True)
+    (fake_repo / "config" / "app" / "core.yaml").write_text("test: true\n")
+    (fake_repo / "deploy" / "scripts").mkdir(parents=True)
+    launch = fake_repo / "deploy" / "scripts" / "launch.sh"
+    launch.write_text("#!/usr/bin/env bash\r\nexit 0\r\n", encoding="utf-8", newline="\r\n")
+    launch.chmod(0o755)
+
+    slot = build_release.build(
+        repo_root=fake_repo,
+        output_root=tmp_path / "out",
+        version="2026.04.22-lf",
+        channel="dev",
+        skip_venv=True,
+    )
+
+    bundled = slot / "bin" / "launch"
+    contents = bundled.read_bytes()
+    assert b"\r\n" not in contents
+    assert contents.startswith(b"#!/usr/bin/env bash\n")
 
 
 def test_build_skips_venv_by_default(tmp_path: Path) -> None:

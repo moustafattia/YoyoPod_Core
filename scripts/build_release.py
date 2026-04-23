@@ -28,7 +28,7 @@ import shutil
 import subprocess
 import sys
 import tarfile
-import tempfile
+import tomllib
 from pathlib import Path
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -84,38 +84,78 @@ def _copy_launcher(repo_root: Path, dest_bin: Path) -> None:
     if not src.exists():
         raise FileNotFoundError(f"launcher script missing: {src}")
     target = dest_bin / "launch"
-    shutil.copy(src, target)
+    launcher_text = src.read_text(encoding="utf-8").replace("\r\n", "\n").replace("\r", "\n")
+    target.write_text(launcher_text, encoding="utf-8", newline="\n")
     target.chmod(0o755)
 
 
-def _resolve_venv(repo_root: Path, dest_venv: Path, python_version: str) -> None:
-    """Resolve aarch64 wheels into dest_venv/.
+def _runtime_dependencies(repo_root: Path) -> tuple[str, ...]:
+    pyproject_path = repo_root / "pyproject.toml"
+    if not pyproject_path.exists():
+        raise FileNotFoundError(f"pyproject.toml missing: {pyproject_path}")
+    with pyproject_path.open("rb") as handle:
+        data = tomllib.load(handle)
 
-    Builds the project as a wheel first (uv pip install with --only-binary
-    cannot build sdists), then installs the wheel and its transitive
-    dependencies. Requires network access for transitive deps.
-    Tests use skip_venv=True to avoid this path.
-    """
-    dest_venv.mkdir(parents=True, exist_ok=True)
-    with tempfile.TemporaryDirectory() as wheel_tmp:
-        subprocess.run(
-            ["uv", "build", "--wheel", "--out-dir", wheel_tmp, str(repo_root)],
-            check=True,
-        )
-        wheels = list(Path(wheel_tmp).glob("*.whl"))
-        if not wheels:
-            raise RuntimeError(f"uv build produced no wheel in {wheel_tmp}")
-        wheel = wheels[0]
-        subprocess.run(
-            [
-                "uv", "pip", "install",
-                "--target", str(dest_venv),
-                "--python-version", python_version,
-                "--only-binary", ":all:",
-                str(wheel),
-            ],
-            check=True,
-        )
+    project = data.get("project", {})
+    if not isinstance(project, dict):
+        raise ValueError(f"[project] must be a TOML table in {pyproject_path}")
+
+    dependencies = project.get("dependencies", [])
+    if not isinstance(dependencies, list):
+        raise ValueError(f"[project].dependencies must be a TOML array in {pyproject_path}")
+
+    return tuple(str(dep).strip() for dep in dependencies if str(dep).strip())
+
+
+def _write_runtime_requirements(repo_root: Path, target: Path) -> None:
+    requirements = _runtime_dependencies(repo_root)
+    contents = "\n".join(requirements)
+    if contents:
+        contents += "\n"
+    target.write_text(contents, encoding="utf-8", newline="\n")
+
+
+def _venv_python_path(dest_venv: Path) -> Path:
+    scripts_dir = "Scripts" if sys.platform == "win32" else "bin"
+    python_name = "python.exe" if sys.platform == "win32" else "python"
+    return dest_venv / scripts_dir / python_name
+
+
+def _resolve_venv(dest_venv: Path, requirements_path: Path, python_version: str) -> None:
+    """Create a real venv in dest_venv and install runtime dependencies into it."""
+    subprocess.run(
+        ["uv", "venv", "--python", python_version, str(dest_venv)],
+        check=True,
+    )
+    python_bin = _venv_python_path(dest_venv)
+    subprocess.run(
+        [
+            "uv",
+            "pip",
+            "install",
+            "--python",
+            str(python_bin),
+            "--upgrade",
+            "pip",
+            "setuptools",
+            "wheel",
+        ],
+        check=True,
+    )
+    if requirements_path.stat().st_size == 0:
+        return
+    subprocess.run(
+        [
+            "uv",
+            "pip",
+            "install",
+            "--python",
+            str(python_bin),
+            "-r",
+            str(requirements_path),
+        ],
+        check=True,
+    )
 
 
 def _copy_config(repo_root: Path, dest_config: Path) -> None:
@@ -179,12 +219,13 @@ def build(
     _copy_sources(repo_root, slot_dir / "app")
     _copy_launcher(repo_root, slot_dir / "bin")
     _copy_config(repo_root, slot_dir / "config")
+    _write_runtime_requirements(repo_root, slot_dir / "runtime-requirements.txt")
     (slot_dir / "assets").mkdir(exist_ok=True)
 
     if skip_venv:
         (slot_dir / "venv").mkdir()
     else:
-        _resolve_venv(repo_root, slot_dir / "venv", python_version)
+        _resolve_venv(slot_dir / "venv", slot_dir / "runtime-requirements.txt", python_version)
 
     tarball = output_root / f"{version}.tar.gz"
     _make_tarball(slot_dir, tarball)

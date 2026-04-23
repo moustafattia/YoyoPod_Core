@@ -1,4 +1,4 @@
-"""yoyopod remote release {push,rollback,status} — slot-deploy CLI."""
+"""yoyopod remote release {push,rollback,status} - slot-deploy CLI."""
 
 from __future__ import annotations
 
@@ -10,12 +10,12 @@ import typer
 
 from yoyopod_cli.paths import SlotPaths, load_slot_paths
 from yoyopod_cli.release_manifest import load_manifest
-from yoyopod_cli.remote_shared import pi_conn
+from yoyopod_cli.remote_shared import RemoteConnection, pi_conn
 from yoyopod_cli.remote_transport import run_remote, run_remote_capture, validate_config
 
 app = typer.Typer(name="release", help="Slot-deploy push/rollback/status.", no_args_is_help=True)
 
-# Cache the slot paths per process — load once, not per-helper-call.
+# Cache the slot paths per process - load once, not per-helper-call.
 _slot_paths_cache: SlotPaths | None = None
 
 
@@ -26,98 +26,201 @@ def _slots() -> SlotPaths:
     return _slot_paths_cache
 
 
-def _conn(ctx: typer.Context) -> object:
+def _conn(ctx: typer.Context) -> RemoteConnection:
     """Resolve RemoteConnection from typer context (respects --host/--user overrides)."""
     conn = pi_conn(ctx)
     validate_config(conn)  # type: ignore[arg-type]
     return conn
 
 
-def _slot_python_invocation(version: str) -> str:
-    """Return the shell prefix to invoke yoyopod_cli from a slot."""
-    base = f"{_slots().releases_dir()}/{shlex.quote(version)}"
-    return f"PYTHONPATH={base}/app:{base}/venv " f"python3 -m yoyopod_cli"
+def _slot_dir(version: str) -> str:
+    return f"{_slots().releases_dir()}/{version}"
 
 
-def _rsync_to_pi(conn: object, slot: Path, version: str) -> int:
-    """Rsync a local slot directory to the Pi release store."""
+def _slot_subapp_command(
+    base: str,
+    module: str,
+    *args: str,
+    manifest_path: str | None = None,
+) -> str:
+    """Return a shell command that runs one lightweight yoyopod_cli subapp."""
+    python_bin = f"{base}/venv/bin/python"
+    app_path = f"{base}/app"
+    command_args = " ".join(shlex.quote(arg) for arg in args)
+    python_code = shlex.quote(
+        f"import sys; sys.path.insert(0, {app_path!r}); from {module} import app; app()"
+    )
+    manifest_env = (
+        f"YOYOPOD_RELEASE_MANIFEST={shlex.quote(manifest_path)} "
+        if manifest_path is not None
+        else ""
+    )
+    return (
+        f"PYTHON={shlex.quote(python_bin)}; "
+        f'[ -x "$PYTHON" ] || PYTHON="$(command -v python3.12 || command -v python3)"; '
+        f'{manifest_env}"$PYTHON" -c {python_code} {command_args}'
+    )
+
+
+def _rsync_to_pi(conn: RemoteConnection, slot: Path, version: str) -> int:
+    """Upload one slot directory to the Pi release store."""
     pi_host: str = getattr(conn, "host", "")
     pi_user: str = getattr(conn, "user", "")
-    target = (
-        f"{pi_user}@{pi_host}:{_slots().releases_dir()}/{version}/"
-        if pi_user
-        else f"{pi_host}:{_slots().releases_dir()}/{version}/"
+    ssh_target = f"{pi_user}@{pi_host}" if pi_user else pi_host
+    release_root = _slots().releases_dir()
+    target = f"{ssh_target}:{release_root}/{version}/"
+    slot_arg = slot.as_posix().rstrip("/")
+    target_dir = f"{release_root}/{version}"
+    launch_path = f"{target_dir}/bin/launch"
+
+    rsync_cmd = ["rsync", "-az", "-e", "ssh", "--delete", f"{slot_arg}/", target]
+    rsync_result = subprocess.run(rsync_cmd, check=False)
+    if rsync_result.returncode == 0:
+        return run_remote(conn, f"chmod 755 {shlex.quote(launch_path)}")
+
+    prepare_remote = run_remote(
+        conn,
+        f"rm -rf {shlex.quote(target_dir)} && mkdir -p {shlex.quote(target_dir)}",
     )
-    cmd = ["rsync", "-az", "--delete", f"{slot}/", target]
-    return subprocess.run(cmd, check=False).returncode
+    if prepare_remote != 0:
+        return prepare_remote
+
+    scp_cmd = ["scp", "-r", f"{slot_arg}/.", f"{ssh_target}:{target_dir}/"]
+    scp_result = subprocess.run(scp_cmd, check=False)
+    if scp_result.returncode != 0:
+        return scp_result.returncode
+    return run_remote(conn, f"chmod 755 {shlex.quote(launch_path)}")
 
 
 def _run_preflight_on_pi(conn: object, version: str) -> int:
     """Run the preflight health check for the uploaded slot on the Pi."""
+    slot_dir = _slot_dir(version)
+    cmd = _slot_subapp_command(
+        slot_dir,
+        "yoyopod_cli.health",
+        "preflight",
+        "--slot",
+        slot_dir,
+    )
+    return run_remote(conn, cmd)  # type: ignore[arg-type]
+
+
+def _hydrate_slot_on_pi(conn: object, version: str) -> int:
+    """Create a slot-local venv and native shims on the Pi before preflight."""
+    slot_dir = _slot_dir(version)
+    current_path = _slots().current_path()
+    venv_dir = f"{slot_dir}/venv"
+    requirements_path = f"{slot_dir}/runtime-requirements.txt"
+    tmp_root = f"{_slots().state_dir()}/tmp"
+    current_venv = f"{current_path}/venv"
+    current_lvgl_build = f"{current_path}/app/yoyopod/ui/lvgl_binding/native/build"
+    current_liblinphone_build = f"{current_path}/app/yoyopod/backends/voip/shim_native/build"
+    slot_lvgl_build = f"{slot_dir}/app/yoyopod/ui/lvgl_binding/native/build"
+    slot_liblinphone_build = f"{slot_dir}/app/yoyopod/backends/voip/shim_native/build"
+    current_lvgl_shim = f"{current_lvgl_build}/libyoyopod_lvgl_shim.so"
+    current_liblinphone_shim = f"{current_liblinphone_build}/libyoyopod_liblinphone_shim.so"
+    slot_lvgl_shim = f"{slot_lvgl_build}/libyoyopod_lvgl_shim.so"
+    slot_liblinphone_shim = f"{slot_liblinphone_build}/libyoyopod_liblinphone_shim.so"
     cmd = (
-        f"{_slot_python_invocation(version)} health preflight "
-        f"--slot {_slots().releases_dir()}/{shlex.quote(version)}"
+        "set -e; "
+        f"test -f {shlex.quote(requirements_path)}; "
+        f"mkdir -p {shlex.quote(tmp_root)}; "
+        f"export TMPDIR={shlex.quote(tmp_root)}; "
+        'tmp_venv=$(mktemp -d "$TMPDIR/yoyopod-slot-venv.XXXXXX"); '
+        "trap 'rm -rf \"$tmp_venv\"' EXIT; "
+        f"if [ -e {shlex.quote(current_venv)} ]; then "
+        f'  cp -aL {shlex.quote(current_venv)}/. "$tmp_venv"/; '
+        "else "
+        '  python3 -m venv "$tmp_venv"; '
+        '  "$tmp_venv/bin/python" -m pip install --upgrade pip setuptools wheel; '
+        f"  if [ -s {shlex.quote(requirements_path)} ]; then "
+        f'    "$tmp_venv/bin/python" -m pip install -r {shlex.quote(requirements_path)}; '
+        "  fi; "
+        f"fi; "
+        f"rm -rf {shlex.quote(venv_dir)}; "
+        f'mv "$tmp_venv" {shlex.quote(venv_dir)}; '
+        "trap - EXIT; "
+        f"if [ -f {shlex.quote(current_lvgl_shim)} ]; then "
+        f"  rm -rf {shlex.quote(slot_lvgl_build)} && mkdir -p {shlex.quote(slot_lvgl_build)} && "
+        f"  cp -aL {shlex.quote(current_lvgl_shim)} {shlex.quote(slot_lvgl_shim)} && "
+        f"  touch {shlex.quote(slot_lvgl_shim)}; "
+        f"fi; "
+        f"if [ -f {shlex.quote(current_liblinphone_shim)} ]; then "
+        f"  rm -rf {shlex.quote(slot_liblinphone_build)} && "
+        f"  mkdir -p {shlex.quote(slot_liblinphone_build)} && "
+        f"  cp -aL {shlex.quote(current_liblinphone_shim)} "
+        f"{shlex.quote(slot_liblinphone_shim)} && "
+        f"  touch {shlex.quote(slot_liblinphone_shim)}; "
+        f"fi; "
+        f"{_slot_subapp_command(slot_dir, 'yoyopod_cli.build', 'ensure-native')}"
     )
     return run_remote(conn, cmd)  # type: ignore[arg-type]
 
 
 def _flip_symlinks_on_pi(conn: object, version: str) -> int:
-    """Atomically flip current → new version, previous → old current."""
-    new_slot = f"{_slots().releases_dir()}/{shlex.quote(version)}"
+    """Atomically flip current -> new version, previous -> old current."""
+    new_slot = _slot_dir(version)
     prev_path = _slots().previous_path()
     current_path = _slots().current_path()
-    # Build the entire flip as one shell script. prev is read on the remote
-    # side, so we never embed untrusted SSH output into a Python f-string.
     script = (
-        f"set -e; "
-        f"prev=$(readlink -f {current_path} 2>/dev/null || echo NONE); "
-        f'if [ "$prev" != "NONE" ]; then '
-        f'  ln -sfn "$prev" {prev_path}.new && '
-        f"  mv -T {prev_path}.new {prev_path}; "
-        f"fi; "
-        f"ln -sfn {new_slot} {current_path}.new && "
-        f"mv -T {current_path}.new {current_path} && "
-        f"sudo systemctl restart yoyopod-slot.service"
+        "set -e; "
+        f"prev=$(readlink -f {shlex.quote(current_path)} 2>/dev/null || echo NONE); "
+        'if [ "$prev" != "NONE" ]; then '
+        f'  ln -sfn "$prev" {shlex.quote(prev_path)}.new && '
+        f"  mv -T {shlex.quote(prev_path)}.new {shlex.quote(prev_path)}; "
+        "fi; "
+        f"ln -sfn {shlex.quote(new_slot)} {shlex.quote(current_path)}.new && "
+        f"mv -T {shlex.quote(current_path)}.new {shlex.quote(current_path)} && "
+        "sudo systemctl restart yoyopod-slot.service"
     )
     return run_remote(conn, script)  # type: ignore[arg-type]
 
 
+def _live_status_shell(service: str = "yoyopod-slot.service") -> str:
+    """Return a shell snippet that validates the active slot without starting Python."""
+    current_path = _slots().current_path()
+    service_q = shlex.quote(service)
+    current_q = shlex.quote(current_path)
+    return (
+        f"systemctl is-active --quiet {service_q} && "
+        f"pid=$(systemctl show -p MainPID --value {service_q}) && "
+        'test -n "$pid" && [ "$pid" != "0" ] && '
+        f"cur=$(readlink -f {current_q}) && "
+        'cwd=$(readlink -f "/proc/$pid/cwd" 2>/dev/null || true) && '
+        'test -n "$cwd" && [ "$cwd" = "$cur" ]'
+    )
+
+
 def _run_live_probe_on_pi(conn: object, version: str, timeout_s: int = 60) -> int:
     """Poll the Pi until the new version reports as live, or timeout."""
-    paths = _slots()
-    current_path = paths.current_path()
-    # Live probe runs against the CURRENT slot (after flip), so use current_path
-    # to find the active venv.  Export YOYOPOD_RELEASE_MANIFEST so that
-    # health live reads the manifest from the correct (non-default) slot root.
+    current_path = _slots().current_path()
+    live_cmd = _live_status_shell()
     cmd = (
         f"for i in $(seq 1 {timeout_s}); do "
-        f"out=$(YOYOPOD_RELEASE_MANIFEST={current_path}/manifest.json "
-        f"PYTHONPATH={current_path}/app:{current_path}/venv "
-        f"python3 -m yoyopod_cli health live 2>/dev/null) && "
-        f"echo \"$out\" | grep -q {shlex.quote('version=' + version)} && exit 0; "
-        f"sleep 1; done; exit 1"
+        f"slot=$(readlink -f {shlex.quote(current_path)} 2>/dev/null || true) && "
+        f'if {live_cmd} && [ "$(basename "$slot")" = {shlex.quote(version)} ]; then '
+        f'echo "version={version}"; exit 0; fi; '
+        "sleep 1; done; exit 1"
     )
     return run_remote(conn, cmd)  # type: ignore[arg-type]
 
 
 def _rollback_on_pi(conn: object) -> int:
-    """Invoke the rollback script on the Pi (swaps current ↔ previous)."""
+    """Invoke the rollback script on the Pi (swaps current <-> previous)."""
     return run_remote(conn, f"sudo {_slots().bin_dir()}/rollback.sh")  # type: ignore[arg-type]
 
 
 def _status_from_pi(conn: object) -> str:
     """Return the status output from the Pi, or raise typer.Exit on SSH failure."""
-    paths = _slots()
-    current_path = paths.current_path()
-    previous_path = paths.previous_path()
-    # Export YOYOPOD_RELEASE_MANIFEST so health live reads from the correct slot
-    # root when slot.root is non-default.
+    current_path = _slots().current_path()
+    previous_path = _slots().previous_path()
+    health_cmd = _live_status_shell()
     cmd = (
-        f"echo current=$(readlink -f {current_path} 2>/dev/null | xargs -n1 basename); "
-        f"echo previous=$(readlink -f {previous_path} 2>/dev/null | xargs -n1 basename); "
-        f"echo health=$(YOYOPOD_RELEASE_MANIFEST={current_path}/manifest.json "
-        f"PYTHONPATH={current_path}/app:{current_path}/venv "
-        f"python3 -m yoyopod_cli health live >/dev/null 2>&1 && echo ok || echo fail)"
+        f"cur=$(readlink -f {shlex.quote(current_path)} 2>/dev/null || true); "
+        f"prev=$(readlink -f {shlex.quote(previous_path)} 2>/dev/null || true); "
+        'if [ -n "$cur" ]; then echo current=$(basename "$cur"); else echo current=NONE; fi; '
+        'if [ -n "$prev" ]; then echo previous=$(basename "$prev"); else echo previous=NONE; fi; '
+        f"echo health=$({health_cmd} >/dev/null 2>&1 && echo ok || echo fail)"
     )
     result = run_remote_capture(conn, cmd)  # type: ignore[arg-type]
     if result.returncode != 0:
@@ -132,12 +235,12 @@ def _status_from_pi(conn: object) -> str:
 
 def _cleanup_remote_slot(conn: object, version: str) -> None:
     """Remove a partially-uploaded slot from the Pi."""
-    run_remote(conn, f"rm -rf {_slots().releases_dir()}/{shlex.quote(version)}")  # type: ignore[arg-type]
+    run_remote(conn, f"rm -rf {shlex.quote(_slot_dir(version))}")  # type: ignore[arg-type]
 
 
 def _check_rollback_available(conn: object) -> int:
     """Return 0 if previous symlink exists as a symlink on the Pi, nonzero otherwise."""
-    cmd = f"test -L {_slots().previous_path()}"
+    cmd = f"test -L {shlex.quote(_slots().previous_path())}"
     return run_remote(conn, cmd)  # type: ignore[arg-type]
 
 
@@ -148,14 +251,13 @@ def _slot_exists_state(conn: object, version: str) -> str:
     EXISTS: slot dir exists but is not the active release.
     CURRENT: slot dir exists AND is what `current` resolves to.
     """
-    paths = _slots()
-    quoted = shlex.quote(version)
-    target = f"{paths.releases_dir()}/{quoted}"
+    target = _slot_dir(version)
+    current_path = _slots().current_path()
     cmd = (
-        f"if [ ! -d {target} ]; then echo NEW; "
-        f'elif [ "$(readlink -f {paths.current_path()} 2>/dev/null)" = '
-        f'"$(readlink -f {target} 2>/dev/null)" ]; then echo CURRENT; '
-        f"else echo EXISTS; fi"
+        f"if [ ! -d {shlex.quote(target)} ]; then echo NEW; "
+        f'elif [ "$(readlink -f {shlex.quote(current_path)} 2>/dev/null)" = '
+        f'"$(readlink -f {shlex.quote(target)} 2>/dev/null)" ]; then echo CURRENT; '
+        "else echo EXISTS; fi"
     )
     return run_remote_capture(conn, cmd).stdout.strip()  # type: ignore[arg-type]
 
@@ -191,7 +293,6 @@ def push(
 
     conn = _conn(ctx)
 
-    # Immutability guard: refuse to overwrite existing slots.
     state = _slot_exists_state(conn, manifest.version)
     if state == "CURRENT":
         typer.echo(
@@ -209,7 +310,6 @@ def push(
         )
         raise typer.Exit(code=2)
 
-    # Pre-flight: confirm a rollback path exists, unless operator opted out.
     if not first_deploy:
         rb_check = _check_rollback_available(conn)
         if rb_check != 0:
@@ -230,6 +330,13 @@ def push(
         typer.echo("rsync failed", err=True)
         raise typer.Exit(code=rc)
 
+    typer.echo("hydrate runtime...")
+    rc = _hydrate_slot_on_pi(conn, manifest.version)
+    if rc != 0:
+        typer.echo("slot hydration failed -- removing uploaded slot", err=True)
+        _cleanup_remote_slot(conn, manifest.version)
+        raise typer.Exit(code=rc)
+
     typer.echo("preflight...")
     rc = _run_preflight_on_pi(conn, manifest.version)
     if rc != 0:
@@ -246,10 +353,10 @@ def push(
     typer.echo("live probe...")
     rc = _run_live_probe_on_pi(conn, manifest.version)
     if rc != 0:
-        typer.echo("live probe failed — rolling back", err=True)
+        typer.echo("live probe failed - rolling back", err=True)
         rb_rc = _rollback_on_pi(conn)
         if rb_rc != 0:
-            typer.echo(f"rollback also failed (exit {rb_rc}) — system state unknown", err=True)
+            typer.echo(f"rollback also failed (exit {rb_rc}) - system state unknown", err=True)
         raise typer.Exit(code=rc)
 
     typer.echo(f"released {manifest.version}")

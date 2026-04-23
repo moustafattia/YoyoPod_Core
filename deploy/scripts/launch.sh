@@ -16,7 +16,7 @@ SLOT_DIR="$(dirname "$(dirname "$SCRIPT_PATH")")"
 
 export YOYOPOD_RELEASE_MANIFEST="${SLOT_DIR}/manifest.json"
 export YOYOPOD_STATE_DIR="${YOYOPOD_STATE_DIR:-/opt/yoyopod/state}"
-export PYTHONPATH="${SLOT_DIR}/app:${SLOT_DIR}/venv"
+export PYTHONPATH="${SLOT_DIR}/app"
 export PYTHONUNBUFFERED=1
 
 # Create the state dir if missing (first boot after bootstrap).
@@ -29,4 +29,5 @@ if [ ! -x "${PYTHON}" ]; then
 fi
 
 cd "${SLOT_DIR}"
-exec "${PYTHON}" -m yoyopod.main "$@"
+# yoyopod.main exposes main() but is not itself executable as a module.
+exec "${PYTHON}" -c "from yoyopod.main import main; raise SystemExit(main())" "$@"
