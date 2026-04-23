@@ -304,6 +304,33 @@ def test_build_release_cli_can_skip_venv(
     assert calls["skip_venv"] is True
 
 
+def test_resolve_venv_copies_python_interpreter(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[list[str]] = []
+
+    def fake_run(argv: list[str], *, check: bool) -> subprocess.CompletedProcess[str]:
+        del check
+        calls.append(argv)
+        if argv[1:4] == ["-m", "venv", "--copies"]:
+            python_bin = tmp_path / "venv" / "bin" / "python"
+            python_bin.parent.mkdir(parents=True)
+            python_bin.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+            python_bin.chmod(0o755)
+        return subprocess.CompletedProcess(argv, 0)
+
+    requirements = tmp_path / "requirements.txt"
+    python_launcher = Path("/usr/bin/python3.12")
+    requirements.write_text("", encoding="utf-8")
+    monkeypatch.setattr(build_release, "_resolve_python_launcher", lambda _: python_launcher)
+    monkeypatch.setattr(build_release.subprocess, "run", fake_run)
+
+    build_release._resolve_venv(tmp_path / "venv", requirements, "3.12")
+
+    assert calls[0] == [str(python_launcher), "-m", "venv", "--copies", str(tmp_path / "venv")]
+
+
 def test_build_rejects_invalid_channel(tmp_path: Path) -> None:
     fake_repo = tmp_path / "repo"
     (fake_repo / "yoyopod").mkdir(parents=True)

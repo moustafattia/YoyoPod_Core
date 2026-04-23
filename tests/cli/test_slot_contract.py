@@ -1,0 +1,38 @@
+from __future__ import annotations
+
+from pathlib import Path
+
+import pytest
+
+from yoyopod_cli.slot_contract import (
+    APP_NATIVE_RUNTIME_ARTIFACTS,
+    SLOT_VENV_PYTHON,
+    is_self_contained_slot,
+    missing_self_contained_paths,
+)
+
+
+def test_self_contained_contract_rejects_symlinked_launch_python(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    slot = tmp_path / "slot"
+    python_bin = slot / SLOT_VENV_PYTHON
+    python_bin.parent.mkdir(parents=True)
+    python_bin.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+    for relative in APP_NATIVE_RUNTIME_ARTIFACTS:
+        target = slot / "app" / relative
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text("shim\n", encoding="utf-8")
+
+    original_is_symlink = Path.is_symlink
+
+    def fake_is_symlink(path: Path) -> bool:
+        if path == python_bin:
+            return True
+        return original_is_symlink(path)
+
+    monkeypatch.setattr(Path, "is_symlink", fake_is_symlink)
+
+    assert missing_self_contained_paths(slot) == (SLOT_VENV_PYTHON,)
+    assert is_self_contained_slot(slot) is False

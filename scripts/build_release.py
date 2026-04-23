@@ -169,7 +169,7 @@ def _resolve_venv(dest_venv: Path, requirements_path: Path, python_version: str)
     """Create a real venv in dest_venv and install runtime dependencies into it."""
     python_launcher = _resolve_python_launcher(python_version)
     subprocess.run(
-        [str(python_launcher), "-m", "venv", str(dest_venv)],
+        [str(python_launcher), "-m", "venv", "--copies", str(dest_venv)],
         check=True,
     )
     python_bin = _venv_python_path(dest_venv)

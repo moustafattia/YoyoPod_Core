@@ -30,9 +30,23 @@ SELF_CONTAINED_REQUIRED_FILES: tuple[Path, ...] = (
 def missing_self_contained_paths(slot_dir: Path) -> tuple[Path, ...]:
     """Return the slot-relative files a self-contained release still lacks."""
 
+    # The launch interpreter must be an actual file inside the slot. A venv
+    # symlink to the build host's Python can pass Path.is_file(), but is not
+    # portable to the Pi.
+    venv_python = slot_dir / SLOT_VENV_PYTHON
+    if not venv_python.is_file() or venv_python.is_symlink():
+        return (
+            SLOT_VENV_PYTHON,
+            *(
+                relative
+                for relative in SLOT_NATIVE_RUNTIME_ARTIFACTS
+                if not (slot_dir / relative).is_file()
+            ),
+        )
+
     return tuple(
         relative
-        for relative in SELF_CONTAINED_REQUIRED_FILES
+        for relative in SLOT_NATIVE_RUNTIME_ARTIFACTS
         if not (slot_dir / relative).is_file()
     )
 
