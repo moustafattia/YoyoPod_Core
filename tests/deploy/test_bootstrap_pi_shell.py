@@ -27,3 +27,10 @@ def test_bootstrap_keeps_root_and_bin_out_of_app_user_ownership() -> None:
 
     assert root_owned_pos < app_owned_pos
     assert '-o "${INVOKING_USER}" -g "${INVOKING_GROUP}" \\\n    "${ROOT}"' not in script
+
+
+def test_bootstrap_completion_message_does_not_trigger_command_substitution() -> None:
+    script = BOOTSTRAP_SH.read_text(encoding="utf-8")
+    completion_message = script.split("cat <<EOF", maxsplit=1)[1].split("\nEOF", maxsplit=1)[0]
+
+    assert "`" not in completion_message
