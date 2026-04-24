@@ -278,3 +278,7 @@ def docs() -> None:
     md = generate_commands_md(app)
     (HOST.repo_root / "yoyopod_cli" / "COMMANDS.md").write_text(md, encoding="utf-8")
     typer.echo("yoyopod_cli/COMMANDS.md regenerated.")
+
+
+if __name__ == "__main__":
+    run()
