@@ -29,7 +29,7 @@ def _build_status(pi: PiPaths) -> str:
     pid = shell_quote(pi.pid_file)
     return (
         f"echo '=== git ===' && git rev-parse HEAD && "
-        f"echo '=== processes ===' && (ps aux | grep -E 'python|mpv|linphonec' | grep -v grep || true) && "
+        f"echo '=== processes ===' && (ps aux | grep -E 'python|mpv' | grep -v grep || true) && "
         f"echo '=== pid ===' && (cat {pid} 2>/dev/null || echo 'no pid file') && "
         f"echo '=== log tail ===' && (tail -n 20 {log} 2>/dev/null || echo 'no log file')"
     )

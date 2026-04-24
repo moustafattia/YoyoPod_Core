@@ -39,7 +39,7 @@ class PiPaths:
     screenshot_path: str = "/tmp/yoyopod_screenshot.png"
     test_music_target_dir: str = DEFAULT_TEST_MUSIC_TARGET_DIR
     startup_marker: str = "YoYoPod starting"
-    kill_processes: tuple[str, ...] = ("python", "linphonec")
+    kill_processes: tuple[str, ...] = ("python",)
     rsync_exclude: tuple[str, ...] = (
         ".git/",
         ".cache/",
@@ -75,7 +75,6 @@ class ProcessNames:
 
     app: str = "python yoyopod.py"
     mpv: str = "mpv"
-    linphonec: str = "linphonec"
 
 
 HOST = HostPaths()

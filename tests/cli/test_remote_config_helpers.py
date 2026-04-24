@@ -57,7 +57,7 @@ def test_load_pi_deploy_config_uses_tracked_defaults_without_local_override(tmp_
                 "branch: main",
                 "venv: .venv",
                 "start_cmd: python yoyopod.py",
-                "kill_processes: [python, linphonec]",
+                "kill_processes: [python]",
                 "log_file: logs/yoyopod.log",
                 "error_log_file: logs/yoyopod_errors.log",
                 "pid_file: /tmp/yoyopod.pid",

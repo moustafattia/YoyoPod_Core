@@ -19,7 +19,6 @@ venv: .venv
 start_cmd: python yoyopod.py
 kill_processes:
   - python
-  - linphonec
 log_file: logs/yoyopod.log
 error_log_file: logs/yoyopod_errors.log
 pid_file: /tmp/yoyopod.pid

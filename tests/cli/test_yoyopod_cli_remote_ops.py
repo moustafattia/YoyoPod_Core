@@ -27,17 +27,18 @@ def test_build_status_includes_repo_sha_and_log_tail() -> None:
     assert "git rev-parse HEAD" in shell
     assert pi.log_file in shell
     assert pi.pid_file in shell
+    assert "linphonec" not in shell
 
 
 def test_build_restart_uses_configured_processes() -> None:
     pi = PiPaths(
         venv="venv",
         start_cmd="python yoyopod.py --simulate",
-        kill_processes=("python", "linphonec"),
+        kill_processes=("python", "stale-helper"),
     )
     shell = _build_restart(pi)
     assert "python" in shell
-    assert "linphonec" in shell
+    assert "stale-helper" in shell
     assert "pkill" in shell
     assert "systemctl cat" in shell
     assert "sudo systemctl start" in shell

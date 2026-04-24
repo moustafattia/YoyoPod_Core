@@ -1,9 +1,6 @@
 """Tests for yoyopod_cli.paths — the single source of truth for path constants."""
+
 from __future__ import annotations
-
-from pathlib import Path
-
-import pytest
 
 from yoyopod_cli.paths import (
     CONFIGS,
@@ -26,6 +23,7 @@ def test_pi_defaults_populated() -> None:
     assert PI_DEFAULTS.log_file == "logs/yoyopod.log"
     assert PI_DEFAULTS.pid_file == "/tmp/yoyopod.pid"
     assert "python" in PI_DEFAULTS.kill_processes
+    assert "linphonec" not in PI_DEFAULTS.kill_processes
 
 
 def test_configs_paths_exist() -> None:
@@ -37,6 +35,7 @@ def test_configs_paths_exist() -> None:
 def test_procs_known() -> None:
     assert PROCS.app == "python yoyopod.py"
     assert PROCS.mpv == "mpv"
+    assert not hasattr(PROCS, "linphonec")
 
 
 def test_load_pi_paths_returns_defaults_when_no_override(tmp_path) -> None:
