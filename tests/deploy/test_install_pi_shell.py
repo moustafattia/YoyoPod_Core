@@ -60,3 +60,18 @@ def test_readme_describes_lane_based_pi_bringup() -> None:
     assert "Typical bring-up flow" not in readme
     assert "Basic hardware validation" not in readme
     assert "yoyopod pi validate smoke" not in readme
+
+
+def test_repo_skills_describe_current_lane_contract() -> None:
+    skill_files = sorted((REPO_ROOT / "skills").glob("*/SKILL.md"))
+    combined = "\n".join(path.read_text(encoding="utf-8") for path in skill_files)
+    combined_lower = combined.lower()
+
+    assert "/opt/yoyopod-dev/checkout" in combined
+    assert "/opt/yoyopod-prod" in combined
+    assert "remote mode status" in combined
+    assert "remote release install-url" in combined
+    assert "bootstrap_pi.sh" not in combined
+    assert "classic flow" not in combined_lower
+    assert "until all pis" not in combined_lower
+    assert "remote service" not in combined
