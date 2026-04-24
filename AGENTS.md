@@ -1,6 +1,6 @@
 # YoYoPod - Agent Instructions
 
-Last Updated: 2026-04-22
+Last Updated: 2026-04-24
 Target Hardware: Raspberry Pi Zero 2W
 Project: iPod-inspired VoIP + local music device with small-screen button UI
 
@@ -45,6 +45,15 @@ Current runtime summary
 - Production service templates: `deploy/systemd/`
 - CLI package: `yoyopod_cli/` (flat, single `yoyopod` entry point)
 
+Pi lanes and bootstrap
+- Dev lane: mutable hardware-testing checkout at `/opt/yoyopod-dev/checkout`, venv at `/opt/yoyopod-dev/venv`, service `yoyopod-dev.service`.
+- Prod lane: immutable packaged slots under `/opt/yoyopod-prod`, service `yoyopod-prod.service`; use `remote release ...`, not `remote sync`.
+- Check lane ownership first with `yoyopod remote mode status`; dev/prod services should not own hardware together.
+- Fresh board: from a temporary Pi checkout run `sudo -E ./deploy/scripts/bootstrap_pi.sh`; add `--migrate` for old `~/yoyopod-core`, or `--release-url=<artifact-url>` for first prod install.
+- After migration, `~/yoyopod-core` is archive/history only; live dev truth is `/opt/yoyopod-dev/checkout`.
+- Dev deploy loop: `yoyopod remote mode activate dev`, then `yoyopod remote setup` once, then `yoyopod remote sync --branch <branch>`; add `--clean-native` after native/CMake/lib changes or branch switches.
+- Lane details live in `docs/DEV_PROD_LANES.md`, dev workflow in `docs/PI_DEV_WORKFLOW.md`, prod slot/OTA flow in `docs/SLOT_DEPLOY.md`.
+
 Source-of-truth files
 - `yoyopod/core/application.py`
 - `yoyopod/core/bootstrap/`
@@ -60,6 +69,9 @@ Source-of-truth files
 - `yoyopod_cli/COMMANDS.md`
 - `README.md`
 - `docs/SYSTEM_ARCHITECTURE.md`
+- `docs/DEV_PROD_LANES.md`
+- `docs/PI_DEV_WORKFLOW.md`
+- `docs/SLOT_DEPLOY.md`
 - `docs/POWER_MODULE.md`
 - `docs/LVGL_MIGRATION_PLAN.md`
 - `docs/LOCAL_FIRST_MUSIC_PLAN.md`
@@ -71,6 +83,7 @@ High-value commands
 - **CI test suite (run before every commit + push):** `uv run pytest -q`
 - Pi smoke: `yoyopod pi validate smoke`
 - Remote operations: `yoyopod remote ...`
+- Dev deploy: `yoyopod remote sync --branch <branch>` after `yoyopod remote mode activate dev`
 - Full command reference: `yoyopod_cli/COMMANDS.md` (auto-generated; regenerate via `yoyopod dev docs`)
 
 Pre-commit rule
