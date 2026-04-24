@@ -74,6 +74,20 @@ def test_build_restart_only_starts_managed_service_for_selected_checkout() -> No
     assert '[ "$selected_checkout" = "$legacy_service_checkout" ]' in shell
 
 
+def test_build_restart_mirrors_legacy_unit_checkout_fallbacks() -> None:
+    shell = _build_restart(PiPaths())
+
+    yoyo_core_fallback = 'legacy_service_checkout="$HOME/YoyoPod_Core"'
+    yoyo_py_fallback = 'legacy_service_checkout="$HOME/yoyo-py"'
+    legacy_match = '[ "$selected_checkout" = "$legacy_service_checkout" ]'
+
+    assert '$HOME/yoyopod-core' in shell
+    assert yoyo_core_fallback in shell
+    assert yoyo_py_fallback in shell
+    assert shell.index(yoyo_core_fallback) < shell.index(legacy_match)
+    assert shell.index(yoyo_py_fallback) < shell.index(legacy_match)
+
+
 def test_build_native_shim_refresh_rebuilds_lvgl_and_liblinphone_when_stale() -> None:
     pi = PiPaths(venv="venv")
     shell = _build_native_shim_refresh(pi)

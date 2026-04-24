@@ -95,6 +95,14 @@ def _build_restart(pi: PiPaths, lanes: LanePaths | None = None) -> str:
         '"~") legacy_service_checkout="$HOME" ;; '
         '"~/"*) legacy_service_checkout="$HOME/${legacy_service_checkout#~/}" ;; '
         "esac; "
+        'if [ ! -f "$legacy_service_checkout/pyproject.toml" ] && '
+        '[ -f "$HOME/YoyoPod_Core/pyproject.toml" ]; then '
+        'legacy_service_checkout="$HOME/YoyoPod_Core"; '
+        "fi; "
+        'if [ ! -f "$legacy_service_checkout/pyproject.toml" ] && '
+        '[ -f "$HOME/yoyo-py/pyproject.toml" ]; then '
+        'legacy_service_checkout="$HOME/yoyo-py"; '
+        "fi; "
         'legacy_service_checkout="$(cd "$legacy_service_checkout" 2>/dev/null && '
         'pwd -P || printf "%s" "$legacy_service_checkout")"'
     )
