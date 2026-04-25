@@ -21,11 +21,15 @@ to either duplicate rendering in many screens or add more bespoke manager APIs.
 Cross-screen concerns should implement one shared contract:
 
 1. Long-lived instance: created once at boot by its owning subsystem.
-2. Activation check: `is_active(now: float) -> bool`.
+2. Pure activation check: `is_active(now: float) -> bool` decides visibility
+   without mutating overlay-owned state.
 3. Rendering hook: `render(now: float) -> None`.
-4. Ordering: each overlay provides `priority: int`; higher values render first.
-5. Runtime ownership: overlays are registered in a shared overlay runtime that
-   evaluates all overlays and renders only the highest-priority active overlay.
+4. Deactivation hook: `on_deactivate(now: float) -> None` owns cleanup that
+   should happen only when an overlay stops being active.
+5. Ordering: each overlay provides `priority: int`; higher values render first.
+6. Runtime ownership: overlays are registered in a shared overlay runtime that
+   evaluates overlays once per coordinator tick, stops at the first active
+   overlay, and renders only that winner.
 
 ## Loop Placement
 
@@ -41,8 +45,7 @@ avoids standalone special-cases in the outer coordinator iteration.
   internal state.
 - Overlays must be self-deactivating: once the condition is gone,
   `is_active()` returns `False` and the runtime naturally stops rendering it.
-- Overlay owners can trigger one-time cleanup actions (for example, refreshing
-  the previously visible screen) when transitioning to inactive.
+- One-time cleanup actions belong in `on_deactivate()`, not in `is_active()`.
 
 ## Current Migration Plan
 

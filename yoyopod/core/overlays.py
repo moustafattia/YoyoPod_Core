@@ -13,20 +13,26 @@ class CrossScreenOverlay(Protocol):
     priority: int
 
     def is_active(self, now: float) -> bool:
-        """Return whether this overlay should be active at the given timestamp."""
+        """Return whether this overlay should be active without mutating overlay state."""
         ...
 
     def render(self, now: float) -> None:
         """Render this overlay on top of the currently active screen."""
         ...
 
+    def on_deactivate(self, now: float) -> None:
+        """Clean up overlay-owned state after this overlay stops being active."""
+        ...
+
 
 @dataclass(slots=True)
 class CrossScreenOverlayRuntime:
-    """Evaluate registered overlays and render the highest-priority active one."""
+    """Evaluate registered overlays once per tick and render the active winner."""
 
     _overlays: list[CrossScreenOverlay] = field(default_factory=list)
+    _active_overlay: CrossScreenOverlay | None = None
     _last_active_overlay_name: str | None = None
+    _last_evaluated_at: float | None = None
 
     def register(self, overlay: CrossScreenOverlay) -> None:
         """Register a long-lived overlay implementation."""
@@ -37,18 +43,41 @@ class CrossScreenOverlayRuntime:
         self._overlays.append(overlay)
         self._overlays.sort(key=lambda entry: entry.priority, reverse=True)
 
-    def update(self, now: float, *, render: bool) -> bool:
-        """Refresh active overlay state and optionally render the top active overlay."""
+    def evaluate(self, now: float) -> bool:
+        """Evaluate active overlay state once for the current runtime tick."""
 
-        active_overlay: CrossScreenOverlay | None = None
-        for overlay in self._overlays:
-            if overlay.is_active(now) and active_overlay is None:
-                active_overlay = overlay
+        if self._last_evaluated_at == now:
+            return self._active_overlay is not None
 
+        active_overlay = next(
+            (overlay for overlay in self._overlays if overlay.is_active(now)),
+            None,
+        )
+        previous_overlay = self._active_overlay
+        if previous_overlay is not None and previous_overlay is not active_overlay:
+            previous_overlay.on_deactivate(now)
+
+        self._active_overlay = active_overlay
         self._last_active_overlay_name = active_overlay.name if active_overlay else None
-        if active_overlay is not None and render:
-            active_overlay.render(now)
+        self._last_evaluated_at = now
         return active_overlay is not None
+
+    def render_active(self, now: float) -> bool:
+        """Render the cached active overlay, evaluating once when needed."""
+
+        if not self.evaluate(now):
+            return False
+
+        assert self._active_overlay is not None
+        self._active_overlay.render(now)
+        return True
+
+    def update(self, now: float, *, render: bool) -> bool:
+        """Compatibility wrapper for older callers using the combined update API."""
+
+        if render:
+            return self.render_active(now)
+        return self.evaluate(now)
 
     @property
     def last_active_overlay_name(self) -> str | None:

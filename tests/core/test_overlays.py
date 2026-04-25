@@ -18,6 +18,7 @@ class _OverlayStub:
     active: bool = False
     is_active_calls: list[float] = field(default_factory=list)
     render_calls: list[float] = field(default_factory=list)
+    deactivation_calls: list[float] = field(default_factory=list)
 
     def is_active(self, now: float) -> bool:
         self.is_active_calls.append(now)
@@ -25,6 +26,9 @@ class _OverlayStub:
 
     def render(self, now: float) -> None:
         self.render_calls.append(now)
+
+    def on_deactivate(self, now: float) -> None:
+        self.deactivation_calls.append(now)
 
 
 def test_overlay_runtime_renders_highest_priority_active_overlay() -> None:
@@ -39,8 +43,8 @@ def test_overlay_runtime_renders_highest_priority_active_overlay() -> None:
     handled = runtime.update(now=5.0, render=True)
 
     assert handled is True
-    assert lower.is_active_calls == [5.0]
     assert higher.is_active_calls == [5.0]
+    assert lower.is_active_calls == []
     assert lower.render_calls == []
     assert higher.render_calls == [5.0]
     assert runtime.last_active_overlay_name == "higher"
@@ -59,6 +63,34 @@ def test_overlay_runtime_can_evaluate_without_rendering() -> None:
     assert overlay.is_active_calls == [8.0]
     assert overlay.render_calls == []
     assert runtime.last_active_overlay_name == "power"
+
+
+def test_overlay_runtime_reuses_cached_overlay_decision_for_same_tick() -> None:
+    """Evaluating and rendering the same tick should call `is_active()` only once."""
+
+    runtime = CrossScreenOverlayRuntime()
+    overlay = _OverlayStub(name="power", priority=100, active=True)
+    runtime.register(overlay)
+
+    assert runtime.evaluate(now=8.0) is True
+    assert runtime.render_active(now=8.0) is True
+
+    assert overlay.is_active_calls == [8.0]
+    assert overlay.render_calls == [8.0]
+
+
+def test_overlay_runtime_calls_deactivate_hook_once_on_transition_to_inactive() -> None:
+    """Overlay cleanup should run only when a previously active overlay turns off."""
+
+    runtime = CrossScreenOverlayRuntime()
+    overlay = _OverlayStub(name="power", priority=100, active=True)
+    runtime.register(overlay)
+
+    assert runtime.evaluate(now=1.0) is True
+    overlay.active = False
+
+    assert runtime.evaluate(now=2.0) is False
+    assert overlay.deactivation_calls == [2.0]
 
 
 def test_overlay_runtime_clears_active_name_when_no_overlays_are_active() -> None:

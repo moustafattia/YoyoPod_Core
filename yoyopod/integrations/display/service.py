@@ -262,13 +262,7 @@ class ScreenPowerService:
         if self.app._power_alert is None:
             return False
 
-        if now >= self.app._power_alert.expires_at:
-            self.app._power_alert = None
-            if self.app.screen_manager is not None:
-                self.app.screen_manager.refresh_current_screen()
-            return False
-
-        return True
+        return now < self.app._power_alert.expires_at
 
     def render(self, now: float) -> None:
         """Render the current power overlay state when active."""
@@ -293,9 +287,20 @@ class ScreenPowerService:
             self.app._power_alert.color,
         )
 
+    def on_deactivate(self, now: float) -> None:
+        """Clear expired alerts and restore the visible screen when needed."""
+
+        if self.app._power_alert is None or now < self.app._power_alert.expires_at:
+            return
+
+        self.app._power_alert = None
+        if self.app.screen_manager is not None:
+            self.app.screen_manager.refresh_current_screen()
+
     def update_power_overlays(self, now: float) -> bool:
         """Compatibility helper for callers still using the old power-overlay API."""
         if not self.is_active(now):
+            self.on_deactivate(now)
             return False
         self.render(now)
         return True

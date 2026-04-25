@@ -355,9 +355,8 @@ def test_lvgl_pump_runs_overlay_runtime_between_navigation_flush_and_backend_pum
             super().render()
 
     class _OverlayRuntimeStub:
-        def update(self, now: float, *, render: bool) -> bool:
-            if render:
-                events.append("overlay")
+        def render_active(self, now: float) -> bool:
+            events.append("overlay")
             return False
 
     class _OrderedBackend(FakeLvglPumpBackend):
