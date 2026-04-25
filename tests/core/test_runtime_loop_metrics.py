@@ -80,6 +80,19 @@ def test_user_activity_event_does_not_record_handled_action_latency() -> None:
     assert snapshot["responsiveness_action_to_visible_count"] == 0
 
 
+def test_handled_input_matches_pending_marker_by_action_name() -> None:
+    app = YoyoPodApp()
+    app.note_input_activity(SimpleNamespace(value="select"), 0, captured_at=100.0)
+    app.note_input_activity(SimpleNamespace(value="back"), 0, captured_at=100.020)
+
+    app.note_handled_input(action_name="back", handled_at=100.030)
+
+    snapshot = app.runtime_metrics.responsiveness_snapshot(now=101.0)
+    assert snapshot["responsiveness_input_to_action_count"] == 1
+    assert snapshot["responsiveness_last_input_to_action_name"] == "back"
+    assert snapshot["responsiveness_input_to_action_last_ms"] == 10.0
+
+
 def test_timing_snapshot_includes_drain_duration() -> None:
     app = YoyoPodApp()
     app.runtime_loop.process_pending_main_thread_actions()

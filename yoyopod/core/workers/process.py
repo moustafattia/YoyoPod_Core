@@ -57,7 +57,7 @@ class WorkerProcessRuntime:
 
     def __init__(self, config: WorkerProcessConfig) -> None:
         self.config = config
-        self._process: subprocess.Popen[str] | None = None
+        self._process: subprocess.Popen[bytes] | None = None
         self._messages: Queue[WorkerEnvelope] = Queue(maxsize=max(1, config.receive_queue_size))
         self._outbound: Queue[WorkerEnvelope | None] = Queue(
             maxsize=max(1, config.send_queue_size)
@@ -95,8 +95,8 @@ class WorkerProcessRuntime:
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
-            text=True,
-            bufsize=1,
+            text=False,
+            bufsize=-1,
         )
         assert self._process.stdout is not None
         assert self._process.stderr is not None
@@ -246,7 +246,7 @@ class WorkerProcessRuntime:
             if process.poll() is not None:
                 return False
             try:
-                process.stdin.write(encode_envelope(envelope))
+                process.stdin.write(encode_envelope(envelope).encode("utf-8"))
                 process.stdin.flush()
             except (BrokenPipeError, OSError, TypeError, ValueError):
                 return False
@@ -283,7 +283,7 @@ class WorkerProcessRuntime:
             killed=self._killed,
         )
 
-    def _start_reader(self, stream_name: str, stream: IO[str]) -> threading.Thread:
+    def _start_reader(self, stream_name: str, stream: IO[bytes]) -> threading.Thread:
         thread = threading.Thread(
             target=self._read_stream,
             args=(stream_name, stream),
@@ -293,11 +293,15 @@ class WorkerProcessRuntime:
         thread.start()
         return thread
 
-    def _read_stream(self, stream_name: str, stream: IO[str]) -> None:
+    def _read_stream(self, stream_name: str, stream: IO[bytes]) -> None:
         for line in stream:
             if stream_name == "stderr":
                 self._stderr_lines += 1
-                logger.info("worker {} stderr: {}", self.config.name, line.rstrip())
+                logger.info(
+                    "worker {} stderr: {}",
+                    self.config.name,
+                    line.decode("utf-8", errors="replace").rstrip(),
+                )
                 continue
             try:
                 envelope = parse_envelope_line(line)

@@ -20,10 +20,10 @@ class _BlockingStdin:
         self.write_entered = threading.Event()
         self.release_write = threading.Event()
 
-    def write(self, _data: str) -> int:
+    def write(self, data: bytes) -> int:
         self.write_entered.set()
         self.release_write.wait(timeout=5.0)
-        return 0
+        return len(data)
 
     def flush(self) -> None:
         return None
@@ -31,9 +31,9 @@ class _BlockingStdin:
 
 class _RecordingStdin:
     def __init__(self) -> None:
-        self.writes: list[str] = []
+        self.writes: list[bytes] = []
 
-    def write(self, data: str) -> int:
+    def write(self, data: bytes) -> int:
         self.writes.append(data)
         return len(data)
 
@@ -140,6 +140,34 @@ sys.stdout.flush()
 
     assert snapshot.protocol_errors >= 1
     assert snapshot.received_messages == 0
+
+
+def test_worker_process_counts_invalid_utf8_stdout_without_losing_reader(tmp_path: Path) -> None:
+    worker = _write_worker(
+        tmp_path,
+        """
+import sys
+sys.stdout.buffer.write(b"\\xff\\n")
+sys.stdout.buffer.write(b'{"schema_version":1,"kind":"event","type":"voice.ready","request_id":null,"timestamp_ms":1,"deadline_ms":0,"payload":{"ok":true}}\\n')
+sys.stdout.flush()
+""".strip(),
+    )
+    runtime = WorkerProcessRuntime(
+        WorkerProcessConfig(name="bad-utf8", argv=[sys.executable, "-u", str(worker)])
+    )
+
+    runtime.start()
+    try:
+        messages = runtime.wait_for_messages(count=1, timeout_seconds=2.0)
+        runtime.stop(grace_seconds=0.1)
+        snapshot = runtime.snapshot()
+    finally:
+        runtime.stop(grace_seconds=0.1)
+
+    assert len(messages) == 1
+    assert messages[0].type == "voice.ready"
+    assert snapshot.protocol_errors >= 1
+    assert snapshot.received_messages == 1
 
 
 def test_worker_process_stop_is_bounded_for_stuck_worker(tmp_path: Path) -> None:
@@ -286,7 +314,7 @@ def test_worker_process_writer_survives_json_encoding_failure() -> None:
     assert snapshot.send_failures == 1
     assert snapshot.sent_messages == 1
     assert len(stdin.writes) == 1
-    assert '"request_id":"good"' in stdin.writes[0]
+    assert b'"request_id":"good"' in stdin.writes[0]
 
 
 def test_worker_process_writer_exits_after_process_exit() -> None:

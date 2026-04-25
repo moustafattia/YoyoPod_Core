@@ -80,8 +80,8 @@ class RuntimeMetricsStore:
         self.last_input_handled_action_name = action_name
         self._last_handled_input_for_refresh_at = handled_at
         self._last_handled_input_for_refresh_action_name = action_name
-        if self._pending_input_activities:
-            input_marker = self._pending_input_activities.popleft()
+        input_marker = self._pop_matching_input_activity(action_name)
+        if input_marker is not None:
             input_activity_at = input_marker.captured_at
         elif self.last_input_activity_action_name is None:
             input_activity_at = 0.0
@@ -167,6 +167,19 @@ class RuntimeMetricsStore:
         self.last_responsiveness_capture_scope = suspected_scope
         self.last_responsiveness_capture_summary = summary
         self.last_responsiveness_capture_artifacts = dict(artifacts or {})
+
+    def _pop_matching_input_activity(
+        self,
+        action_name: str | None,
+    ) -> _InputActivityMarker | None:
+        if action_name is None:
+            return self._pending_input_activities.popleft() if self._pending_input_activities else None
+
+        while self._pending_input_activities:
+            input_marker = self._pending_input_activities.popleft()
+            if input_marker.action_name == action_name:
+                return input_marker
+        return None
 
 
 class RuntimeStatusService:
