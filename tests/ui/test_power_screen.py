@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import fields
+from dataclasses import fields, replace
 from datetime import datetime
 import time
 from types import SimpleNamespace
@@ -539,16 +539,45 @@ def test_power_screen_visible_tick_stays_clean_when_prepared_state_is_unchanged(
 def test_power_screen_visible_tick_marks_dirty_when_prepared_state_changes() -> None:
     """Visible ticks should mark the screen dirty when the prepared state changes."""
 
+    first_snapshot = _snapshot()
+    second_snapshot = replace(
+        first_snapshot,
+        battery=replace(first_snapshot.battery, level_percent=42.0),
+    )
+
     states = iter(
         (
             PowerScreenState(
-                network_enabled=True,
-                network_rows=(("Status", "Online"),),
+                snapshot=first_snapshot,
             ),
             PowerScreenState(
-                network_enabled=True,
-                network_rows=(("Status", "Offline"),),
+                snapshot=second_snapshot,
             ),
+        )
+    )
+
+    display = Display(simulate=True)
+    try:
+        screen = PowerScreen(display, AppContext(), state_provider=lambda: next(states))
+        screen._visible_tick_refresh_grace_seconds = 0.0
+
+        screen.enter()
+        screen.in_detail = True
+        screen.clear_dirty()
+        screen.refresh_for_visible_tick()
+
+        assert screen.should_render_for_visible_tick() is True
+    finally:
+        display.cleanup()
+
+
+def test_power_screen_visible_tick_ignores_volatile_status_ages_for_dirty_flag() -> None:
+    """Visible ticks should ignore status-only age churn that does not change visible rows."""
+
+    states = iter(
+        (
+            PowerScreenState(status={"input_activity_age_seconds": 1.0}),
+            PowerScreenState(status={"input_activity_age_seconds": 2.0}),
         )
     )
 
@@ -561,7 +590,7 @@ def test_power_screen_visible_tick_marks_dirty_when_prepared_state_changes() -> 
         screen.clear_dirty()
         screen.refresh_for_visible_tick()
 
-        assert screen.should_render_for_visible_tick() is True
+        assert screen.should_render_for_visible_tick() is False
     finally:
         display.cleanup()
 
