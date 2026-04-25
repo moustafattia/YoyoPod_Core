@@ -133,6 +133,8 @@ class RuntimeLoopService:
         self._last_loop_iteration_started_at = 0.0
         self._last_runtime_loop_gap_seconds = 0.0
         self._last_runtime_iteration_duration_seconds = 0.0
+        self._last_main_thread_drain_duration_seconds = 0.0
+        self._main_thread_drain_recorded = False
         self._last_voip_iterate_started_at = 0.0
         self._last_voip_timing_sample_id = 0
         self._last_voip_schedule_delay_seconds = 0.0
@@ -222,6 +224,11 @@ class RuntimeLoopService:
             threshold_seconds=self._SLOW_MAIN_THREAD_DRAIN_WARNING_SECONDS,
             detail=self._main_thread_drain_detail(result),
         )
+        self._last_main_thread_drain_duration_seconds = max(
+            0.0,
+            time.monotonic() - started_at,
+        )
+        self._main_thread_drain_recorded = True
         return result.total_processed
 
     def _process_pending_main_thread_actions_for_iteration(self) -> int:
@@ -247,6 +254,11 @@ class RuntimeLoopService:
             threshold_seconds=self._SLOW_MAIN_THREAD_DRAIN_WARNING_SECONDS,
             detail=self._main_thread_drain_detail(result),
         )
+        self._last_main_thread_drain_duration_seconds = max(
+            0.0,
+            time.monotonic() - started_at,
+        )
+        self._main_thread_drain_recorded = True
         return result.total_processed
 
     def _scheduler_drain_budget(self) -> int:
@@ -680,6 +692,7 @@ class RuntimeLoopService:
                     "visible_screen_refresh",
                     screen_manager.refresh_current_screen_for_visible_tick,
                 )
+                self.app.note_visible_refresh(refreshed_at=time.monotonic())
                 return current_time
 
             return last_screen_update
@@ -827,6 +840,12 @@ class RuntimeLoopService:
             "runtime_iteration_seconds": (
                 self._last_runtime_iteration_duration_seconds
                 if self._last_loop_iteration_started_at > 0.0
+                else None
+            ),
+            "runtime_main_thread_drain_seconds": (
+                self._last_main_thread_drain_duration_seconds
+                if self._last_loop_iteration_started_at > 0.0
+                or self._main_thread_drain_recorded
                 else None
             ),
             "voip_schedule_delay_seconds": (

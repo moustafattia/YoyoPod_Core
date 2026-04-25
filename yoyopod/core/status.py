@@ -356,6 +356,7 @@ class RuntimeStatusService:
             "responsiveness_last_capture_artifacts": dict(
                 runtime_metrics.last_responsiveness_capture_artifacts
             ),
+            **runtime_metrics.responsiveness_snapshot(now=monotonic_now),
             **self.app.runtime_loop.timing_snapshot(now=monotonic_now),
         }
 
