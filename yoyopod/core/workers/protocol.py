@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 SUPPORTED_SCHEMA_VERSION = 1
-VALID_KINDS = {"command", "event", "result", "error", "heartbeat"}
+VALID_KINDS = frozenset({"command", "event", "result", "error", "heartbeat"})
 
 
 class WorkerProtocolError(ValueError):
@@ -62,7 +62,7 @@ def parse_envelope_line(line: str | bytes) -> WorkerEnvelope:
     try:
         data = json.loads(decoded)
     except json.JSONDecodeError as exc:
-        raise WorkerProtocolError("invalid JSON worker envelope") from exc
+        raise WorkerProtocolError(f"invalid JSON worker envelope: {exc.msg}") from exc
 
     if not isinstance(data, dict):
         raise WorkerProtocolError("worker envelope must be a JSON object")
@@ -135,7 +135,7 @@ def _validate_envelope_data(data: dict[str, Any]) -> WorkerEnvelope:
         request_id=request_id,
         timestamp_ms=timestamp_ms,
         deadline_ms=deadline_ms,
-        payload=payload,
+        payload=dict(payload),
     )
 
 

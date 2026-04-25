@@ -42,6 +42,20 @@ def test_parse_valid_envelope_line() -> None:
     assert VALID_KINDS == {"command", "event", "result", "error", "heartbeat"}
 
 
+def test_valid_kinds_is_immutable() -> None:
+    assert isinstance(VALID_KINDS, frozenset)
+    assert not hasattr(VALID_KINDS, "add")
+
+
+def test_make_envelope_copies_payload() -> None:
+    payload = {"text": "hello"}
+
+    envelope = make_envelope(kind="result", type="voice.transcribe", payload=payload)
+    payload["text"] = "changed"
+
+    assert envelope.payload == {"text": "hello"}
+
+
 def test_parse_rejects_unknown_schema_version() -> None:
     with pytest.raises(WorkerProtocolError, match="schema_version"):
         parse_envelope_line(
