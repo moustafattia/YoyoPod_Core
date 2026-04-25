@@ -16,6 +16,7 @@ from yoyopod.core.workers.protocol import (
     make_envelope,
     parse_envelope_line,
 )
+from yoyopod.core.workers.supervisor import WorkerSupervisor
 
 __all__ = [
     "SUPPORTED_SCHEMA_VERSION",
@@ -25,6 +26,7 @@ __all__ = [
     "WorkerProcessRuntime",
     "WorkerProcessSnapshot",
     "WorkerProtocolError",
+    "WorkerSupervisor",
     "encode_envelope",
     "make_envelope",
     "parse_envelope_line",
