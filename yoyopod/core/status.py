@@ -157,7 +157,10 @@ class RuntimeStatusService:
     def get_status(self, *, refresh_output_volume: bool = False) -> dict[str, Any]:
         """Return the current application status."""
 
+        from yoyopod.core.diagnostics.memory import collect_process_memory
+
         monotonic_now = time.monotonic()
+        process_memory = collect_process_memory()
         runtime_metrics = self.app.runtime_metrics
         pending_shutdown_in_seconds = None
         if self.app._pending_shutdown is not None:
@@ -277,6 +280,11 @@ class RuntimeStatusService:
                 if self.app._last_lvgl_pump_at > 0.0
                 else None
             ),
+            "process_memory_pid": process_memory.pid,
+            "process_memory_rss_kb": process_memory.rss_kb,
+            "process_memory_pss_kb": process_memory.pss_kb,
+            "process_memory_private_dirty_kb": process_memory.private_dirty_kb,
+            "process_memory_source": process_memory.source,
             "loop_heartbeat_age_seconds": (
                 max(0.0, monotonic_now - self.app._last_loop_heartbeat_at)
                 if self.app._last_loop_heartbeat_at > 0.0
