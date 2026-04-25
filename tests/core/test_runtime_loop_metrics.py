@@ -89,3 +89,23 @@ def test_runtime_status_includes_responsiveness_and_loop_timing() -> None:
     assert "responsiveness_input_to_action_count" in status
     assert "responsiveness_action_to_visible_count" in status
     assert "runtime_main_thread_drain_seconds" in status
+
+
+def test_runtime_loop_polls_worker_supervisor() -> None:
+    app = YoyoPodApp()
+    calls: list[str] = []
+    app.worker_supervisor = SimpleNamespace(
+        poll=lambda: calls.append("poll") or 0,
+        snapshot=lambda: {},
+    )
+    app.app_state_runtime = SimpleNamespace(get_state_name=lambda: "idle")
+    app.call_interruption_policy = SimpleNamespace(music_interrupted_by_call=False)
+
+    app.runtime_loop.run_iteration(
+        monotonic_now=10.0,
+        current_time=20.0,
+        last_screen_update=20.0,
+        screen_update_interval=1.0,
+    )
+
+    assert calls == ["poll"]

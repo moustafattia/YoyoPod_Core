@@ -12,6 +12,7 @@ from yoyopod.core.events import (
     WorkerDomainStateChangedEvent,
     WorkerMessageReceivedEvent,
 )
+from yoyopod.core.application import YoyoPodApp
 from yoyopod.core.scheduler import MainThreadScheduler
 from yoyopod.core.workers.process import WorkerProcessConfig
 from yoyopod.core.workers.supervisor import WorkerSupervisor
@@ -333,3 +334,24 @@ def test_supervisor_restart_spawn_failure_stays_contained(tmp_path: Path) -> Non
     assert snapshot["next_restart_at"] == 0.0
     assert events[-1].state == "degraded"
     assert events[-1].reason == "restart_failed"
+
+
+def test_app_owns_worker_supervisor() -> None:
+    app = YoyoPodApp()
+
+    assert isinstance(app.worker_supervisor, WorkerSupervisor)
+    assert app.get_status
+
+
+def test_status_includes_worker_snapshot() -> None:
+    app = YoyoPodApp()
+    app.app_state_runtime = type("State", (), {"get_state_name": lambda self: "idle"})()
+    app.call_interruption_policy = type(
+        "Policy",
+        (),
+        {"music_interrupted_by_call": False},
+    )()
+
+    status = app.get_status()
+
+    assert status["workers"] == {}

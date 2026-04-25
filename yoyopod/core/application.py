@@ -49,6 +49,7 @@ from yoyopod.core.event_subscriptions import RuntimeEventSubscriptions
 from yoyopod.core.loop import RuntimeLoopService
 from yoyopod.core.status import RuntimeMetricsStore
 from yoyopod.core.recovery import RecoveryState, RuntimeRecoveryService
+from yoyopod.core.workers import WorkerSupervisor
 from yoyopod.integrations.call import VoiceNoteEventHandler
 from yoyopod.integrations.network import NetworkEventHandler
 from yoyopod.integrations.display import ScreenPowerService
@@ -216,6 +217,7 @@ class YoyoPodApp:
 
         self.runtime_metrics = RuntimeMetricsStore()
         self.cross_screen_overlays = CrossScreenOverlayRuntime()
+        self.worker_supervisor = WorkerSupervisor(scheduler=self.scheduler, bus=self.bus)
 
         # Runtime services
         self.screen_power_service = ScreenPowerService(self)
@@ -306,6 +308,7 @@ class YoyoPodApp:
             return
 
         self.bus.publish(LifecycleEvent(phase="stopping"))
+        self.worker_supervisor.stop_all(grace_seconds=1.0)
         self._teardown_registered_integrations()
 
         if self._legacy_setup_complete or self._has_runtime_resources():

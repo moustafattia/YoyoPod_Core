@@ -285,6 +285,7 @@ class RuntimeStatusService:
             "process_memory_pss_kb": process_memory.pss_kb,
             "process_memory_private_dirty_kb": process_memory.private_dirty_kb,
             "process_memory_source": process_memory.source,
+            "workers": self.app.worker_supervisor.snapshot(),
             "loop_heartbeat_age_seconds": (
                 max(0.0, monotonic_now - self.app._last_loop_heartbeat_at)
                 if self.app._last_loop_heartbeat_at > 0.0

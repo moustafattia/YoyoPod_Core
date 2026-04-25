@@ -633,6 +633,10 @@ class RuntimeLoopService:
                 self._process_pending_main_thread_actions_for_iteration,
             )
             self._measure_blocking_span(
+                "worker_poll",
+                self.app.worker_supervisor.poll,
+            )
+            self._measure_blocking_span(
                 "manager_recovery",
                 lambda: self.app.recovery_service.attempt_manager_recovery(now=monotonic_now),
             )
@@ -849,6 +853,7 @@ class RuntimeLoopService:
                 or self._main_thread_drain_recorded
                 else None
             ),
+            "runtime_worker_count": len(self.app.worker_supervisor.snapshot()),
             "voip_schedule_delay_seconds": (
                 self._last_voip_schedule_delay_seconds
                 if self._last_voip_iterate_started_at > 0.0
