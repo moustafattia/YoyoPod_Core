@@ -60,12 +60,13 @@ class RuntimeMetricsStore:
 
         self.last_input_activity_at = time.monotonic() if captured_at is None else captured_at
         self.last_input_activity_action_name = getattr(action, "value", None)
-        self._pending_input_activities.append(
-            _InputActivityMarker(
-                action_name=self.last_input_activity_action_name,
-                captured_at=self.last_input_activity_at,
+        if self.last_input_activity_action_name is not None:
+            self._pending_input_activities.append(
+                _InputActivityMarker(
+                    action_name=self.last_input_activity_action_name,
+                    captured_at=self.last_input_activity_at,
+                )
             )
-        )
 
     def note_handled_input(
         self,
@@ -82,6 +83,8 @@ class RuntimeMetricsStore:
         if self._pending_input_activities:
             input_marker = self._pending_input_activities.popleft()
             input_activity_at = input_marker.captured_at
+        elif self.last_input_activity_action_name is None:
+            input_activity_at = 0.0
         else:
             input_activity_at = self.last_input_activity_at
         if input_activity_at <= 0.0:

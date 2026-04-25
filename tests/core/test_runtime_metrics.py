@@ -77,6 +77,31 @@ def test_runtime_metrics_correlates_backlogged_inputs_fifo() -> None:
     assert snapshot["responsiveness_input_to_action_last_ms"] == 25.0
 
 
+def test_runtime_metrics_ignores_raw_activity_for_input_to_action_queue() -> None:
+    store = RuntimeMetricsStore()
+
+    store.note_input_activity(None, captured_at=9.0)
+    store.note_input_activity(SimpleNamespace(value="select"), captured_at=10.0)
+    store.note_handled_input(action_name="select", handled_at=10.050)
+
+    snapshot = store.responsiveness_snapshot(now=11.0)
+
+    assert snapshot["responsiveness_input_to_action_count"] == 1
+    assert snapshot["responsiveness_input_to_action_last_ms"] == 50.0
+
+
+def test_runtime_metrics_does_not_sample_raw_activity_without_semantic_marker() -> None:
+    store = RuntimeMetricsStore()
+
+    store.note_input_activity(None, captured_at=9.0)
+    store.note_handled_input(action_name="select", handled_at=10.050)
+
+    snapshot = store.responsiveness_snapshot(now=11.0)
+
+    assert snapshot["responsiveness_input_to_action_count"] == 0
+    assert snapshot["responsiveness_input_to_action_last_ms"] is None
+
+
 def test_runtime_metrics_records_action_to_visible_refresh_latency() -> None:
     store = RuntimeMetricsStore()
 
