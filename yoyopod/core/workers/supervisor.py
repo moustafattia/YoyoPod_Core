@@ -313,6 +313,8 @@ class WorkerSupervisor:
         ]
         for request_id in expired_stale_ids:
             slot.stale_request_ids.pop(request_id, None)
+            if request_id not in slot.request_deadlines:
+                slot.request_attempts.pop(request_id, None)
 
     def _is_timeout_cancel_ack(self, domain: str, message: WorkerEnvelope) -> bool:
         return message.type == f"{domain}.cancelled"

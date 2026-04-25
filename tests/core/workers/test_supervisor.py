@@ -494,6 +494,30 @@ def test_supervisor_ignores_late_non_cancel_result_after_retry_reuses_request_id
     assert len(slot.request_deadlines) == 1
 
 
+def test_supervisor_prunes_request_attempt_when_stale_timeout_retention_expires() -> None:
+    bus = Bus()
+    scheduler = MainThreadScheduler()
+    supervisor = WorkerSupervisor(scheduler=scheduler, bus=bus)
+    supervisor.register("voice", WorkerProcessConfig(name="voice", argv=["unused"]))
+    slot = supervisor._workers["voice"]
+    slot.runtime = cast(
+        object,
+        SimpleNamespace(
+            running=True,
+            drain_messages=lambda limit=None: [],
+            send_command=lambda **_kwargs: True,
+        ),
+    )
+    slot.state = "running"
+    slot.request_attempts["req-stale"] = 7
+    slot.stale_request_ids["req-stale"] = 5.0
+
+    supervisor.poll(monotonic_now=5.0)
+
+    assert slot.stale_request_ids == {}
+    assert slot.request_attempts == {}
+
+
 def test_supervisor_caps_published_worker_messages_per_poll() -> None:
     bus = Bus()
     scheduler = MainThreadScheduler()
