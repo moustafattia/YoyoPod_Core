@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -17,9 +18,18 @@ import (
 )
 
 type blockingProvider struct {
+	entered     chan struct{}
+	release     chan struct{}
+	enteredOnce bool
+}
+
+type ignoringCancelProvider struct {
 	entered chan struct{}
 	release chan struct{}
-	enteredOnce bool
+}
+
+type recordingWriter struct {
+	lines chan string
 }
 
 func newBlockingProvider() *blockingProvider {
@@ -67,6 +77,46 @@ func (p *blockingProvider) markEntered() {
 		p.enteredOnce = true
 		close(p.entered)
 	}
+}
+
+func newIgnoringCancelProvider() *ignoringCancelProvider {
+	return &ignoringCancelProvider{
+		entered: make(chan struct{}),
+		release: make(chan struct{}),
+	}
+}
+
+func (p *ignoringCancelProvider) Health(ctx context.Context) (provider.HealthResult, error) {
+	return provider.HealthResult{Healthy: true, Provider: "ignoring-cancel"}, nil
+}
+
+func (p *ignoringCancelProvider) Transcribe(ctx context.Context, request provider.TranscribeRequest) (provider.TranscribeResult, error) {
+	close(p.entered)
+	<-p.release
+	return provider.TranscribeResult{
+		Text:       "late release",
+		Confidence: 1.0,
+		IsFinal:    true,
+	}, nil
+}
+
+func (p *ignoringCancelProvider) Speak(ctx context.Context, request provider.SpeakRequest) (provider.SpeakResult, error) {
+	close(p.entered)
+	<-p.release
+	return provider.SpeakResult{AudioPath: "/tmp/late.wav", Format: "wav", SampleRateHz: 16000}, nil
+}
+
+func newRecordingWriter() *recordingWriter {
+	return &recordingWriter{lines: make(chan string, 16)}
+}
+
+func (w *recordingWriter) Write(data []byte) (int, error) {
+	for _, line := range strings.Split(string(data), "\n") {
+		if strings.TrimSpace(line) != "" {
+			w.lines <- line
+		}
+	}
+	return len(data), nil
 }
 
 func TestMockProviderTranscribeUsesEnvironmentTranscript(t *testing.T) {
@@ -253,11 +303,89 @@ func TestWorkerCancelEmitsCancelledResult(t *testing.T) {
 
 	envelopes, _ := runWorkerText(t, blocking, input)
 	cancelled := findEnvelope(t, envelopes, "voice.cancelled")
-	if cancelled.RequestID != "req-active" {
-		t.Fatalf("cancelled RequestID = %q, want req-active", cancelled.RequestID)
+	if cancelled.RequestID != "req-cancel" {
+		t.Fatalf("cancelled RequestID = %q, want req-cancel", cancelled.RequestID)
 	}
 	if cancelled.Payload["cancelled"] != true {
 		t.Fatalf("cancelled payload = %v, want true", cancelled.Payload["cancelled"])
+	}
+}
+
+func TestWorkerCancelUsesCancelCommandRequestIDWhenTargetIsNotActive(t *testing.T) {
+	envelopes, _ := runWorker(
+		t,
+		provider.MockProvider{},
+		protocol.Envelope{
+			Kind:      "command",
+			Type:      "voice.cancel",
+			RequestID: "req-cancel",
+			Payload: map[string]any{
+				"request_id": "req-missing",
+			},
+		},
+	)
+
+	cancelled := findEnvelope(t, envelopes, "voice.cancelled")
+	if cancelled.RequestID != "req-cancel" {
+		t.Fatalf("cancelled RequestID = %q, want req-cancel", cancelled.RequestID)
+	}
+	if cancelled.Payload["cancelled"] != false {
+		t.Fatalf("cancelled payload = %v, want false", cancelled.Payload["cancelled"])
+	}
+}
+
+func TestWorkerCancelEmitsImmediateAckWhenProviderIgnoresContext(t *testing.T) {
+	voiceProvider := newIgnoringCancelProvider()
+	stdinReader, stdinWriter := io.Pipe()
+	stdout := newRecordingWriter()
+	var stderr bytes.Buffer
+	ctx, stop := context.WithCancel(context.Background())
+	defer stop()
+	done := make(chan error, 1)
+	go func() {
+		done <- worker.New(voiceProvider, stdinReader, stdout, &stderr).Run(ctx)
+	}()
+
+	first := mustEncode(t, protocol.Envelope{
+		Kind:      "command",
+		Type:      "voice.transcribe",
+		RequestID: "req-active",
+		DeadlineMS: 5000,
+		Payload: map[string]any{
+			"audio_path": "/tmp/input.wav",
+		},
+	})
+	if _, err := stdinWriter.Write([]byte(first)); err != nil {
+		t.Fatalf("writing transcribe command: %v", err)
+	}
+	waitFor(t, voiceProvider.entered)
+
+	cancel := mustEncode(t, protocol.Envelope{
+		Kind:      "command",
+		Type:      "voice.cancel",
+		RequestID: "req-cancel",
+		Payload: map[string]any{
+			"request_id": "req-active",
+		},
+	})
+	if _, err := stdinWriter.Write([]byte(cancel)); err != nil {
+		t.Fatalf("writing cancel command: %v", err)
+	}
+
+	cancelled := waitForEnvelope(t, stdout.lines, "voice.cancelled")
+	if cancelled.RequestID != "req-cancel" {
+		t.Fatalf("cancelled RequestID = %q, want req-cancel", cancelled.RequestID)
+	}
+	if cancelled.Payload["cancelled"] != true {
+		t.Fatalf("cancelled payload = %v, want true", cancelled.Payload["cancelled"])
+	}
+
+	close(voiceProvider.release)
+	if err := stdinWriter.Close(); err != nil {
+		t.Fatalf("closing stdin writer: %v", err)
+	}
+	if err := <-done; err != nil {
+		t.Fatalf("Run returned error: %v", err)
 	}
 }
 
@@ -357,4 +485,28 @@ func waitFor(t *testing.T, ch <-chan struct{}) {
 	}
 }
 
+func waitForEnvelope(
+	t *testing.T,
+	lines <-chan string,
+	envelopeType string,
+) protocol.Envelope {
+	t.Helper()
+	timeout := time.After(time.Second)
+	for {
+		select {
+		case line := <-lines:
+			envelope, err := protocol.Decode([]byte(line))
+			if err != nil {
+				t.Fatalf("Decode(%q) returned error: %v", line, err)
+			}
+			if envelope.Type == envelopeType {
+				return envelope
+			}
+		case <-timeout:
+			t.Fatalf("timed out waiting for envelope type %q", envelopeType)
+		}
+	}
+}
+
 var _ provider.Provider = (*blockingProvider)(nil)
+var _ provider.Provider = (*ignoringCancelProvider)(nil)

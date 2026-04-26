@@ -27,8 +27,9 @@ type Worker struct {
 }
 
 type activeRequest struct {
-	requestID string
-	cancel    context.CancelFunc
+	requestID   string
+	cancel      context.CancelFunc
+	cancelAcked bool
 }
 
 func New(
@@ -191,17 +192,33 @@ func (w *Worker) handleCancel(envelope protocol.Envelope) {
 	active := w.active
 	if active != nil && active.requestID == targetID {
 		active.cancel()
+		active.cancelAcked = true
 		w.mu.Unlock()
+		w.emitCancelAck(envelope, targetID, true, "cancel_requested")
 		return
 	}
 	w.mu.Unlock()
+	w.emitCancelAck(envelope, targetID, false, "not_active")
+}
+
+func (w *Worker) emitCancelAck(
+	envelope protocol.Envelope,
+	targetID string,
+	cancelled bool,
+	reason string,
+) {
+	replyID := envelope.RequestID
+	if replyID == "" {
+		replyID = targetID
+	}
 	w.emit(protocol.Envelope{
 		Kind:      "result",
 		Type:      "voice.cancelled",
-		RequestID: targetID,
+		RequestID: replyID,
 		Payload: map[string]any{
-			"cancelled": false,
-			"reason":    "not_active",
+			"cancelled":         cancelled,
+			"reason":            reason,
+			"target_request_id": targetID,
 		},
 	})
 }
@@ -261,6 +278,9 @@ func (w *Worker) emitError(
 }
 
 func (w *Worker) emitCancelled(requestID string, reason string) {
+	if w.cancelAlreadyAcked(requestID) {
+		return
+	}
 	w.emit(protocol.Envelope{
 		Kind:      "result",
 		Type:      "voice.cancelled",
@@ -270,6 +290,12 @@ func (w *Worker) emitCancelled(requestID string, reason string) {
 			"reason":    reason,
 		},
 	})
+}
+
+func (w *Worker) cancelAlreadyAcked(requestID string) bool {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.active != nil && w.active.requestID == requestID && w.active.cancelAcked
 }
 
 func (w *Worker) emit(envelope protocol.Envelope) error {
