@@ -167,7 +167,52 @@ func TestOpenAIProviderReturnsMissingAPIKeyErrors(t *testing.T) {
 	}
 }
 
-func TestNewOpenAIProviderFromEnvUsesDefaultsAndOverrides(t *testing.T) {
+func TestNewOpenAIProviderFromEnvUsesDefaultsWhenEnvUnset(t *testing.T) {
+	unsetEnv(t, "OPENAI_BASE_URL")
+	unsetEnv(t, "OPENAI_API_KEY")
+	unsetEnv(t, "YOYOPOD_CLOUD_STT_MODEL")
+	unsetEnv(t, "YOYOPOD_CLOUD_TTS_MODEL")
+	unsetEnv(t, "YOYOPOD_CLOUD_TTS_VOICE")
+
+	provider := NewOpenAIProviderFromEnv()
+
+	if provider.BaseURL != "https://api.openai.com" {
+		t.Fatalf("BaseURL = %q, want https://api.openai.com", provider.BaseURL)
+	}
+	if provider.STTModel != "gpt-4o-mini-transcribe" {
+		t.Fatalf("STTModel = %q, want gpt-4o-mini-transcribe", provider.STTModel)
+	}
+	if provider.TTSModel != "gpt-4o-mini-tts" {
+		t.Fatalf("TTSModel = %q, want gpt-4o-mini-tts", provider.TTSModel)
+	}
+	if provider.TTSVoice != "alloy" {
+		t.Fatalf("TTSVoice = %q, want alloy", provider.TTSVoice)
+	}
+}
+
+func TestNewOpenAIProviderFromEnvUsesDefaultsWhenEnvEmpty(t *testing.T) {
+	t.Setenv("OPENAI_BASE_URL", "")
+	t.Setenv("YOYOPOD_CLOUD_STT_MODEL", "")
+	t.Setenv("YOYOPOD_CLOUD_TTS_MODEL", "")
+	t.Setenv("YOYOPOD_CLOUD_TTS_VOICE", "")
+
+	provider := NewOpenAIProviderFromEnv()
+
+	if provider.BaseURL != "https://api.openai.com" {
+		t.Fatalf("BaseURL = %q, want https://api.openai.com", provider.BaseURL)
+	}
+	if provider.STTModel != "gpt-4o-mini-transcribe" {
+		t.Fatalf("STTModel = %q, want gpt-4o-mini-transcribe", provider.STTModel)
+	}
+	if provider.TTSModel != "gpt-4o-mini-tts" {
+		t.Fatalf("TTSModel = %q, want gpt-4o-mini-tts", provider.TTSModel)
+	}
+	if provider.TTSVoice != "alloy" {
+		t.Fatalf("TTSVoice = %q, want alloy", provider.TTSVoice)
+	}
+}
+
+func TestNewOpenAIProviderFromEnvUsesOverrides(t *testing.T) {
 	t.Setenv("OPENAI_BASE_URL", "https://openai.test")
 	t.Setenv("OPENAI_API_KEY", "env-key")
 	t.Setenv("YOYOPOD_CLOUD_STT_MODEL", "env-stt")
@@ -204,4 +249,19 @@ func writeTestWAV(t *testing.T, content []byte) string {
 
 func isMissingAPIKeyError(err error) bool {
 	return err != nil && errors.Is(err, ErrMissingAPIKey)
+}
+
+func unsetEnv(t *testing.T, key string) {
+	t.Helper()
+	previous, existed := os.LookupEnv(key)
+	if err := os.Unsetenv(key); err != nil {
+		t.Fatalf("Unsetenv(%q) returned error: %v", key, err)
+	}
+	t.Cleanup(func() {
+		if existed {
+			_ = os.Setenv(key, previous)
+			return
+		}
+		_ = os.Unsetenv(key)
+	})
 }

@@ -25,3 +25,13 @@ func TestSelectedProviderDefaultsToMock(t *testing.T) {
 		t.Fatalf("selected provider = %T, want provider.MockProvider", selected)
 	}
 }
+
+func TestSelectedProviderRequiresExactOpenAIValue(t *testing.T) {
+	t.Setenv("YOYOPOD_VOICE_WORKER_PROVIDER", "OPENAI")
+
+	selected := selectedProvider()
+
+	if _, ok := selected.(provider.MockProvider); !ok {
+		t.Fatalf("selected provider = %T, want provider.MockProvider", selected)
+	}
+}

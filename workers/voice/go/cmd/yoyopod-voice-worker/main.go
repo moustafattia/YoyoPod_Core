@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"strings"
 
 	"github.com/moustafattia/yoyopod-core/workers/voice/go/internal/provider"
 	"github.com/moustafattia/yoyopod-core/workers/voice/go/internal/worker"
@@ -18,7 +17,7 @@ func main() {
 }
 
 func selectedProvider() provider.Provider {
-	if strings.EqualFold(os.Getenv("YOYOPOD_VOICE_WORKER_PROVIDER"), "openai") {
+	if os.Getenv("YOYOPOD_VOICE_WORKER_PROVIDER") == "openai" {
 		return provider.NewOpenAIProviderFromEnv()
 	}
 	return provider.MockProvider{}
