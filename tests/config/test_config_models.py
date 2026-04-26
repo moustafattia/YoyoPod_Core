@@ -143,6 +143,36 @@ def test_voice_config_defaults_do_not_require_a_file(tmp_path, monkeypatch) -> N
     assert settings.audio.capture_device_id == ""
 
 
+def test_voice_config_includes_cloud_worker_defaults(tmp_path, monkeypatch) -> None:
+    """Cloud voice settings should have safe defaults without requiring credentials."""
+
+    for key in [
+        "YOYOPOD_VOICE_MODE",
+        "YOYOPOD_VOICE_WORKER_ENABLED",
+        "YOYOPOD_VOICE_WORKER_PROVIDER",
+        "YOYOPOD_VOICE_WORKER_ARGV",
+        "YOYOPOD_CLOUD_STT_MODEL",
+        "YOYOPOD_CLOUD_TTS_MODEL",
+        "YOYOPOD_CLOUD_TTS_VOICE",
+    ]:
+        monkeypatch.delenv(key, raising=False)
+
+    config_file = tmp_path / "voice" / "assistant.yaml"
+    settings = load_config_model_from_yaml(VoiceConfig, config_file)
+
+    assert settings.assistant.mode == "local"
+    assert settings.worker.enabled is False
+    assert settings.worker.domain == "voice"
+    assert settings.worker.provider == "mock"
+    assert settings.worker.argv == ["workers/voice/go/build/yoyopod-voice-worker"]
+    assert settings.worker.request_timeout_seconds == 12.0
+    assert settings.worker.max_audio_seconds == 30.0
+    assert settings.worker.stt_model == "gpt-4o-mini-transcribe"
+    assert settings.worker.tts_model == "gpt-4o-mini-tts"
+    assert settings.worker.tts_voice == "alloy"
+    assert settings.worker.local_feedback_enabled is True
+
+
 def test_config_manager_app_config_merges_yaml_and_env(tmp_path, monkeypatch) -> None:
     """Environment variables should override YAML while preserving other values."""
 
