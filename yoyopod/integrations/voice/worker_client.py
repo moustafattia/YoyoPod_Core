@@ -109,6 +109,21 @@ class VoiceWorkerClient:
 
         self._set_available(False, reason or "unavailable")
 
+    def fail_pending_requests(self, reason: str) -> None:
+        """Fail all in-flight requests because the worker lifecycle changed."""
+
+        normalized_reason = reason or "unavailable"
+        self._set_available(False, normalized_reason)
+        with self._lock:
+            pending_requests = list(self._pending.values())
+        for pending in pending_requests:
+            self._complete_once(
+                pending,
+                error=VoiceWorkerUnavailable(
+                    f"voice worker unavailable: {normalized_reason}"
+                ),
+            )
+
     def health(self) -> VoiceWorkerHealthResult:
         """Probe worker/provider health and update availability."""
 

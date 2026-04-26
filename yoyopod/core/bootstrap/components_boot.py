@@ -97,13 +97,15 @@ class ComponentsBoot:
         )
         self.app.voice_worker_client = client
         self.app.bus.subscribe(WorkerMessageReceivedEvent, client.handle_worker_message)
+        lifecycle_handler = _VoiceWorkerLifecycleHandler(
+            client,
+            domain=domain,
+            logger=self.logger,
+            scheduler=self.app.scheduler,
+        )
         self.app.bus.subscribe(
             WorkerDomainStateChangedEvent,
-            lambda event: _mark_voice_worker_unavailable_on_degraded_state(
-                client,
-                domain=domain,
-                event=event,
-            ),
+            lifecycle_handler.handle,
         )
         self.app.worker_supervisor.register(
             domain,
@@ -119,11 +121,7 @@ class ComponentsBoot:
             client.mark_unavailable("start_failed")
             self.app.voice_worker_client = None
             return False
-        _start_voice_worker_health_probe(
-            client,
-            logger=self.logger,
-            scheduler=self.app.scheduler,
-        )
+        lifecycle_handler.schedule_health_probe()
         return True
 
     def init_core_components(self) -> bool:
@@ -271,18 +269,42 @@ def _voice_worker_env(worker_cfg: Any) -> dict[str, str]:
     return env
 
 
-def _mark_voice_worker_unavailable_on_degraded_state(
-    client: VoiceWorkerClient,
-    *,
-    domain: str,
-    event: WorkerDomainStateChangedEvent,
-) -> None:
-    """Reflect worker lifecycle failures in client availability."""
+class _VoiceWorkerLifecycleHandler:
+    """Keep voice-worker client availability in sync with process lifecycle."""
 
-    if event.domain != domain:
-        return
-    if event.state in {"degraded", "disabled", "stopped"}:
-        client.mark_unavailable(event.reason or event.state)
+    def __init__(
+        self,
+        client: VoiceWorkerClient,
+        *,
+        domain: str,
+        logger: Any,
+        scheduler: Any,
+    ) -> None:
+        self._client = client
+        self._domain = domain
+        self._logger = logger
+        self._scheduler = scheduler
+        self._health_probe_requested = False
+
+    def handle(self, event: WorkerDomainStateChangedEvent) -> None:
+        if event.domain != self._domain:
+            return
+        if event.state == "running":
+            self.schedule_health_probe()
+            return
+        if event.state in {"degraded", "disabled", "stopped"}:
+            self._health_probe_requested = False
+            self._client.fail_pending_requests(event.reason or event.state)
+
+    def schedule_health_probe(self) -> None:
+        if self._health_probe_requested:
+            return
+        self._health_probe_requested = True
+        _start_voice_worker_health_probe(
+            self._client,
+            logger=self._logger,
+            scheduler=self._scheduler,
+        )
 
 
 def _start_voice_worker_health_probe(

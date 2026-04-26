@@ -14,6 +14,7 @@ from yoyopod.core.bootstrap import RuntimeBootService
 from yoyopod.core.bootstrap.screens_boot import ScreensBoot
 from yoyopod.core.bootstrap.managers_boot import ManagersBoot
 from yoyopod.core.bus import Bus
+from yoyopod.core.events import WorkerDomainStateChangedEvent
 from yoyopod.core.scheduler import MainThreadScheduler
 from yoyopod.core.workers import WorkerProcessConfig
 from yoyopod.integrations.voice import VoiceSettings
@@ -494,6 +495,59 @@ def test_setup_voice_worker_clears_client_when_start_fails(monkeypatch) -> None:
     assert _components_boot_for(app).setup_voice_worker() is False
     assert app.voice_worker_client is None
     assert health_probes == []
+
+
+def test_voice_worker_running_state_schedules_health_probe_after_restart(monkeypatch) -> None:
+    """A restarted worker should re-probe health so cloud voice can recover."""
+
+    scheduler = MainThreadScheduler()
+    bus = Bus(main_thread_id=scheduler.main_thread_id)
+    health_probes: list[object] = []
+    monkeypatch.setattr(
+        "yoyopod.core.bootstrap.components_boot._start_voice_worker_health_probe",
+        lambda client, logger, scheduler: health_probes.append((client, scheduler)),
+    )
+
+    class _FakeWorkerSupervisor:
+        def register(self, domain: str, config: WorkerProcessConfig) -> None:
+            return None
+
+        def start(self, domain: str) -> bool:
+            return True
+
+    app = SimpleNamespace(
+        config_manager=SimpleNamespace(
+            get_voice_settings=lambda: SimpleNamespace(
+                assistant=SimpleNamespace(mode="cloud"),
+                worker=SimpleNamespace(
+                    enabled=True,
+                    domain="voice",
+                    provider="mock",
+                    argv=["python", "fake_worker.py"],
+                    request_timeout_seconds=3.5,
+                ),
+            )
+        ),
+        scheduler=scheduler,
+        bus=bus,
+        worker_supervisor=_FakeWorkerSupervisor(),
+        voice_worker_client=None,
+    )
+
+    assert _components_boot_for(app).setup_voice_worker() is True
+    client = app.voice_worker_client
+    assert client is not None
+    health_probes.clear()
+
+    client.mark_unavailable("process_exited")
+    bus.publish(
+        WorkerDomainStateChangedEvent(domain="voice", state="degraded", reason="process_exited")
+    )
+    bus.drain()
+    bus.publish(WorkerDomainStateChangedEvent(domain="voice", state="running", reason="started"))
+    bus.drain()
+
+    assert health_probes == [(client, scheduler)]
 
 
 def test_voice_worker_health_probe_starts_after_scheduler_drains(monkeypatch) -> None:

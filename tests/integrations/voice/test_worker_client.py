@@ -274,6 +274,43 @@ def test_worker_error_raises_unavailable_with_error_code() -> None:
     assert client.pending_count == 0
 
 
+def test_fail_pending_requests_unblocks_waiter_on_worker_exit() -> None:
+    scheduler = _Scheduler()
+    supervisor = _Supervisor()
+    client = VoiceWorkerClient(
+        scheduler=scheduler,
+        worker_supervisor=supervisor,
+        request_timeout_seconds=1.0,
+    )
+    errors: list[BaseException] = []
+
+    thread = threading.Thread(
+        target=lambda: _capture_error(
+            errors,
+            lambda: client.transcribe(
+                audio_path=Path("/tmp/input.wav"),
+                sample_rate_hz=16000,
+                language="en",
+                max_audio_seconds=5.0,
+            ),
+        )
+    )
+    thread.start()
+
+    _wait_until(lambda: len(scheduler.callbacks) == 1)
+    scheduler.drain()
+    client.fail_pending_requests("process_exited")
+    thread.join(timeout=0.2)
+
+    assert not thread.is_alive()
+    assert len(errors) == 1
+    assert isinstance(errors[0], VoiceWorkerUnavailable)
+    assert "process_exited" in str(errors[0])
+    assert client.pending_count == 0
+    assert client.is_available is False
+    assert client.availability_reason == "process_exited"
+
+
 def test_cancel_event_sends_worker_cancel_and_unblocks_waiter() -> None:
     scheduler = _Scheduler()
     supervisor = _Supervisor()

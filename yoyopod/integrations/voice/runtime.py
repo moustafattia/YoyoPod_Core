@@ -488,6 +488,12 @@ class VoiceRuntimeCoordinator:
         callback()
 
     def _play_attention_tone(self) -> None:
+        try:
+            if not self._settings_resolver.current().local_feedback_enabled:
+                return
+        except Exception:
+            logger.debug("Voice local feedback setting unavailable")
+
         beep_path: Path | None = None
         try:
             with NamedTemporaryFile(prefix="yoyopod-beep-", suffix=".wav", delete=False) as handle:

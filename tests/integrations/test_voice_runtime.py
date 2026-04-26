@@ -467,6 +467,28 @@ def test_cloud_voice_unavailable_uses_service_settings_snapshot() -> None:
     assert "Cloud speech is unavailable" in coordinator.state.body
 
 
+def test_local_feedback_disabled_skips_attention_tone() -> None:
+    play_calls: list[Path] = []
+
+    class _RecordingOutputPlayer:
+        def play_wav(self, path: Path, **kwargs) -> None:
+            play_calls.append(path)
+
+    coordinator = VoiceRuntimeCoordinator(
+        context=None,
+        settings_resolver=VoiceSettingsResolver(
+            context=None,
+            settings_provider=lambda: VoiceSettings(local_feedback_enabled=False),
+        ),
+        command_executor=VoiceCommandExecutor(context=None),
+        output_player=_RecordingOutputPlayer(),
+    )
+
+    coordinator._play_attention_tone()
+
+    assert play_calls == []
+
+
 def test_runtime_cancel_reaches_in_flight_cloud_transcription(tmp_path: Path) -> None:
     audio_path = tmp_path / "input.wav"
     audio_path.write_bytes(b"RIFF")
