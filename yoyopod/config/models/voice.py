@@ -6,6 +6,19 @@ from dataclasses import dataclass
 
 from yoyopod.config.models.core import config_value
 
+DEFAULT_CLOUD_ASK_INSTRUCTIONS = (
+    "You are YoYoPod's friendly Ask helper for a child using a small handheld audio device. "
+    "Answer in simple language a child can understand. Keep answers to 1-3 short sentences "
+    "unless the child asks for a story. Be warm, calm, and encouraging. Do not use scary "
+    "detail. Do not ask for private information. For medical, legal, safety, emergency, or "
+    "adult topics, give a brief safe answer and say to ask a grown-up. If you are unsure, "
+    "say so simply. Do not claim to browse the internet or know live facts."
+)
+DEFAULT_CLOUD_TTS_INSTRUCTIONS = (
+    "Speak warmly and calmly for a child. Use simple words, friendly pacing, and brief answers. "
+    "Avoid scary emphasis."
+)
+
 
 @dataclass(slots=True)
 class VoiceAssistantConfig:
@@ -65,10 +78,27 @@ class VoiceWorkerConfig:
         env="YOYOPOD_CLOUD_STT_MODEL",
     )
     tts_model: str = config_value(default="gpt-4o-mini-tts", env="YOYOPOD_CLOUD_TTS_MODEL")
-    tts_voice: str = config_value(default="alloy", env="YOYOPOD_CLOUD_TTS_VOICE")
+    tts_voice: str = config_value(default="coral", env="YOYOPOD_CLOUD_TTS_VOICE")
     tts_instructions: str = config_value(
-        default="Speak clearly and briefly for a small handheld device.",
+        default=DEFAULT_CLOUD_TTS_INSTRUCTIONS,
         env="YOYOPOD_CLOUD_TTS_INSTRUCTIONS",
+    )
+    ask_model: str = config_value(default="gpt-4.1-mini", env="YOYOPOD_CLOUD_ASK_MODEL")
+    ask_timeout_seconds: float = config_value(
+        default=12.0,
+        env="YOYOPOD_CLOUD_ASK_TIMEOUT_SECONDS",
+    )
+    ask_max_history_turns: int = config_value(
+        default=4,
+        env="YOYOPOD_CLOUD_ASK_MAX_HISTORY_TURNS",
+    )
+    ask_max_response_chars: int = config_value(
+        default=480,
+        env="YOYOPOD_CLOUD_ASK_MAX_RESPONSE_CHARS",
+    )
+    ask_instructions: str = config_value(
+        default=DEFAULT_CLOUD_ASK_INSTRUCTIONS,
+        env="YOYOPOD_CLOUD_ASK_INSTRUCTIONS",
     )
     local_feedback_enabled: bool = config_value(
         default=True,

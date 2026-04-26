@@ -96,6 +96,7 @@ class ScreensBoot:
                         tts_backend=tts_backend,
                     )
 
+            voice_settings_defaults = VoiceSettings()
             self.app.voice_runtime = VoiceRuntimeCoordinator(
                 context=context,
                 settings_resolver=VoiceSettingsResolver(
@@ -227,18 +228,67 @@ class ScreensBoot:
                             else "gpt-4o-mini-tts"
                         ),
                         cloud_worker_tts_voice=(
-                            getattr(worker_cfg, "tts_voice", "alloy")
+                            getattr(
+                                worker_cfg,
+                                "tts_voice",
+                                voice_settings_defaults.cloud_worker_tts_voice,
+                            )
                             if worker_cfg is not None
-                            else "alloy"
+                            else voice_settings_defaults.cloud_worker_tts_voice
                         ),
                         cloud_worker_tts_instructions=(
                             getattr(
                                 worker_cfg,
                                 "tts_instructions",
-                                "Speak clearly and briefly for a small handheld device.",
+                                voice_settings_defaults.cloud_worker_tts_instructions,
                             )
                             if worker_cfg is not None
-                            else "Speak clearly and briefly for a small handheld device."
+                            else voice_settings_defaults.cloud_worker_tts_instructions
+                        ),
+                        cloud_worker_ask_model=(
+                            getattr(
+                                worker_cfg,
+                                "ask_model",
+                                voice_settings_defaults.cloud_worker_ask_model,
+                            )
+                            if worker_cfg is not None
+                            else voice_settings_defaults.cloud_worker_ask_model
+                        ),
+                        cloud_worker_ask_timeout_seconds=(
+                            getattr(
+                                worker_cfg,
+                                "ask_timeout_seconds",
+                                voice_settings_defaults.cloud_worker_ask_timeout_seconds,
+                            )
+                            if worker_cfg is not None
+                            else voice_settings_defaults.cloud_worker_ask_timeout_seconds
+                        ),
+                        cloud_worker_ask_max_history_turns=(
+                            getattr(
+                                worker_cfg,
+                                "ask_max_history_turns",
+                                voice_settings_defaults.cloud_worker_ask_max_history_turns,
+                            )
+                            if worker_cfg is not None
+                            else voice_settings_defaults.cloud_worker_ask_max_history_turns
+                        ),
+                        cloud_worker_ask_max_response_chars=(
+                            getattr(
+                                worker_cfg,
+                                "ask_max_response_chars",
+                                voice_settings_defaults.cloud_worker_ask_max_response_chars,
+                            )
+                            if worker_cfg is not None
+                            else voice_settings_defaults.cloud_worker_ask_max_response_chars
+                        ),
+                        cloud_worker_ask_instructions=(
+                            getattr(
+                                worker_cfg,
+                                "ask_instructions",
+                                voice_settings_defaults.cloud_worker_ask_instructions,
+                            )
+                            if worker_cfg is not None
+                            else voice_settings_defaults.cloud_worker_ask_instructions
                         ),
                         local_feedback_enabled=(
                             getattr(worker_cfg, "local_feedback_enabled", True)

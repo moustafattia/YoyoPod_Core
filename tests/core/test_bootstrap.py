@@ -23,6 +23,19 @@ from yoyopod.backends.voice import (
     CloudWorkerTextToSpeechBackend,
 )
 
+ASK_INSTRUCTIONS = (
+    "You are YoYoPod's friendly Ask helper for a child using a small handheld audio device. "
+    "Answer in simple language a child can understand. Keep answers to 1-3 short sentences "
+    "unless the child asks for a story. Be warm, calm, and encouraging. Do not use scary "
+    "detail. Do not ask for private information. For medical, legal, safety, emergency, or "
+    "adult topics, give a brief safe answer and say to ask a grown-up. If you are unsure, "
+    "say so simply. Do not claim to browse the internet or know live facts."
+)
+TTS_INSTRUCTIONS = (
+    "Speak warmly and calmly for a child. Use simple words, friendly pacing, and brief answers. "
+    "Avoid scary emphasis."
+)
+
 
 class _FakeDisplay:
     WIDTH = 240
@@ -347,8 +360,13 @@ def _cloud_voice_config(*, stt_backend: str, tts_backend: str) -> SimpleNamespac
             max_audio_seconds=30.0,
             stt_model="gpt-4o-mini-transcribe",
             tts_model="gpt-4o-mini-tts",
-            tts_voice="alloy",
-            tts_instructions="Speak clearly and briefly for a small handheld device.",
+            tts_voice="coral",
+            tts_instructions=TTS_INSTRUCTIONS,
+            ask_model="gpt-4.1-mini",
+            ask_timeout_seconds=12.0,
+            ask_max_history_turns=4,
+            ask_max_response_chars=480,
+            ask_instructions=ASK_INSTRUCTIONS,
             local_feedback_enabled=True,
         ),
     )
@@ -416,6 +434,11 @@ def test_setup_voice_worker_registers_starts_and_subscribes_when_cloud_enabled(
                     tts_model="tts-from-yaml",
                     tts_voice="voice-from-yaml",
                     tts_instructions="instructions from yaml",
+                    ask_model="ask-from-yaml",
+                    ask_timeout_seconds=4.25,
+                    ask_max_history_turns=9,
+                    ask_max_response_chars=640,
+                    ask_instructions="ask instructions from yaml",
                 ),
             )
         ),
@@ -442,6 +465,11 @@ def test_setup_voice_worker_registers_starts_and_subscribes_when_cloud_enabled(
     assert worker_config.env["YOYOPOD_CLOUD_TTS_MODEL"] == "tts-from-yaml"
     assert worker_config.env["YOYOPOD_CLOUD_TTS_VOICE"] == "voice-from-yaml"
     assert worker_config.env["YOYOPOD_CLOUD_TTS_INSTRUCTIONS"] == "instructions from yaml"
+    assert worker_config.env["YOYOPOD_CLOUD_ASK_MODEL"] == "ask-from-yaml"
+    assert worker_config.env["YOYOPOD_CLOUD_ASK_TIMEOUT_SECONDS"] == "4.25"
+    assert worker_config.env["YOYOPOD_CLOUD_ASK_MAX_HISTORY_TURNS"] == "9"
+    assert worker_config.env["YOYOPOD_CLOUD_ASK_MAX_RESPONSE_CHARS"] == "640"
+    assert worker_config.env["YOYOPOD_CLOUD_ASK_INSTRUCTIONS"] == "ask instructions from yaml"
     assert started == ["voice"]
     assert bus.subscription_counts()["WorkerMessageReceivedEvent"] == 1
     assert bus.subscription_counts()["WorkerDomainStateChangedEvent"] == 1
@@ -623,6 +651,34 @@ def test_cloud_voice_factory_preserves_local_stt_when_only_tts_uses_worker(monke
     assert manager.settings.tts_backend == "cloud-worker"
     assert not isinstance(manager.stt_backend, CloudWorkerSpeechToTextBackend)
     assert isinstance(manager.tts_backend, CloudWorkerTextToSpeechBackend)
+
+
+def test_cloud_voice_settings_provider_includes_worker_ask_settings(monkeypatch) -> None:
+    captured: dict[str, object] = {}
+    _install_dummy_screen_modules(monkeypatch)
+
+    class _CapturingVoiceRuntime:
+        def __init__(self, **kwargs) -> None:
+            captured.update(kwargs)
+
+    monkeypatch.setattr(
+        "yoyopod.core.bootstrap.screens_boot.VoiceRuntimeCoordinator",
+        _CapturingVoiceRuntime,
+    )
+    app = _build_cloud_screen_app(stt_backend="cloud-worker", tts_backend="cloud-worker")
+
+    assert ScreensBoot(app, logger=_quiet_logger()).setup_screens() is True
+
+    resolver = captured["settings_resolver"]
+    settings = resolver.current()
+
+    assert settings.cloud_worker_tts_voice == "coral"
+    assert settings.cloud_worker_tts_instructions == TTS_INSTRUCTIONS
+    assert settings.cloud_worker_ask_model == "gpt-4.1-mini"
+    assert settings.cloud_worker_ask_timeout_seconds == 12.0
+    assert settings.cloud_worker_ask_max_history_turns == 4
+    assert settings.cloud_worker_ask_max_response_chars == 480
+    assert settings.cloud_worker_ask_instructions == ASK_INSTRUCTIONS
 
 
 def test_cloud_voice_factory_preserves_local_tts_when_only_stt_uses_worker(monkeypatch) -> None:
@@ -866,9 +922,17 @@ def test_setup_voip_callbacks_bind_direct_call_handlers() -> None:
     assert voip_manager.call_state_callback.__name__ == "handle_call_state_change"
     assert voip_manager.registration_callback.__name__ == "handle_registration_change"
     assert voip_manager.availability_callback.__name__ == "handle_availability_change"
-    assert voip_manager.message_summary_callback is voice_note_events.handle_voice_note_summary_changed
-    assert voip_manager.message_received_callback is voice_note_events.handle_voice_note_activity_changed
-    assert voip_manager.message_delivery_callback is voice_note_events.handle_voice_note_activity_changed
+    assert (
+        voip_manager.message_summary_callback is voice_note_events.handle_voice_note_summary_changed
+    )
+    assert (
+        voip_manager.message_received_callback
+        is voice_note_events.handle_voice_note_activity_changed
+    )
+    assert (
+        voip_manager.message_delivery_callback
+        is voice_note_events.handle_voice_note_activity_changed
+    )
     assert voip_manager.message_failure_callback is voice_note_events.handle_voice_note_failure
     assert synced == {"talk": 1, "active": 1}
 

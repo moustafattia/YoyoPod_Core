@@ -23,6 +23,19 @@ from yoyopod.integrations.voice import (
     VoiceTranscript,
 )
 
+ASK_INSTRUCTIONS = (
+    "You are YoYoPod's friendly Ask helper for a child using a small handheld audio device. "
+    "Answer in simple language a child can understand. Keep answers to 1-3 short sentences "
+    "unless the child asks for a story. Be warm, calm, and encouraging. Do not use scary "
+    "detail. Do not ask for private information. For medical, legal, safety, emergency, or "
+    "adult topics, give a brief safe answer and say to ask a grown-up. If you are unsure, "
+    "say so simply. Do not claim to browse the internet or know live facts."
+)
+TTS_INSTRUCTIONS = (
+    "Speak warmly and calmly for a child. Use simple words, friendly pacing, and brief answers. "
+    "Avoid scary emphasis."
+)
+
 
 class _FakeContact:
     def __init__(self, name: str, sip_address: str, notes: str = "") -> None:
@@ -73,8 +86,13 @@ class _FakeConfigManager:
                 max_audio_seconds=30.0,
                 stt_model="gpt-4o-mini-transcribe",
                 tts_model="gpt-4o-mini-tts",
-                tts_voice="alloy",
-                tts_instructions="Speak clearly and briefly for a small handheld device.",
+                tts_voice="coral",
+                tts_instructions=TTS_INSTRUCTIONS,
+                ask_model="gpt-4.1-mini",
+                ask_timeout_seconds=12.0,
+                ask_max_history_turns=4,
+                ask_max_response_chars=480,
+                ask_instructions=ASK_INSTRUCTIONS,
                 local_feedback_enabled=True,
             ),
         )
@@ -84,9 +102,9 @@ class _FakeConfigManager:
 
     def get_callable_contacts(self, *, gsm_enabled: bool = False) -> list[_FakeContact]:
         return [
-            contact for contact in self._contacts if contact.preferred_call_target(
-                gsm_enabled=gsm_enabled
-            )[0]
+            contact
+            for contact in self._contacts
+            if contact.preferred_call_target(gsm_enabled=gsm_enabled)[0]
         ]
 
     def get_capture_device_id(self) -> str | None:
@@ -672,7 +690,9 @@ def test_voice_runtime_coordinator_ptt_no_audio_resolves_to_no_speech() -> None:
     assert context.voice.interaction.capture_in_flight is False
 
 
-def test_voice_runtime_coordinator_releases_cached_service_when_settings_change(monkeypatch) -> None:
+def test_voice_runtime_coordinator_releases_cached_service_when_settings_change(
+    monkeypatch,
+) -> None:
     """Replacing the cached service should drop backend-owned resources explicitly."""
 
     current_settings = VoiceSettings(vosk_model_keep_loaded=True)
@@ -723,6 +743,11 @@ def test_voice_settings_resolver_includes_cloud_worker_config() -> None:
     voice_cfg.worker.tts_model = "test-tts"
     voice_cfg.worker.tts_voice = "verse"
     voice_cfg.worker.tts_instructions = "Keep it tiny."
+    voice_cfg.worker.ask_model = "test-ask"
+    voice_cfg.worker.ask_timeout_seconds = 6.5
+    voice_cfg.worker.ask_max_history_turns = 7
+    voice_cfg.worker.ask_max_response_chars = 222
+    voice_cfg.worker.ask_instructions = "Answer safely."
     voice_cfg.worker.local_feedback_enabled = False
 
     settings = VoiceSettingsResolver(
@@ -742,6 +767,11 @@ def test_voice_settings_resolver_includes_cloud_worker_config() -> None:
     assert settings.cloud_worker_tts_model == "test-tts"
     assert settings.cloud_worker_tts_voice == "verse"
     assert settings.cloud_worker_tts_instructions == "Keep it tiny."
+    assert settings.cloud_worker_ask_model == "test-ask"
+    assert settings.cloud_worker_ask_timeout_seconds == 6.5
+    assert settings.cloud_worker_ask_max_history_turns == 7
+    assert settings.cloud_worker_ask_max_response_chars == 222
+    assert settings.cloud_worker_ask_instructions == "Answer safely."
     assert settings.local_feedback_enabled is False
 
 

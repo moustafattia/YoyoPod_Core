@@ -17,6 +17,19 @@ from yoyopod.config import (
     load_config_model_from_yaml,
 )
 
+ASK_INSTRUCTIONS = (
+    "You are YoYoPod's friendly Ask helper for a child using a small handheld audio device. "
+    "Answer in simple language a child can understand. Keep answers to 1-3 short sentences "
+    "unless the child asks for a story. Be warm, calm, and encouraging. Do not use scary "
+    "detail. Do not ask for private information. For medical, legal, safety, emergency, or "
+    "adult topics, give a brief safe answer and say to ask a grown-up. If you are unsure, "
+    "say so simply. Do not claim to browse the internet or know live facts."
+)
+TTS_INSTRUCTIONS = (
+    "Speak warmly and calmly for a child. Use simple words, friendly pacing, and brief answers. "
+    "Avoid scary emphasis."
+)
+
 
 def test_app_shell_defaults_do_not_require_a_file(tmp_path, monkeypatch) -> None:
     """Missing app-shell config should resolve to typed defaults in memory."""
@@ -159,6 +172,11 @@ def test_voice_config_includes_cloud_worker_defaults(tmp_path, monkeypatch) -> N
         "YOYOPOD_CLOUD_TTS_MODEL",
         "YOYOPOD_CLOUD_TTS_VOICE",
         "YOYOPOD_CLOUD_TTS_INSTRUCTIONS",
+        "YOYOPOD_CLOUD_ASK_MODEL",
+        "YOYOPOD_CLOUD_ASK_TIMEOUT_SECONDS",
+        "YOYOPOD_CLOUD_ASK_MAX_HISTORY_TURNS",
+        "YOYOPOD_CLOUD_ASK_MAX_RESPONSE_CHARS",
+        "YOYOPOD_CLOUD_ASK_INSTRUCTIONS",
         "YOYOPOD_VOICE_LOCAL_FEEDBACK_ENABLED",
     ]:
         monkeypatch.delenv(key, raising=False)
@@ -175,8 +193,33 @@ def test_voice_config_includes_cloud_worker_defaults(tmp_path, monkeypatch) -> N
     assert settings.worker.max_audio_seconds == 30.0
     assert settings.worker.stt_model == "gpt-4o-mini-transcribe"
     assert settings.worker.tts_model == "gpt-4o-mini-tts"
-    assert settings.worker.tts_voice == "alloy"
+    assert settings.worker.tts_voice == "coral"
+    assert settings.worker.tts_instructions == TTS_INSTRUCTIONS
+    assert settings.worker.ask_model == "gpt-4.1-mini"
+    assert settings.worker.ask_timeout_seconds == 12.0
+    assert settings.worker.ask_max_history_turns == 4
+    assert settings.worker.ask_max_response_chars == 480
+    assert settings.worker.ask_instructions == ASK_INSTRUCTIONS
     assert settings.worker.local_feedback_enabled is True
+
+
+def test_voice_config_cloud_worker_ask_env_overrides(tmp_path, monkeypatch) -> None:
+    """Cloud Ask settings should be overridable through typed env fields."""
+
+    monkeypatch.setenv("YOYOPOD_CLOUD_ASK_MODEL", "ask-env-model")
+    monkeypatch.setenv("YOYOPOD_CLOUD_ASK_TIMEOUT_SECONDS", "7.5")
+    monkeypatch.setenv("YOYOPOD_CLOUD_ASK_MAX_HISTORY_TURNS", "6")
+    monkeypatch.setenv("YOYOPOD_CLOUD_ASK_MAX_RESPONSE_CHARS", "321")
+    monkeypatch.setenv("YOYOPOD_CLOUD_ASK_INSTRUCTIONS", "Answer from env.")
+
+    config_file = tmp_path / "voice" / "assistant.yaml"
+    settings = load_config_model_from_yaml(VoiceConfig, config_file)
+
+    assert settings.worker.ask_model == "ask-env-model"
+    assert settings.worker.ask_timeout_seconds == 7.5
+    assert settings.worker.ask_max_history_turns == 6
+    assert settings.worker.ask_max_response_chars == 321
+    assert settings.worker.ask_instructions == "Answer from env."
 
 
 def test_voice_worker_argv_env_override_parses_json_list(tmp_path, monkeypatch) -> None:
@@ -234,6 +277,11 @@ def test_authored_voice_config_includes_cloud_worker_defaults(monkeypatch) -> No
         "YOYOPOD_CLOUD_TTS_MODEL",
         "YOYOPOD_CLOUD_TTS_VOICE",
         "YOYOPOD_CLOUD_TTS_INSTRUCTIONS",
+        "YOYOPOD_CLOUD_ASK_MODEL",
+        "YOYOPOD_CLOUD_ASK_TIMEOUT_SECONDS",
+        "YOYOPOD_CLOUD_ASK_MAX_HISTORY_TURNS",
+        "YOYOPOD_CLOUD_ASK_MAX_RESPONSE_CHARS",
+        "YOYOPOD_CLOUD_ASK_INSTRUCTIONS",
         "YOYOPOD_VOICE_LOCAL_FEEDBACK_ENABLED",
     ]:
         monkeypatch.delenv(key, raising=False)
@@ -249,10 +297,13 @@ def test_authored_voice_config_includes_cloud_worker_defaults(monkeypatch) -> No
     assert settings.worker.max_audio_seconds == 30.0
     assert settings.worker.stt_model == "gpt-4o-mini-transcribe"
     assert settings.worker.tts_model == "gpt-4o-mini-tts"
-    assert settings.worker.tts_voice == "alloy"
-    assert (
-        settings.worker.tts_instructions == "Speak clearly and briefly for a small handheld device."
-    )
+    assert settings.worker.tts_voice == "coral"
+    assert settings.worker.tts_instructions == TTS_INSTRUCTIONS
+    assert settings.worker.ask_model == "gpt-4.1-mini"
+    assert settings.worker.ask_timeout_seconds == 12.0
+    assert settings.worker.ask_max_history_turns == 4
+    assert settings.worker.ask_max_response_chars == 480
+    assert settings.worker.ask_instructions == ASK_INSTRUCTIONS
     assert settings.worker.local_feedback_enabled is True
 
 

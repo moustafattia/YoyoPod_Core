@@ -261,6 +261,19 @@ def _voice_worker_env(worker_cfg: Any) -> dict[str, str]:
         "YOYOPOD_CLOUD_TTS_MODEL": getattr(worker_cfg, "tts_model", ""),
         "YOYOPOD_CLOUD_TTS_VOICE": getattr(worker_cfg, "tts_voice", ""),
         "YOYOPOD_CLOUD_TTS_INSTRUCTIONS": getattr(worker_cfg, "tts_instructions", ""),
+        "YOYOPOD_CLOUD_ASK_MODEL": getattr(worker_cfg, "ask_model", ""),
+        "YOYOPOD_CLOUD_ASK_TIMEOUT_SECONDS": getattr(worker_cfg, "ask_timeout_seconds", ""),
+        "YOYOPOD_CLOUD_ASK_MAX_HISTORY_TURNS": getattr(
+            worker_cfg,
+            "ask_max_history_turns",
+            "",
+        ),
+        "YOYOPOD_CLOUD_ASK_MAX_RESPONSE_CHARS": getattr(
+            worker_cfg,
+            "ask_max_response_chars",
+            "",
+        ),
+        "YOYOPOD_CLOUD_ASK_INSTRUCTIONS": getattr(worker_cfg, "ask_instructions", ""),
     }
     for key, value in config_env.items():
         normalized = str(value).strip()

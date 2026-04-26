@@ -6,6 +6,19 @@ from dataclasses import dataclass
 from pathlib import Path
 from threading import Event
 
+DEFAULT_CLOUD_ASK_INSTRUCTIONS = (
+    "You are YoYoPod's friendly Ask helper for a child using a small handheld audio device. "
+    "Answer in simple language a child can understand. Keep answers to 1-3 short sentences "
+    "unless the child asks for a story. Be warm, calm, and encouraging. Do not use scary "
+    "detail. Do not ask for private information. For medical, legal, safety, emergency, or "
+    "adult topics, give a brief safe answer and say to ask a grown-up. If you are unsure, "
+    "say so simply. Do not claim to browse the internet or know live facts."
+)
+DEFAULT_CLOUD_TTS_INSTRUCTIONS = (
+    "Speak warmly and calmly for a child. Use simple words, friendly pacing, and brief answers. "
+    "Avoid scary emphasis."
+)
+
 
 @dataclass(slots=True, frozen=True)
 class VoiceSettings:
@@ -36,8 +49,13 @@ class VoiceSettings:
     cloud_worker_max_audio_seconds: float = 30.0
     cloud_worker_stt_model: str = "gpt-4o-mini-transcribe"
     cloud_worker_tts_model: str = "gpt-4o-mini-tts"
-    cloud_worker_tts_voice: str = "alloy"
-    cloud_worker_tts_instructions: str = "Speak clearly and briefly for a small handheld device."
+    cloud_worker_tts_voice: str = "coral"
+    cloud_worker_tts_instructions: str = DEFAULT_CLOUD_TTS_INSTRUCTIONS
+    cloud_worker_ask_model: str = "gpt-4.1-mini"
+    cloud_worker_ask_timeout_seconds: float = 12.0
+    cloud_worker_ask_max_history_turns: int = 4
+    cloud_worker_ask_max_response_chars: int = 480
+    cloud_worker_ask_instructions: str = DEFAULT_CLOUD_ASK_INSTRUCTIONS
     local_feedback_enabled: bool = True
 
 

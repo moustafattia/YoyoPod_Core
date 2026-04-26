@@ -105,7 +105,9 @@ class VoiceSettingsResolver:
                         )
 
             if capture_device_id is None:
-                capture_device_id = getattr(self._config_manager, "get_capture_device_id", lambda: None)()
+                capture_device_id = getattr(
+                    self._config_manager, "get_capture_device_id", lambda: None
+                )()
             if speaker_device_id is None:
                 speaker_device_id = getattr(
                     self._config_manager,
@@ -211,6 +213,31 @@ class VoiceSettingsResolver:
                 worker_cfg,
                 "tts_instructions",
                 defaults.cloud_worker_tts_instructions,
+            ),
+            cloud_worker_ask_model=getattr(
+                worker_cfg,
+                "ask_model",
+                defaults.cloud_worker_ask_model,
+            ),
+            cloud_worker_ask_timeout_seconds=getattr(
+                worker_cfg,
+                "ask_timeout_seconds",
+                defaults.cloud_worker_ask_timeout_seconds,
+            ),
+            cloud_worker_ask_max_history_turns=getattr(
+                worker_cfg,
+                "ask_max_history_turns",
+                defaults.cloud_worker_ask_max_history_turns,
+            ),
+            cloud_worker_ask_max_response_chars=getattr(
+                worker_cfg,
+                "ask_max_response_chars",
+                defaults.cloud_worker_ask_max_response_chars,
+            ),
+            cloud_worker_ask_instructions=getattr(
+                worker_cfg,
+                "ask_instructions",
+                defaults.cloud_worker_ask_instructions,
             ),
             local_feedback_enabled=getattr(
                 worker_cfg,
