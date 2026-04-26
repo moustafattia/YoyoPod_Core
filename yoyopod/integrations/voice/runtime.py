@@ -258,6 +258,13 @@ class VoiceRuntimeCoordinator:
             )
             return VoiceCommandOutcome("Mic Unavailable", body, should_speak=False)
         if not voice_service.stt_available():
+            settings = self.settings()
+            if settings.mode == "cloud":
+                return VoiceCommandOutcome(
+                    "Speech Offline",
+                    "Cloud speech is unavailable. Local controls still work.",
+                    should_speak=False,
+                )
             return VoiceCommandOutcome(
                 "Speech Offline",
                 "The offline speech model is not installed yet.",

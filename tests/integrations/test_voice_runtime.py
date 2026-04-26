@@ -299,6 +299,61 @@ def test_voice_runtime_coordinator_runs_capture_and_emits_route() -> None:
     assert context.voice.interaction.headline == "Playing"
 
 
+def test_listening_cycle_uses_cloud_worker_transcript(tmp_path: Path) -> None:
+    audio_path = tmp_path / "input.wav"
+    audio_path.write_bytes(b"RIFF")
+    outcomes: list[VoiceCommandOutcome] = []
+
+    class _WorkerLikeVoiceService:
+        def capture_available(self) -> bool:
+            return True
+
+        def stt_available(self) -> bool:
+            return True
+
+        def tts_available(self) -> bool:
+            return False
+
+        def capture_audio(self, _request) -> VoiceCaptureResult:
+            return VoiceCaptureResult(audio_path=audio_path, recorded=True)
+
+        def transcribe(self, path: Path) -> VoiceTranscript:
+            assert path == audio_path
+            return VoiceTranscript(text="play music", confidence=1.0, is_final=True)
+
+        def speak(self, _text: str) -> bool:
+            return False
+
+    coordinator = VoiceRuntimeCoordinator(
+        context=None,
+        settings_resolver=VoiceSettingsResolver(
+            context=None,
+            settings_provider=lambda: VoiceSettings(mode="cloud"),
+        ),
+        command_executor=VoiceCommandExecutor(
+            context=None,
+            play_music_action=lambda: True,
+        ),
+        voice_service_factory=lambda _settings: _WorkerLikeVoiceService(),
+        output_player=_FakeOutputPlayer(),
+    )
+    coordinator.bind(
+        state_listener=None,
+        outcome_listener=outcomes.append,
+        dispatcher=lambda callback: callback(),
+    )
+
+    coordinator.begin_listening(async_capture=False)
+
+    assert outcomes
+    assert outcomes[-1] == VoiceCommandOutcome(
+        "Playing",
+        "Starting local music.",
+        route_name="shuffle_started",
+    )
+    assert not audio_path.exists()
+
+
 def test_voice_runtime_coordinator_handles_disabled_voice_without_capture() -> None:
     context = AppContext()
     context.configure_voice(commands_enabled=False)
@@ -316,6 +371,41 @@ def test_voice_runtime_coordinator_handles_disabled_voice_without_capture() -> N
     assert service.capture_calls == 0
     assert context.voice.interaction.phase == "reply"
     assert context.voice.interaction.headline == "Voice Off"
+
+
+def test_cloud_voice_unavailable_keeps_local_feedback_message() -> None:
+    class _VoiceService:
+        def capture_available(self) -> bool:
+            return True
+
+        def stt_available(self) -> bool:
+            return False
+
+        def tts_available(self) -> bool:
+            return False
+
+    coordinator = VoiceRuntimeCoordinator(
+        context=None,
+        settings_resolver=VoiceSettingsResolver(
+            context=None,
+            settings_provider=lambda: VoiceSettings(mode="cloud"),
+        ),
+        command_executor=VoiceCommandExecutor(context=None),
+        voice_service_factory=lambda _settings: _VoiceService(),
+        output_player=_FakeOutputPlayer(),
+    )
+    outcomes: list[VoiceCommandOutcome] = []
+    coordinator.bind(
+        state_listener=None,
+        outcome_listener=outcomes.append,
+        dispatcher=lambda callback: callback(),
+    )
+
+    coordinator.begin_listening(async_capture=False)
+
+    assert outcomes
+    assert coordinator.state.headline == "Speech Offline"
+    assert "Local controls still work" in coordinator.state.body
 
 
 def test_voice_runtime_coordinator_ptt_no_audio_resolves_to_no_speech() -> None:
