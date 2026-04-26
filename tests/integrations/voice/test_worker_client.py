@@ -38,6 +38,18 @@ class _Supervisor:
         return self.send_result
 
 
+class _BlockingSupervisor(_Supervisor):
+    def __init__(self) -> None:
+        super().__init__()
+        self.entered = threading.Event()
+        self.release = threading.Event()
+
+    def send_request(self, domain: str, **kwargs: object) -> bool:
+        self.entered.set()
+        assert self.release.wait(timeout=1.0)
+        return super().send_request(domain, **kwargs)
+
+
 def test_transcribe_schedules_request_on_main_and_resolves_result() -> None:
     scheduler = _Scheduler()
     supervisor = _Supervisor()
@@ -167,6 +179,87 @@ def test_transcribe_raises_timeout_when_no_result_arrives() -> None:
 
     assert scheduler.callbacks
     assert supervisor.requests == []
+    assert client.pending_count == 0
+
+
+def test_late_scheduler_callback_does_not_send_after_timeout_cleanup() -> None:
+    scheduler = _Scheduler()
+    supervisor = _Supervisor()
+    client = VoiceWorkerClient(
+        scheduler=scheduler,
+        worker_supervisor=supervisor,
+        request_timeout_seconds=0.001,
+    )
+    errors: list[BaseException] = []
+
+    thread = threading.Thread(
+        target=lambda: _capture_error(
+            errors,
+            lambda: client.transcribe(
+                audio_path=Path("/tmp/input.wav"),
+                sample_rate_hz=16000,
+                language="en",
+                max_audio_seconds=5.0,
+            ),
+        )
+    )
+    thread.start()
+
+    _wait_until(lambda: len(scheduler.callbacks) == 1)
+    thread.join(timeout=1.0)
+
+    assert not thread.is_alive()
+    assert len(errors) == 1
+    assert isinstance(errors[0], VoiceWorkerTimeout)
+    assert client.pending_count == 0
+    assert supervisor.requests == []
+
+    scheduler.drain()
+
+    assert supervisor.requests == []
+
+
+def test_timeout_cleanup_cannot_interleave_with_in_flight_send() -> None:
+    scheduler = _Scheduler()
+    supervisor = _BlockingSupervisor()
+    client = VoiceWorkerClient(
+        scheduler=scheduler,
+        worker_supervisor=supervisor,
+        request_timeout_seconds=0.001,
+    )
+    completed = threading.Event()
+    errors: list[BaseException] = []
+
+    request_thread = threading.Thread(
+        target=lambda: _capture_error_and_signal(
+            errors,
+            completed,
+            lambda: client.transcribe(
+                audio_path=Path("/tmp/input.wav"),
+                sample_rate_hz=16000,
+                language="en",
+                max_audio_seconds=5.0,
+            ),
+        )
+    )
+    request_thread.start()
+
+    _wait_until(lambda: len(scheduler.callbacks) == 1)
+    drain_thread = threading.Thread(target=scheduler.drain)
+    drain_thread.start()
+    assert supervisor.entered.wait(timeout=1.0)
+
+    try:
+        assert not completed.wait(timeout=0.1)
+    finally:
+        supervisor.release.set()
+        drain_thread.join(timeout=1.0)
+        request_thread.join(timeout=1.0)
+
+    assert not drain_thread.is_alive()
+    assert not request_thread.is_alive()
+    assert len(errors) == 1
+    assert isinstance(errors[0], VoiceWorkerTimeout)
     assert client.pending_count == 0
 
 
@@ -379,6 +472,19 @@ def _capture_error(errors: list[BaseException], callback: Callable[[], object]) 
         callback()
     except BaseException as exc:
         errors.append(exc)
+
+
+def _capture_error_and_signal(
+    errors: list[BaseException],
+    completed: threading.Event,
+    callback: Callable[[], object],
+) -> None:
+    try:
+        callback()
+    except BaseException as exc:
+        errors.append(exc)
+    finally:
+        completed.set()
 
 
 def _wait_until(predicate: Callable[[], bool], timeout_seconds: float = 1.0) -> None:

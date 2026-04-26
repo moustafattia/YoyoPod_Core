@@ -172,21 +172,21 @@ class VoiceWorkerClient:
             with self._lock:
                 if self._pending.get(request_id) is not pending:
                     return
-            try:
-                sent = self._worker_supervisor.send_request(
-                    self._domain,
-                    type=request_type,
-                    payload=payload,
-                    request_id=request_id,
-                    timeout_seconds=self._request_timeout_seconds,
-                )
-            except Exception as exc:
-                pending.error = VoiceWorkerUnavailable(str(exc) or "voice worker unavailable")
-                pending.event.set()
-                return
-            if not sent:
-                pending.error = VoiceWorkerUnavailable("voice worker unavailable")
-                pending.event.set()
+                try:
+                    sent = self._worker_supervisor.send_request(
+                        self._domain,
+                        type=request_type,
+                        payload=payload,
+                        request_id=request_id,
+                        timeout_seconds=self._request_timeout_seconds,
+                    )
+                except Exception as exc:
+                    pending.error = VoiceWorkerUnavailable(str(exc) or "voice worker unavailable")
+                    pending.event.set()
+                    return
+                if not sent:
+                    pending.error = VoiceWorkerUnavailable("voice worker unavailable")
+                    pending.event.set()
 
         self._scheduler.run_on_main(send_on_main)
         return pending
