@@ -213,34 +213,19 @@ class ScreenManager:
     def refresh_current_screen(self) -> None:
         """Re-render the current screen."""
         self._navigation_refresh_pending = False
-        if self.current_screen:
-            started_at = time.monotonic()
-            refresh_for_visible_tick = getattr(
-                self.current_screen, "refresh_for_visible_tick", None
-            )
-            if callable(refresh_for_visible_tick):
-                refresh_for_visible_tick()
-            self.current_screen.render()
-            if self.on_visible_refresh is not None and self._is_screen_visible():
-                self.on_visible_refresh(refreshed_at=time.monotonic())
-            self._warn_if_slow(
-                "refresh_current_screen",
-                started_at=started_at,
-                threshold_seconds=self._SLOW_RENDER_WARNING_SECONDS,
-                detail=f"screen={self.current_screen.route_name or self.current_screen.name}",
-            )
-        if self.current_screen is None:
+        screen = self.current_screen
+        if screen is None:
             return
 
         started_at = time.monotonic()
         refresh_for_visible_tick = getattr(
-            self.current_screen,
+            screen,
             "refresh_for_visible_tick",
             None,
         )
         if callable(refresh_for_visible_tick):
             refresh_for_visible_tick()
-        self._render_screen(self.current_screen, started_at=started_at)
+        self._render_screen(screen, started_at=started_at)
 
     def refresh_current_screen_for_visible_tick(self) -> VisibleTickRefreshResult:
         """Refresh the current screen when it opts into periodic visible ticks.
@@ -510,6 +495,8 @@ class ScreenManager:
         render_started_at = time.monotonic() if started_at is None else started_at
         screen.render()
         screen.clear_dirty()
+        if self.on_visible_refresh is not None and self._is_screen_visible():
+            self.on_visible_refresh(refreshed_at=time.monotonic())
         self._warn_if_slow(
             "refresh_current_screen",
             started_at=render_started_at,
