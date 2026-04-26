@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import subprocess
+import wave
 from pathlib import Path
 
 from typer.testing import CliRunner
@@ -12,6 +14,15 @@ def _collect_option_names(click_cmd: object) -> set[str]:
     for param in getattr(click_cmd, "params", []):
         names.update(getattr(param, "opts", []))
     return names
+
+
+def _write_wav(path: Path, *, sample_rate_hz: int = 16000) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with wave.open(str(path), "wb") as handle:
+        handle.setnchannels(1)
+        handle.setsampwidth(2)
+        handle.setframerate(sample_rate_hz)
+        handle.writeframes(b"\x00\x00" * sample_rate_hz)
 
 
 def test_load_env_file_parses_service_style_assignments(tmp_path: Path, monkeypatch) -> None:
@@ -92,3 +103,149 @@ def test_cloud_voice_command_help_exposes_repeatable_options() -> None:
     assert "--cycles" in names
     assert "--phrase" in names
     assert "--env-file" in names
+    assert "--acoustic-loopback" in names
+
+
+def test_cloud_voice_acoustic_loopback_records_and_transcribes_physical_route(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    tts_path = tmp_path / "tts-source.wav"
+    _write_wav(tts_path)
+    popen_calls: list[list[str]] = []
+
+    class FakeClient:
+        def request(
+            self,
+            request_type: str,
+            payload: dict[str, object],
+            *,
+            timeout_seconds: float,
+        ) -> dict[str, object]:
+            del timeout_seconds
+            if request_type == "voice.speak":
+                return {
+                    "audio_path": str(tts_path),
+                    "format": "wav",
+                    "sample_rate_hz": 16000,
+                    "duration_ms": 1000,
+                }
+            if request_type == "voice.transcribe":
+                assert str(payload["audio_path"]).endswith("acoustic-recording.wav")
+                return {"text": "play music", "confidence": 1.0, "is_final": True}
+            raise AssertionError(f"unexpected request: {request_type}")
+
+    class FakePopen:
+        returncode = 0
+
+        def __init__(self, args: list[str], **_kwargs: object) -> None:
+            self.args = args
+            popen_calls.append(args)
+
+        def communicate(self, *, timeout: float | None = None) -> tuple[str, str]:
+            del timeout
+            recorded_path = Path(self.args[-1])
+            _write_wav(recorded_path)
+            return "", ""
+
+        def kill(self) -> None:
+            self.returncode = -9
+
+    monkeypatch.setattr(pi_validate.shutil, "which", lambda binary: f"/usr/bin/{binary}")
+    monkeypatch.setattr(pi_validate.subprocess, "Popen", FakePopen)
+    monkeypatch.setattr(
+        "yoyopod.backends.voice.output.AlsaOutputPlayer.play_wav",
+        lambda self, audio_path, **_kwargs: audio_path.exists(),
+    )
+
+    results = pi_validate._cloud_voice_acoustic_loopback_check(
+        FakeClient(),
+        settings=pi_validate.VoiceSettings(
+            mode="cloud",
+            stt_backend="cloud-worker",
+            tts_backend="cloud-worker",
+            cloud_worker_enabled=True,
+            capture_device_id="capture",
+            speaker_device_id="playback",
+        ),
+        phrase="play music",
+        artifacts_dir=str(tmp_path / "artifacts"),
+    )
+
+    assert [result.status for result in results] == ["pass", "pass", "pass"]
+    assert popen_calls[0][:3] == ["/usr/bin/arecord", "-D", "capture"]
+    assert "intent=play_music" in results[-1].details
+    artifact_run_dir = next((tmp_path / "artifacts").iterdir())
+    assert (artifact_run_dir / "tts-playback.wav").exists()
+    assert (artifact_run_dir / "acoustic-recording.wav").exists()
+
+
+def test_cloud_voice_acoustic_loopback_reports_empty_transcript_artifact(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    tts_path = tmp_path / "tts-source.wav"
+    _write_wav(tts_path)
+
+    class FakeClient:
+        def request(
+            self,
+            request_type: str,
+            payload: dict[str, object],
+            *,
+            timeout_seconds: float,
+        ) -> dict[str, object]:
+            del payload, timeout_seconds
+            if request_type == "voice.speak":
+                return {
+                    "audio_path": str(tts_path),
+                    "format": "wav",
+                    "sample_rate_hz": 16000,
+                    "duration_ms": 1000,
+                }
+            if request_type == "voice.transcribe":
+                return {"text": "", "confidence": 0.0, "is_final": True}
+            raise AssertionError(f"unexpected request: {request_type}")
+
+    class FakePopen:
+        returncode = 0
+
+        def __init__(self, args: list[str], **_kwargs: object) -> None:
+            self.args = args
+
+        def communicate(self, *, timeout: float | None = None) -> tuple[str, str]:
+            del timeout
+            _write_wav(Path(self.args[-1]))
+            return "", ""
+
+        def kill(self) -> None:
+            self.returncode = -9
+
+    monkeypatch.setattr(pi_validate.shutil, "which", lambda binary: f"/usr/bin/{binary}")
+    monkeypatch.setattr(pi_validate.subprocess, "Popen", FakePopen)
+    monkeypatch.setattr(
+        "yoyopod.backends.voice.output.AlsaOutputPlayer.play_wav",
+        lambda self, audio_path, **_kwargs: audio_path.exists(),
+    )
+
+    results = pi_validate._cloud_voice_acoustic_loopback_check(
+        FakeClient(),
+        settings=pi_validate.VoiceSettings(
+            mode="cloud",
+            stt_backend="cloud-worker",
+            tts_backend="cloud-worker",
+            cloud_worker_enabled=True,
+            capture_device_id="capture",
+            speaker_device_id="playback",
+        ),
+        phrase="play music",
+        artifacts_dir=str(tmp_path / "artifacts"),
+    )
+
+    assert [result.name for result in results] == [
+        "cloud_voice_acoustic_recording",
+        "cloud_voice_acoustic_stt",
+    ]
+    assert [result.status for result in results] == ["pass", "fail"]
+    assert "transcript=''" in results[-1].details
+    assert "acoustic-recording.wav" in results[-1].details

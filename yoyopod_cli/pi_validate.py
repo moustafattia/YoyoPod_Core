@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import math
 import os
 import platform
 import queue
@@ -615,6 +616,206 @@ def _wav_duration_seconds(audio_path: Path) -> float | None:
             return handle.getnframes() / float(frame_rate)
     except (EOFError, OSError, wave.Error):
         return None
+
+
+def _cloud_voice_artifact_run_dir(artifacts_dir: str) -> Path:
+    """Return a timestamped artifact directory for one cloud voice validation run."""
+
+    root = Path(artifacts_dir)
+    if not root.is_absolute():
+        root = REPO_ROOT / root
+    run_label = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    return root / f"cloud-voice-{run_label}"
+
+
+def _cloud_voice_acoustic_loopback_check(
+    client: _VoiceWorkerProtocolClient,
+    *,
+    settings: VoiceSettings,
+    phrase: str,
+    artifacts_dir: str,
+) -> list[_CheckResult]:
+    """Validate the physical speaker->microphone route with cloud STT."""
+
+    from yoyopod.backends.voice.output import AlsaOutputPlayer
+
+    arecord = shutil.which("arecord")
+    if arecord is None:
+        return [
+            _CheckResult(
+                name="cloud_voice_acoustic_loopback",
+                status="fail",
+                details="arecord not found",
+            )
+        ]
+
+    timeout_seconds = max(5.0, settings.cloud_worker_request_timeout_seconds)
+    run_dir = _cloud_voice_artifact_run_dir(artifacts_dir)
+    run_dir.mkdir(parents=True, exist_ok=True)
+    tts_artifact = run_dir / "tts-playback.wav"
+    recorded_artifact = run_dir / "acoustic-recording.wav"
+    generated_audio: Path | None = None
+
+    try:
+        started = time.monotonic()
+        speak_result = parse_speak_result(
+            client.request(
+                "voice.speak",
+                build_speak_payload(
+                    text=phrase,
+                    voice=settings.cloud_worker_tts_voice,
+                    model=settings.cloud_worker_tts_model,
+                    instructions=settings.cloud_worker_tts_instructions,
+                    sample_rate_hz=settings.sample_rate_hz,
+                ),
+                timeout_seconds=timeout_seconds,
+            )
+        )
+        generated_audio = speak_result.audio_path
+        shutil.copy2(generated_audio, tts_artifact)
+        duration = _wav_duration_seconds(generated_audio) or 1.0
+        capture_seconds = max(2, min(8, math.ceil(duration + 1.5)))
+        device = settings.capture_device_id or "default"
+        command = [
+            arecord,
+            "-D",
+            device,
+            "-t",
+            "wav",
+            "-f",
+            "S16_LE",
+            "-r",
+            str(settings.sample_rate_hz),
+            "-c",
+            "1",
+            "-d",
+            str(capture_seconds),
+            "-q",
+            str(recorded_artifact),
+        ]
+        proc = subprocess.Popen(
+            command,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+        time.sleep(0.25)
+        played = AlsaOutputPlayer().play_wav(
+            generated_audio,
+            device_id=settings.speaker_device_id,
+            timeout_seconds=max(4.0, duration + 2.0),
+        )
+        try:
+            _stdout, stderr = proc.communicate(timeout=capture_seconds + 2.0)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            _stdout, stderr = proc.communicate(timeout=2.0)
+            return [
+                _CheckResult(
+                    name="cloud_voice_acoustic_recording",
+                    status="fail",
+                    details=f"device={device} timed out artifact_dir={run_dir}",
+                )
+            ]
+
+        if proc.returncode != 0:
+            return [
+                _CheckResult(
+                    name="cloud_voice_acoustic_recording",
+                    status="fail",
+                    details=(
+                        f"device={device} rc={proc.returncode} "
+                        f"stderr={stderr.strip()} artifact_dir={run_dir}"
+                    ),
+                )
+            ]
+        byte_count = recorded_artifact.stat().st_size if recorded_artifact.exists() else 0
+        if not played or byte_count <= 44:
+            return [
+                _CheckResult(
+                    name="cloud_voice_acoustic_recording",
+                    status="fail",
+                    details=(
+                        f"device={device} played={played} bytes={byte_count} "
+                        f"artifact_dir={run_dir}"
+                    ),
+                )
+            ]
+
+        results = [
+            _CheckResult(
+                name="cloud_voice_acoustic_recording",
+                status="pass",
+                details=(
+                    f"device={device} speaker={settings.speaker_device_id or 'default'} "
+                    f"played={played} bytes={byte_count} capture_seconds={capture_seconds} "
+                    f"elapsed_ms={(time.monotonic() - started) * 1000:.1f} "
+                    f"artifact_dir={run_dir}"
+                ),
+            )
+        ]
+
+        started = time.monotonic()
+        transcript_payload = client.request(
+            "voice.transcribe",
+            build_transcribe_payload(
+                audio_path=recorded_artifact,
+                sample_rate_hz=settings.sample_rate_hz,
+                language="en",
+                max_audio_seconds=settings.cloud_worker_max_audio_seconds,
+                model=settings.cloud_worker_stt_model,
+            ),
+            timeout_seconds=timeout_seconds,
+        )
+        transcript_text = str(transcript_payload.get("text", "")).strip()
+        if not transcript_text:
+            results.append(
+                _CheckResult(
+                    name="cloud_voice_acoustic_stt",
+                    status="fail",
+                    details=(
+                        "transcript='' confidence="
+                        f"{float(transcript_payload.get('confidence', 0.0))} "
+                        f"elapsed_ms={(time.monotonic() - started) * 1000:.1f} "
+                        f"artifact={recorded_artifact}"
+                    ),
+                )
+            )
+            return results
+
+        transcript_result = parse_transcribe_result(transcript_payload)
+        results.append(
+            _CheckResult(
+                name="cloud_voice_acoustic_stt",
+                status="pass",
+                details=(
+                    f"transcript={transcript_result.text!r} "
+                    f"confidence={transcript_result.confidence} "
+                    f"elapsed_ms={(time.monotonic() - started) * 1000:.1f} "
+                    f"artifact={recorded_artifact}"
+                ),
+            )
+        )
+        match_result = _cloud_voice_command_match_check(transcript_result.text)
+        results.append(
+            _CheckResult(
+                name="cloud_voice_acoustic_command_match",
+                status=match_result.status,
+                details=match_result.details,
+            )
+        )
+        return results
+    except Exception as exc:
+        return [
+            _CheckResult(
+                name="cloud_voice_acoustic_loopback",
+                status="fail",
+                details=f"{exc} artifact_dir={run_dir}",
+            )
+        ]
+    finally:
+        if generated_audio is not None:
+            generated_audio.unlink(missing_ok=True)
 
 
 def _cloud_voice_cycle_check(
@@ -2122,6 +2323,23 @@ def cloud_voice(
             help="Validate the configured ALSA capture route with arecord.",
         ),
     ] = True,
+    acoustic_loopback: Annotated[
+        bool,
+        typer.Option(
+            "--acoustic-loopback/--no-acoustic-loopback",
+            help=(
+                "Play generated speech through the speaker, record it through the mic, "
+                "then transcribe that recorded WAV."
+            ),
+        ),
+    ] = True,
+    artifacts_dir: Annotated[
+        str,
+        typer.Option(
+            "--artifacts-dir",
+            help="Directory for cloud voice validation audio artifacts.",
+        ),
+    ] = "logs/validation/cloud-voice",
     verbose: Annotated[bool, typer.Option("--verbose", help="Enable DEBUG logging.")] = False,
 ) -> None:
     """Validate cloud STT/TTS and local voice command routing on the target."""
@@ -2188,6 +2406,15 @@ def cloud_voice(
                         results.extend(cycle_results)
                         if any(result.status == "fail" for result in cycle_results):
                             break
+                    if acoustic_loopback and not any(result.status == "fail" for result in results):
+                        results.extend(
+                            _cloud_voice_acoustic_loopback_check(
+                                client,
+                                settings=settings,
+                                phrase=phrase,
+                                artifacts_dir=artifacts_dir,
+                            )
+                        )
         except Exception as exc:
             results.append(
                 _CheckResult(
