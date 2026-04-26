@@ -258,6 +258,118 @@ func TestOpenAIProviderSpeakNormalizesStreamingWAVSizes(t *testing.T) {
 	}
 }
 
+func TestOpenAIProviderAskPostsResponsesRequestAndParsesOutputText(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/responses" {
+			t.Fatalf("path = %q, want /v1/responses", r.URL.Path)
+		}
+		if r.Header.Get("Authorization") != "Bearer test-key" {
+			t.Fatalf("Authorization = %q, want bearer token", r.Header.Get("Authorization"))
+		}
+		if r.Header.Get("Content-Type") != "application/json" {
+			t.Fatalf("Content-Type = %q, want application/json", r.Header.Get("Content-Type"))
+		}
+		var payload struct {
+			Model        string `json:"model"`
+			Instructions string `json:"instructions"`
+			Input        []struct {
+				Role    string `json:"role"`
+				Content string `json:"content"`
+			} `json:"input"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+			t.Fatalf("Decode returned error: %v", err)
+		}
+		if payload.Model != "custom-ask" {
+			t.Fatalf("model = %q, want custom-ask", payload.Model)
+		}
+		if payload.Instructions != "Answer gently." {
+			t.Fatalf("instructions = %q, want Answer gently.", payload.Instructions)
+		}
+		wantInput := []struct {
+			role    string
+			content string
+		}{
+			{role: "user", content: "Earlier question"},
+			{role: "assistant", content: "Earlier answer"},
+			{role: "user", content: "What now?"},
+		}
+		if len(payload.Input) != len(wantInput) {
+			t.Fatalf("input length = %d, want %d in %#v", len(payload.Input), len(wantInput), payload.Input)
+		}
+		for index, want := range wantInput {
+			if payload.Input[index].Role != want.role || payload.Input[index].Content != want.content {
+				t.Fatalf("input[%d] = %#v, want role=%q content=%q", index, payload.Input[index], want.role, want.content)
+			}
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"output_text":"  A small answer.  "}`))
+	}))
+	defer server.Close()
+
+	result, err := OpenAIProvider{
+		BaseURL:  server.URL,
+		APIKey:   "test-key",
+		AskModel: "default-ask",
+	}.Ask(context.Background(), AskRequest{
+		Question:     "What now?",
+		Model:        "custom-ask",
+		Instructions: "Answer gently.",
+		History: []AskTurn{
+			{Role: "user", Text: "Earlier question"},
+			{Role: "assistant", Text: "Earlier answer"},
+			{Role: "tool", Text: "ignored role"},
+			{Role: "user", Text: "   "},
+		},
+	})
+
+	if err != nil {
+		t.Fatalf("Ask returned error: %v", err)
+	}
+	if result.Answer != "A small answer." {
+		t.Fatalf("Answer = %q, want trimmed output_text", result.Answer)
+	}
+	if result.Model != "custom-ask" {
+		t.Fatalf("Model = %q, want custom-ask", result.Model)
+	}
+}
+
+func TestOpenAIProviderAskParsesStructuredOutputFallbackAndTruncates(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{
+			"output": [
+				{
+					"content": [
+						{"type": "summary_text", "text": "ignored"},
+						{"type": "output_text", "text": "Structured answer"}
+					]
+				}
+			]
+		}`))
+	}))
+	defer server.Close()
+
+	result, err := OpenAIProvider{
+		BaseURL:  server.URL,
+		APIKey:   "test-key",
+		AskModel: "default-ask",
+	}.Ask(context.Background(), AskRequest{
+		Question:       "What now?",
+		MaxOutputChars: 10,
+	})
+
+	if err != nil {
+		t.Fatalf("Ask returned error: %v", err)
+	}
+	if result.Answer != "Structured" {
+		t.Fatalf("Answer = %q, want truncated structured output", result.Answer)
+	}
+	if result.Model != "default-ask" {
+		t.Fatalf("Model = %q, want default-ask", result.Model)
+	}
+}
+
 func TestOpenAIProviderReturnsMissingAPIKeyErrors(t *testing.T) {
 	provider := OpenAIProvider{BaseURL: "https://example.test"}
 
@@ -270,6 +382,9 @@ func TestOpenAIProviderReturnsMissingAPIKeyErrors(t *testing.T) {
 	if _, err := provider.Speak(context.Background(), SpeakRequest{}); !isMissingAPIKeyError(err) {
 		t.Fatalf("Speak error = %v, want missing API key", err)
 	}
+	if _, err := provider.Ask(context.Background(), AskRequest{Question: "hello"}); !isMissingAPIKeyError(err) {
+		t.Fatalf("Ask error = %v, want missing API key", err)
+	}
 }
 
 func TestNewOpenAIProviderFromEnvUsesDefaultsWhenEnvUnset(t *testing.T) {
@@ -278,6 +393,7 @@ func TestNewOpenAIProviderFromEnvUsesDefaultsWhenEnvUnset(t *testing.T) {
 	unsetEnv(t, "YOYOPOD_CLOUD_STT_MODEL")
 	unsetEnv(t, "YOYOPOD_CLOUD_TTS_MODEL")
 	unsetEnv(t, "YOYOPOD_CLOUD_TTS_VOICE")
+	unsetEnv(t, "YOYOPOD_CLOUD_ASK_MODEL")
 
 	provider := NewOpenAIProviderFromEnv()
 
@@ -292,6 +408,9 @@ func TestNewOpenAIProviderFromEnvUsesDefaultsWhenEnvUnset(t *testing.T) {
 	}
 	if provider.TTSVoice != "alloy" {
 		t.Fatalf("TTSVoice = %q, want alloy", provider.TTSVoice)
+	}
+	if provider.AskModel != "gpt-4.1-mini" {
+		t.Fatalf("AskModel = %q, want gpt-4.1-mini", provider.AskModel)
 	}
 }
 
@@ -300,6 +419,7 @@ func TestNewOpenAIProviderFromEnvUsesDefaultsWhenEnvEmpty(t *testing.T) {
 	t.Setenv("YOYOPOD_CLOUD_STT_MODEL", "")
 	t.Setenv("YOYOPOD_CLOUD_TTS_MODEL", "")
 	t.Setenv("YOYOPOD_CLOUD_TTS_VOICE", "")
+	t.Setenv("YOYOPOD_CLOUD_ASK_MODEL", "")
 
 	provider := NewOpenAIProviderFromEnv()
 
@@ -314,6 +434,9 @@ func TestNewOpenAIProviderFromEnvUsesDefaultsWhenEnvEmpty(t *testing.T) {
 	}
 	if provider.TTSVoice != "alloy" {
 		t.Fatalf("TTSVoice = %q, want alloy", provider.TTSVoice)
+	}
+	if provider.AskModel != "gpt-4.1-mini" {
+		t.Fatalf("AskModel = %q, want gpt-4.1-mini", provider.AskModel)
 	}
 }
 
@@ -323,6 +446,7 @@ func TestNewOpenAIProviderFromEnvUsesOverrides(t *testing.T) {
 	t.Setenv("YOYOPOD_CLOUD_STT_MODEL", "env-stt")
 	t.Setenv("YOYOPOD_CLOUD_TTS_MODEL", "env-tts")
 	t.Setenv("YOYOPOD_CLOUD_TTS_VOICE", "verse")
+	t.Setenv("YOYOPOD_CLOUD_ASK_MODEL", "env-ask")
 
 	provider := NewOpenAIProviderFromEnv()
 
@@ -340,6 +464,9 @@ func TestNewOpenAIProviderFromEnvUsesOverrides(t *testing.T) {
 	}
 	if provider.TTSVoice != "verse" {
 		t.Fatalf("TTSVoice = %q, want verse", provider.TTSVoice)
+	}
+	if provider.AskModel != "env-ask" {
+		t.Fatalf("AskModel = %q, want env-ask", provider.AskModel)
 	}
 }
 

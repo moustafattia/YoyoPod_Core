@@ -68,6 +68,29 @@ func (MockProvider) Speak(ctx context.Context, request SpeakRequest) (SpeakResul
 	}, nil
 }
 
+func (MockProvider) Ask(ctx context.Context, request AskRequest) (AskResult, error) {
+	startedAt := time.Now()
+	select {
+	case <-ctx.Done():
+		return AskResult{}, ctx.Err()
+	default:
+	}
+
+	answer := os.Getenv("YOYOPOD_MOCK_ASK_ANSWER")
+	if answer == "" {
+		answer = "I can answer that in a small, friendly way."
+	}
+	model := request.Model
+	if model == "" {
+		model = "mock"
+	}
+	return AskResult{
+		Answer:            answer,
+		Model:             model,
+		ProviderLatencyMS: time.Since(startedAt).Milliseconds(),
+	}, nil
+}
+
 func mockWAV() []byte {
 	return []byte{
 		'R', 'I', 'F', 'F',

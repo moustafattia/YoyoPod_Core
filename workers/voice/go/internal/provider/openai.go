@@ -18,6 +18,7 @@ import (
 
 const (
 	defaultOpenAIBaseURL  = "https://api.openai.com"
+	defaultOpenAIAskModel = "gpt-4.1-mini"
 	defaultOpenAISTTModel = "gpt-4o-mini-transcribe"
 	defaultOpenAITTSModel = "gpt-4o-mini-tts"
 	defaultOpenAITTSVoice = "alloy"
@@ -35,6 +36,7 @@ var ErrMissingAPIKey = errors.New("OPENAI_API_KEY is not set")
 type OpenAIProvider struct {
 	BaseURL  string
 	APIKey   string
+	AskModel string
 	STTModel string
 	TTSModel string
 	TTSVoice string
@@ -45,6 +47,7 @@ func NewOpenAIProviderFromEnv() OpenAIProvider {
 	return OpenAIProvider{
 		BaseURL:  envOrDefault("OPENAI_BASE_URL", defaultOpenAIBaseURL),
 		APIKey:   os.Getenv("OPENAI_API_KEY"),
+		AskModel: envOrDefault("YOYOPOD_CLOUD_ASK_MODEL", defaultOpenAIAskModel),
 		STTModel: envOrDefault("YOYOPOD_CLOUD_STT_MODEL", defaultOpenAISTTModel),
 		TTSModel: envOrDefault("YOYOPOD_CLOUD_TTS_MODEL", defaultOpenAITTSModel),
 		TTSVoice: envOrDefault("YOYOPOD_CLOUD_TTS_VOICE", defaultOpenAITTSVoice),
@@ -225,12 +228,145 @@ func (p OpenAIProvider) Speak(ctx context.Context, request SpeakRequest) (SpeakR
 	}, nil
 }
 
+func (p OpenAIProvider) Ask(ctx context.Context, request AskRequest) (AskResult, error) {
+	startedAt := time.Now()
+	if err := p.requireAPIKey(); err != nil {
+		return AskResult{}, err
+	}
+	question := strings.TrimSpace(request.Question)
+	if question == "" {
+		return AskResult{}, InvalidPayload("question is required")
+	}
+
+	model := request.Model
+	if model == "" {
+		model = p.AskModel
+	}
+	if model == "" {
+		model = defaultOpenAIAskModel
+	}
+	payload := openAIResponseRequest{
+		Model:        model,
+		Instructions: strings.TrimSpace(request.Instructions),
+		Input:        openAIResponseInput(request.History, question),
+	}
+	encoded, err := json.Marshal(payload)
+	if err != nil {
+		return AskResult{}, err
+	}
+	httpRequest, err := http.NewRequestWithContext(
+		ctx,
+		http.MethodPost,
+		p.urlFor("/v1/responses"),
+		bytes.NewReader(encoded),
+	)
+	if err != nil {
+		return AskResult{}, err
+	}
+	httpRequest.Header.Set("Authorization", "Bearer "+p.APIKey)
+	httpRequest.Header.Set("Content-Type", "application/json")
+
+	response, err := p.httpClient().Do(httpRequest)
+	if err != nil {
+		return AskResult{}, err
+	}
+	defer response.Body.Close()
+
+	if response.StatusCode >= http.StatusBadRequest {
+		return AskResult{}, p.httpError("response", response)
+	}
+
+	var decoded openAIResponse
+	if err := json.NewDecoder(response.Body).Decode(&decoded); err != nil {
+		return AskResult{}, err
+	}
+	answer := strings.TrimSpace(decoded.answerText())
+	if request.MaxOutputChars > 0 {
+		answer = strings.TrimSpace(truncateRunes(answer, request.MaxOutputChars))
+	}
+	if answer == "" {
+		return AskResult{}, fmt.Errorf("openai response returned empty answer")
+	}
+	return AskResult{
+		Answer:            answer,
+		Model:             model,
+		ProviderLatencyMS: time.Since(startedAt).Milliseconds(),
+	}, nil
+}
+
 type openAISpeechRequest struct {
 	Model          string `json:"model"`
 	Input          string `json:"input"`
 	Voice          string `json:"voice"`
 	ResponseFormat string `json:"response_format"`
 	Instructions   string `json:"instructions,omitempty"`
+}
+
+type openAIResponseRequest struct {
+	Model        string                       `json:"model"`
+	Instructions string                       `json:"instructions"`
+	Input        []openAIResponseInputMessage `json:"input"`
+}
+
+type openAIResponseInputMessage struct {
+	Role    string `json:"role"`
+	Content string `json:"content"`
+}
+
+type openAIResponse struct {
+	OutputText string `json:"output_text"`
+	Output     []struct {
+		Content []struct {
+			Type string `json:"type"`
+			Text string `json:"text"`
+		} `json:"content"`
+	} `json:"output"`
+}
+
+func (r openAIResponse) answerText() string {
+	if r.OutputText != "" {
+		return r.OutputText
+	}
+	for _, output := range r.Output {
+		for _, content := range output.Content {
+			if content.Type == "output_text" && content.Text != "" {
+				return content.Text
+			}
+		}
+	}
+	return ""
+}
+
+func openAIResponseInput(history []AskTurn, question string) []openAIResponseInputMessage {
+	input := make([]openAIResponseInputMessage, 0, len(history)+1)
+	for _, turn := range history {
+		role := strings.ToLower(strings.TrimSpace(turn.Role))
+		text := strings.TrimSpace(turn.Text)
+		if !isValidResponseInputRole(role) || text == "" {
+			continue
+		}
+		input = append(input, openAIResponseInputMessage{
+			Role:    role,
+			Content: text,
+		})
+	}
+	input = append(input, openAIResponseInputMessage{
+		Role:    "user",
+		Content: question,
+	})
+	return input
+}
+
+func isValidResponseInputRole(role string) bool {
+	return role == "user" || role == "assistant"
+}
+
+func truncateRunes(value string, maxChars int) string {
+	runes := []rune(value)
+	if len(runes) <= maxChars {
+		return value
+	}
+	return string(runes[:maxChars])
 }
 
 func (p OpenAIProvider) requireAPIKey() error {

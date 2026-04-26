@@ -95,6 +95,8 @@ func (w *Worker) handleCommand(ctx context.Context, envelope protocol.Envelope) 
 		w.startWork(ctx, envelope, w.handleTranscribe)
 	case "voice.speak":
 		w.startWork(ctx, envelope, w.handleSpeak)
+	case "voice.ask":
+		w.startWork(ctx, envelope, w.handleAsk)
 	case "voice.cancel":
 		w.handleCancel(envelope)
 	case "voice.shutdown", "worker.stop":
@@ -184,6 +186,28 @@ func (w *Worker) handleSpeak(ctx context.Context, envelope protocol.Envelope) {
 		return
 	}
 	w.emitResult(envelope, "voice.speak.result", result)
+}
+
+func (w *Worker) handleAsk(ctx context.Context, envelope protocol.Envelope) {
+	var request provider.AskRequest
+	if err := decodePayload(envelope.Payload, &request); err != nil {
+		w.emitError(envelope, "invalid_payload", err.Error(), false)
+		return
+	}
+	result, err := w.provider.Ask(ctx, request)
+	if err != nil || ctx.Err() != nil {
+		if isContextCancelled(ctx, err) || ctx.Err() != nil {
+			w.emitCancelled(envelope.RequestID, cancellationReason(ctx))
+			return
+		}
+		if provider.IsInvalidPayload(err) {
+			w.emitError(envelope, "invalid_payload", err.Error(), false)
+			return
+		}
+		w.emitError(envelope, "provider_error", err.Error(), true)
+		return
+	}
+	w.emitResult(envelope, "voice.ask.result", result)
 }
 
 func (w *Worker) handleCancel(envelope protocol.Envelope) {

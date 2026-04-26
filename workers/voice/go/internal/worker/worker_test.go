@@ -74,6 +74,16 @@ func (p *blockingProvider) Speak(ctx context.Context, request provider.SpeakRequ
 	}
 }
 
+func (p *blockingProvider) Ask(ctx context.Context, request provider.AskRequest) (provider.AskResult, error) {
+	p.markEntered()
+	select {
+	case <-ctx.Done():
+		return provider.AskResult{}, ctx.Err()
+	case <-p.release:
+		return provider.AskResult{Answer: "released", Model: "blocking"}, nil
+	}
+}
+
 func (p *blockingProvider) markEntered() {
 	if !p.enteredOnce {
 		p.enteredOnce = true
@@ -108,6 +118,12 @@ func (p *ignoringCancelProvider) Speak(ctx context.Context, request provider.Spe
 	return provider.SpeakResult{AudioPath: "/tmp/late.wav", Format: "wav", SampleRateHz: 16000}, nil
 }
 
+func (p *ignoringCancelProvider) Ask(ctx context.Context, request provider.AskRequest) (provider.AskResult, error) {
+	close(p.entered)
+	<-p.release
+	return provider.AskResult{Answer: "late release", Model: "ignoring-cancel"}, nil
+}
+
 func (p invalidPayloadProvider) Health(ctx context.Context) (provider.HealthResult, error) {
 	return provider.HealthResult{Healthy: true, Provider: "invalid-payload"}, nil
 }
@@ -118,6 +134,10 @@ func (p invalidPayloadProvider) Transcribe(ctx context.Context, request provider
 
 func (p invalidPayloadProvider) Speak(ctx context.Context, request provider.SpeakRequest) (provider.SpeakResult, error) {
 	return provider.SpeakResult{}, provider.InvalidPayload("text too long")
+}
+
+func (p invalidPayloadProvider) Ask(ctx context.Context, request provider.AskRequest) (provider.AskResult, error) {
+	return provider.AskResult{}, provider.InvalidPayload("question required")
 }
 
 func newRecordingWriter() *recordingWriter {
@@ -173,6 +193,40 @@ func TestMockProviderSpeakWritesWAVFile(t *testing.T) {
 	}
 	if !bytes.HasPrefix(content, []byte("RIFF")) || !bytes.Contains(content, []byte("WAVE")) {
 		t.Fatalf("mock speech file is not a deterministic wav header: %q", content)
+	}
+}
+
+func TestWorkerAskCommandReturnsMockResult(t *testing.T) {
+	t.Setenv("YOYOPOD_MOCK_ASK_ANSWER", "Sure, here is a tiny answer.")
+	envelopes, stderr := runWorker(
+		t,
+		provider.MockProvider{},
+		protocol.Envelope{
+			Kind:      "command",
+			Type:      "voice.ask",
+			RequestID: "req-ask",
+			Payload: map[string]any{
+				"question": "What should I play?",
+				"model":    "mock-ask",
+				"history": []map[string]any{
+					{"role": "user", "text": "hello"},
+				},
+			},
+		},
+	)
+
+	if stderr != "" {
+		t.Fatalf("stderr = %q, want empty", stderr)
+	}
+	result := findEnvelope(t, envelopes, "voice.ask.result")
+	if result.RequestID != "req-ask" {
+		t.Fatalf("RequestID = %q, want req-ask", result.RequestID)
+	}
+	if result.Payload["answer"] != "Sure, here is a tiny answer." {
+		t.Fatalf("answer = %v, want mock env answer", result.Payload["answer"])
+	}
+	if result.Payload["model"] != "mock-ask" {
+		t.Fatalf("model = %v, want mock-ask", result.Payload["model"])
 	}
 }
 

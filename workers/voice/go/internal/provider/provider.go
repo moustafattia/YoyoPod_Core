@@ -9,6 +9,7 @@ type Provider interface {
 	Health(context.Context) (HealthResult, error)
 	Transcribe(context.Context, TranscribeRequest) (TranscribeResult, error)
 	Speak(context.Context, SpeakRequest) (SpeakResult, error)
+	Ask(context.Context, AskRequest) (AskResult, error)
 }
 
 type InvalidPayloadError struct {
@@ -67,5 +68,24 @@ type SpeakResult struct {
 	Format            string `json:"format"`
 	SampleRateHz      int    `json:"sample_rate_hz"`
 	DurationMS        int64  `json:"duration_ms,omitempty"`
+	ProviderLatencyMS int64  `json:"provider_latency_ms,omitempty"`
+}
+
+type AskTurn struct {
+	Role string `json:"role"`
+	Text string `json:"text"`
+}
+
+type AskRequest struct {
+	Question       string    `json:"question"`
+	History        []AskTurn `json:"history"`
+	Model          string    `json:"model"`
+	Instructions   string    `json:"instructions"`
+	MaxOutputChars int       `json:"max_output_chars"`
+}
+
+type AskResult struct {
+	Answer            string `json:"answer"`
+	Model             string `json:"model"`
 	ProviderLatencyMS int64  `json:"provider_latency_ms,omitempty"`
 }
