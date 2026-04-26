@@ -12,10 +12,12 @@ from types import SimpleNamespace
 
 from yoyopod.core import AppContext
 from yoyopod.integrations.voice import (
+    AskConversationState,
     VoiceCommandExecutor,
     VoiceCommandOutcome,
     VoiceRuntimeCoordinator,
     VoiceSettingsResolver,
+    VoiceWorkerAskTurn,
 )
 from yoyopod.integrations.voice import (
     VoiceCaptureResult,
@@ -236,6 +238,63 @@ def _build_executor(
         play_music_action=play_music_action,
         screen_summary_provider=lambda: "You are on Ask. Say a direct command now.",
     )
+
+
+def test_ask_conversation_keeps_bounded_history() -> None:
+    state = AskConversationState(max_turns=2, max_text_chars=12)
+
+    state.append(" first question ", " first answer ")
+    state.append("Second\n\nQuestion with extra words", "Second   Answer   with   extra")
+    state.append("Third Question", "Third Answer")
+
+    assert state._turns == [
+        ("Second Quest", "Second Answe"),
+        ("Third Questi", "Third Answer"),
+    ]
+    assert state.history_for_worker() == [
+        VoiceWorkerAskTurn(role="user", text="Second Quest"),
+        VoiceWorkerAskTurn(role="assistant", text="Second Answe"),
+        VoiceWorkerAskTurn(role="user", text="Third Questi"),
+        VoiceWorkerAskTurn(role="assistant", text="Third Answer"),
+    ]
+
+    state.reset()
+
+    assert state._turns == []
+    assert state.history_for_worker() == []
+
+
+def test_ask_conversation_clamps_non_positive_history_limits() -> None:
+    state = AskConversationState(max_turns=0, max_text_chars=0)
+
+    state.append("Alpha", "Bravo")
+    state.append("Charlie", "Delta")
+
+    assert state._turns == [("C", "D")]
+    assert state.history_for_worker() == [
+        VoiceWorkerAskTurn(role="user", text="C"),
+        VoiceWorkerAskTurn(role="assistant", text="D"),
+    ]
+
+    negative_text_state = AskConversationState(max_text_chars=-2)
+
+    negative_text_state.append("Echo", "Foxtrot")
+
+    assert negative_text_state._turns == [("E", "F")]
+
+
+def test_ask_conversation_detects_exit_phrases() -> None:
+    state = AskConversationState()
+
+    assert state.is_exit_request("  EXIT   ASK  ")
+    assert state.is_exit_request("go back")
+    assert state.is_exit_request("stop asking")
+    assert state.is_exit_request("stop ask")
+    assert state.is_exit_request("leave ask")
+    assert state.is_exit_request("close ask")
+    assert AskConversationState(max_text_chars=3).is_exit_request("go back")
+    assert not state.is_exit_request("ask about space")
+    assert not state.is_exit_request("please go back home")
 
 
 def test_voice_command_executor_routes_call_and_updates_context() -> None:

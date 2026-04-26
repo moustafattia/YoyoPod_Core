@@ -22,6 +22,7 @@ from yoyopod.integrations.voice.worker_contract import (
 )
 
 if TYPE_CHECKING:
+    from yoyopod.integrations.voice.ask_conversation import AskConversationState
     from yoyopod.integrations.voice.commands import (
         VOICE_COMMAND_GRAMMAR,
         VoiceCommandIntent,
@@ -47,6 +48,10 @@ if TYPE_CHECKING:
 
 
 _PUBLIC_EXPORTS = {
+    "AskConversationState": (
+        "yoyopod.integrations.voice.ask_conversation",
+        "AskConversationState",
+    ),
     "VOICE_COMMAND_GRAMMAR": ("yoyopod.integrations.voice.commands", "VOICE_COMMAND_GRAMMAR"),
     "VoiceCaptureRequest": ("yoyopod.integrations.voice.models", "VoiceCaptureRequest"),
     "VoiceCaptureResult": ("yoyopod.integrations.voice.models", "VoiceCaptureResult"),
@@ -119,6 +124,7 @@ def __getattr__(name: str) -> Any:
 
 
 __all__ = [
+    "AskConversationState",
     "VOICE_COMMAND_GRAMMAR",
     "VoiceCaptureRequest",
     "VoiceCaptureResult",
