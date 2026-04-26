@@ -1,0 +1,267 @@
+"""Cloud worker voice backend behavior."""
+
+from __future__ import annotations
+
+from pathlib import Path
+from typing import Any
+
+from yoyopod.backends.voice import (
+    CloudWorkerSpeechToTextBackend,
+    CloudWorkerTextToSpeechBackend,
+)
+from yoyopod.integrations.voice.models import VoiceSettings, VoiceTranscript
+from yoyopod.integrations.voice.worker_contract import (
+    VoiceWorkerSpeakResult,
+    VoiceWorkerTranscribeResult,
+)
+
+
+class FakeVoiceWorkerClient:
+    """Small fake that records cloud-worker backend calls."""
+
+    def __init__(
+        self,
+        *,
+        transcript: VoiceWorkerTranscribeResult | None = None,
+        speech: VoiceWorkerSpeakResult | None = None,
+        exc: Exception | None = None,
+    ) -> None:
+        self.transcript = transcript or VoiceWorkerTranscribeResult(
+            text="turn up the music",
+            confidence=0.82,
+            is_final=True,
+        )
+        self.speech = speech or VoiceWorkerSpeakResult(
+            audio_path=Path("worker-output.wav"),
+            format="wav",
+            sample_rate_hz=24000,
+        )
+        self.exc = exc
+        self.transcribe_calls: list[dict[str, Any]] = []
+        self.speak_calls: list[dict[str, Any]] = []
+
+    def transcribe(
+        self,
+        *,
+        audio_path: Path,
+        sample_rate_hz: int,
+        language: str,
+        max_audio_seconds: float,
+    ) -> VoiceWorkerTranscribeResult:
+        self.transcribe_calls.append(
+            {
+                "audio_path": audio_path,
+                "sample_rate_hz": sample_rate_hz,
+                "language": language,
+                "max_audio_seconds": max_audio_seconds,
+            }
+        )
+        if self.exc is not None:
+            raise self.exc
+        return self.transcript
+
+    def speak(
+        self,
+        *,
+        text: str,
+        voice: str,
+        model: str,
+        instructions: str,
+        sample_rate_hz: int,
+    ) -> VoiceWorkerSpeakResult:
+        self.speak_calls.append(
+            {
+                "text": text,
+                "voice": voice,
+                "model": model,
+                "instructions": instructions,
+                "sample_rate_hz": sample_rate_hz,
+            }
+        )
+        if self.exc is not None:
+            raise self.exc
+        return self.speech
+
+
+class FakeWavPlayer:
+    """Small fake that records playback calls."""
+
+    def __init__(self, *, result: bool = True, exc: Exception | None = None) -> None:
+        self.result = result
+        self.exc = exc
+        self.calls: list[dict[str, Any]] = []
+
+    def __call__(
+        self,
+        audio_path: Path,
+        *,
+        device_id: str | None = None,
+        timeout_seconds: float = 6.0,
+    ) -> bool:
+        self.calls.append(
+            {
+                "audio_path": audio_path,
+                "device_id": device_id,
+                "timeout_seconds": timeout_seconds,
+            }
+        )
+        if self.exc is not None:
+            raise self.exc
+        return self.result
+
+
+def cloud_settings(**overrides: object) -> VoiceSettings:
+    values = {
+        "stt_backend": "cloud-worker",
+        "tts_backend": "cloud-worker",
+        "cloud_worker_max_audio_seconds": 11.5,
+        "cloud_worker_tts_model": "tts-test-model",
+        "cloud_worker_tts_voice": "verse",
+        "cloud_worker_tts_instructions": "Short handheld response.",
+        "sample_rate_hz": 22050,
+    }
+    values.update(overrides)
+    return VoiceSettings(**values)
+
+
+def empty_final_transcript() -> VoiceTranscript:
+    return VoiceTranscript(text="", confidence=0.0, is_final=True)
+
+
+def test_stt_is_available_only_when_enabled_and_cloud_backend() -> None:
+    backend = CloudWorkerSpeechToTextBackend(client=FakeVoiceWorkerClient())
+
+    assert backend.is_available(cloud_settings())
+    assert not backend.is_available(cloud_settings(stt_enabled=False))
+    assert not backend.is_available(cloud_settings(stt_backend="vosk"))
+
+
+def test_stt_transcribe_delegates_to_client_and_maps_transcript() -> None:
+    client = FakeVoiceWorkerClient(
+        transcript=VoiceWorkerTranscribeResult(
+            text="play favorites",
+            confidence=0.91,
+            is_final=True,
+        )
+    )
+    backend = CloudWorkerSpeechToTextBackend(client=client)
+    audio_path = Path("input.wav")
+
+    transcript = backend.transcribe(audio_path, cloud_settings())
+
+    assert transcript == VoiceTranscript(text="play favorites", confidence=0.91, is_final=True)
+    assert client.transcribe_calls == [
+        {
+            "audio_path": audio_path,
+            "sample_rate_hz": 22050,
+            "language": "en",
+            "max_audio_seconds": 11.5,
+        }
+    ]
+
+
+def test_stt_unavailable_returns_empty_final_transcript_without_calling_client() -> None:
+    client = FakeVoiceWorkerClient()
+    backend = CloudWorkerSpeechToTextBackend(client=client)
+
+    transcript = backend.transcribe(Path("input.wav"), cloud_settings(stt_enabled=False))
+
+    assert transcript == empty_final_transcript()
+    assert client.transcribe_calls == []
+
+
+def test_stt_client_exception_returns_empty_final_transcript() -> None:
+    client = FakeVoiceWorkerClient(exc=RuntimeError("worker unavailable"))
+    backend = CloudWorkerSpeechToTextBackend(client=client)
+
+    transcript = backend.transcribe(Path("input.wav"), cloud_settings())
+
+    assert transcript == empty_final_transcript()
+    assert len(client.transcribe_calls) == 1
+
+
+def test_tts_is_available_only_when_enabled_and_cloud_backend() -> None:
+    backend = CloudWorkerTextToSpeechBackend(
+        client=FakeVoiceWorkerClient(),
+        play_wav=FakeWavPlayer(),
+    )
+
+    assert backend.is_available(cloud_settings())
+    assert not backend.is_available(cloud_settings(tts_enabled=False))
+    assert not backend.is_available(cloud_settings(tts_backend="espeak-ng"))
+
+
+def test_tts_speak_delegates_to_client_and_plays_returned_wav() -> None:
+    client = FakeVoiceWorkerClient(
+        speech=VoiceWorkerSpeakResult(
+            audio_path=Path("answer.wav"),
+            format="wav",
+            sample_rate_hz=22050,
+        )
+    )
+    play_wav = FakeWavPlayer()
+    backend = CloudWorkerTextToSpeechBackend(client=client, play_wav=play_wav)
+
+    assert backend.speak("Hello from the cloud", cloud_settings())
+    assert client.speak_calls == [
+        {
+            "text": "Hello from the cloud",
+            "voice": "verse",
+            "model": "tts-test-model",
+            "instructions": "Short handheld response.",
+            "sample_rate_hz": 22050,
+        }
+    ]
+    assert play_wav.calls == [
+        {
+            "audio_path": Path("answer.wav"),
+            "device_id": None,
+            "timeout_seconds": 6.0,
+        }
+    ]
+
+
+def test_tts_empty_text_returns_false_without_calling_client() -> None:
+    client = FakeVoiceWorkerClient()
+    play_wav = FakeWavPlayer()
+    backend = CloudWorkerTextToSpeechBackend(client=client, play_wav=play_wav)
+
+    assert not backend.speak("  ", cloud_settings())
+    assert client.speak_calls == []
+    assert play_wav.calls == []
+
+
+def test_tts_client_exception_returns_false() -> None:
+    client = FakeVoiceWorkerClient(exc=RuntimeError("worker unavailable"))
+    play_wav = FakeWavPlayer()
+    backend = CloudWorkerTextToSpeechBackend(client=client, play_wav=play_wav)
+
+    assert not backend.speak("Hello", cloud_settings())
+    assert len(client.speak_calls) == 1
+    assert play_wav.calls == []
+
+
+def test_tts_playback_exception_returns_false() -> None:
+    client = FakeVoiceWorkerClient()
+    play_wav = FakeWavPlayer(exc=RuntimeError("playback failed"))
+    backend = CloudWorkerTextToSpeechBackend(client=client, play_wav=play_wav)
+
+    assert not backend.speak("Hello", cloud_settings())
+    assert len(client.speak_calls) == 1
+    assert len(play_wav.calls) == 1
+
+
+def test_tts_passes_configured_speaker_device_to_playback() -> None:
+    client = FakeVoiceWorkerClient()
+    play_wav = FakeWavPlayer()
+    backend = CloudWorkerTextToSpeechBackend(client=client, play_wav=play_wav)
+
+    assert backend.speak("Hello", cloud_settings(speaker_device_id="plughw:CARD=Headset"))
+    assert play_wav.calls[0]["device_id"] == "plughw:CARD=Headset"
+
+
+def test_package_level_backend_exports_work() -> None:
+    from yoyopod.backends import voice
+
+    assert voice.CloudWorkerSpeechToTextBackend is CloudWorkerSpeechToTextBackend
+    assert voice.CloudWorkerTextToSpeechBackend is CloudWorkerTextToSpeechBackend
