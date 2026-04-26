@@ -384,6 +384,40 @@ def test_voice_command_executor_handles_local_device_actions() -> None:
     assert context.voice.output_volume == 55
 
 
+def test_voice_command_executor_respects_screen_read_toggle_with_provider() -> None:
+    context = AppContext()
+
+    provider_calls = 0
+
+    def screen_summary_provider() -> str:
+        nonlocal provider_calls
+        provider_calls += 1
+        return "Mode-aware Ask summary."
+
+    executor = VoiceCommandExecutor(
+        context=context,
+        screen_summary_provider=screen_summary_provider,
+    )
+
+    disabled_outcome = executor.execute("read screen")
+
+    assert provider_calls == 0
+    assert disabled_outcome == VoiceCommandOutcome(
+        "Screen Read",
+        "Screen read is off. Turn it on in Setup to auto-read screens.",
+    )
+
+    context.configure_voice(screen_read_enabled=True)
+
+    enabled_outcome = executor.execute("read screen")
+
+    assert provider_calls == 1
+    assert enabled_outcome == VoiceCommandOutcome(
+        "Screen Read",
+        "Mode-aware Ask summary.",
+    )
+
+
 def test_voice_command_executor_volume_fallback_uses_app_context_audio_controller() -> None:
     context = AppContext()
     context.audio_volume_controller = _FakeAudioVolumeController(context)

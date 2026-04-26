@@ -56,7 +56,9 @@ class VoiceCommandExecutor:
 
         normalized = transcript.strip()
         if not normalized:
-            return VoiceCommandOutcome("No Speech", "I did not catch a command.", should_speak=False)
+            return VoiceCommandOutcome(
+                "No Speech", "I did not catch a command.", should_speak=False
+            )
 
         if self._context is not None:
             self._context.record_voice_transcript(normalized, mode="voice_commands")
@@ -95,7 +97,7 @@ class VoiceCommandExecutor:
             self._apply_mic_state(muted=False)
             return VoiceCommandOutcome("Mic Live", "Voice commands mic is live.")
         if command.intent is VoiceCommandIntent.READ_SCREEN:
-            return VoiceCommandOutcome("Screen Read", self._screen_summary_provider())
+            return VoiceCommandOutcome("Screen Read", self._screen_read_summary())
 
         return VoiceCommandOutcome("Not Ready", "That command is recognized but not wired yet.")
 
@@ -194,6 +196,11 @@ class VoiceCommandExecutor:
         if self._context is not None and self._context.voice.screen_read_enabled:
             return "You are on Ask. Say a direct command now."
         return "Screen read is off. Turn it on in Setup to auto-read screens."
+
+    def _screen_read_summary(self) -> str:
+        if self._context is not None and not self._context.voice.screen_read_enabled:
+            return "Screen read is off. Turn it on in Setup to auto-read screens."
+        return self._screen_summary_provider()
 
     def _apply_mic_state(self, *, muted: bool) -> None:
         if self._context is not None:

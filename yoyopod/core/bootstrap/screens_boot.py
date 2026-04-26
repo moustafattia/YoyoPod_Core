@@ -97,6 +97,14 @@ class ScreensBoot:
                     )
 
             voice_settings_defaults = VoiceSettings()
+
+            def ask_screen_summary() -> str:
+                ask_screen = getattr(self.app, "ask_screen", None)
+                summary_provider = getattr(ask_screen, "_screen_summary", None)
+                if callable(summary_provider):
+                    return str(summary_provider())
+                return "You are on Ask. Ask a question, or go back to exit."
+
             self.app.voice_runtime = VoiceRuntimeCoordinator(
                 context=context,
                 settings_resolver=VoiceSettingsResolver(
@@ -315,6 +323,7 @@ class ScreensBoot:
                         if self.app.local_music_service is not None
                         else None
                     ),
+                    screen_summary_provider=ask_screen_summary,
                 ),
                 voice_service_factory=voice_service_factory,
                 ask_client=voice_worker_client,

@@ -681,6 +681,30 @@ def test_cloud_voice_settings_provider_includes_worker_ask_settings(monkeypatch)
     assert settings.cloud_worker_ask_instructions == ASK_INSTRUCTIONS
 
 
+def test_boot_voice_runtime_uses_ask_screen_summary_provider(monkeypatch) -> None:
+    captured: dict[str, object] = {}
+    _install_dummy_screen_modules(monkeypatch)
+
+    class _CapturingVoiceRuntime:
+        def __init__(self, **kwargs) -> None:
+            captured.update(kwargs)
+
+    monkeypatch.setattr(
+        "yoyopod.core.bootstrap.screens_boot.VoiceRuntimeCoordinator",
+        _CapturingVoiceRuntime,
+    )
+    app = _build_cloud_screen_app(stt_backend="cloud-worker", tts_backend="cloud-worker")
+    app.context.configure_voice(screen_read_enabled=True)
+
+    assert ScreensBoot(app, logger=_quiet_logger()).setup_screens() is True
+    app.ask_screen = SimpleNamespace(_screen_summary=lambda: "Mode-aware Ask summary.")
+
+    outcome = captured["command_executor"].execute("read screen")
+
+    assert outcome.headline == "Screen Read"
+    assert outcome.body == "Mode-aware Ask summary."
+
+
 def test_cloud_voice_factory_preserves_local_tts_when_only_stt_uses_worker(monkeypatch) -> None:
     captured: dict[str, object] = {}
     _install_dummy_screen_modules(monkeypatch)

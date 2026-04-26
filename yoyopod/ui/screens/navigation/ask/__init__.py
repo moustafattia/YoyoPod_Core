@@ -45,7 +45,9 @@ class AskScreen(Screen):
         ("mom", "mama", "mum", "mommy", "mother"),
         ("dad", "dada", "daddy", "papa", "father"),
     )
-    _HINT_TEXT = "Say things like call mom, play music, volume up, mute mic, or read screen."
+    _HINT_TEXT = (
+        "Ask a question. Use the quick button for calls, music, volume, and screen reading."
+    )
 
     def __init__(
         self,
@@ -149,6 +151,7 @@ class AskScreen(Screen):
 
         self._entry_cycle_token += 1
         self.voice_runtime.cancel()
+        self.voice_runtime.reset_conversation()
         self._cancel_auto_return()
         self._quick_command = False
         super().exit()
@@ -172,14 +175,17 @@ class AskScreen(Screen):
     def _screen_summary(self) -> str:
         """Return the current screen summary for spoken playback."""
 
-        if self.context is not None and self.context.voice.screen_read_enabled:
-            return "You are on Ask. Say a direct command now."
-        return "Screen read is off. Turn it on in Setup to auto-read screens."
+        if self._quick_command:
+            return "You are on quick Ask. Say a direct command now."
+        return "You are on Ask. Ask a question, or go back to exit."
 
     def on_select(self, data=None) -> None:
         """Start listening, or ask again from the reply state."""
 
-        self.voice_runtime.begin_listening(async_capture=self._async_voice_capture)
+        if self._quick_command:
+            self.voice_runtime.begin_listening(async_capture=self._async_voice_capture)
+            return
+        self.voice_runtime.begin_ask(async_capture=self._async_voice_capture)
 
     def on_back(self, data=None) -> None:
         """Cancel any in-flight capture and pop the screen."""
