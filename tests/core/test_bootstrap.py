@@ -6,6 +6,7 @@ import sys
 from types import ModuleType, SimpleNamespace
 
 import yoyopod.core.bootstrap as boot_module
+from yoyopod.core.bootstrap import components_boot as components_boot_module
 from yoyopod.core import AppContext
 from yoyopod.core.audio_volume import OutputVolumeController
 from yoyopod.core.bootstrap.components_boot import ComponentsBoot
@@ -389,7 +390,7 @@ def test_setup_voice_worker_registers_starts_and_subscribes_when_cloud_enabled(
     health_probes: list[object] = []
     monkeypatch.setattr(
         "yoyopod.core.bootstrap.components_boot._start_voice_worker_health_probe",
-        lambda client, logger: health_probes.append(client),
+        lambda client, logger, scheduler: health_probes.append((client, scheduler)),
     )
 
     class _FakeWorkerSupervisor:
@@ -443,7 +444,7 @@ def test_setup_voice_worker_registers_starts_and_subscribes_when_cloud_enabled(
     assert started == ["voice"]
     assert bus.subscription_counts()["WorkerMessageReceivedEvent"] == 1
     assert bus.subscription_counts()["WorkerDomainStateChangedEvent"] == 1
-    assert health_probes == [app.voice_worker_client]
+    assert health_probes == [(app.voice_worker_client, scheduler)]
 
     first_client = app.voice_worker_client
     assert boot.setup_voice_worker() is False
@@ -461,7 +462,7 @@ def test_setup_voice_worker_clears_client_when_start_fails(monkeypatch) -> None:
     health_probes: list[object] = []
     monkeypatch.setattr(
         "yoyopod.core.bootstrap.components_boot._start_voice_worker_health_probe",
-        lambda client, logger: health_probes.append(client),
+        lambda client, logger, scheduler: health_probes.append((client, scheduler)),
     )
 
     class _FailingWorkerSupervisor:
@@ -493,6 +494,48 @@ def test_setup_voice_worker_clears_client_when_start_fails(monkeypatch) -> None:
     assert _components_boot_for(app).setup_voice_worker() is False
     assert app.voice_worker_client is None
     assert health_probes == []
+
+
+def test_voice_worker_health_probe_starts_after_scheduler_drains(monkeypatch) -> None:
+    """The provider health timeout must not start while boot is still blocking the loop."""
+
+    callbacks = []
+    health_calls = 0
+
+    class _Scheduler:
+        def post(self, callback) -> None:
+            callbacks.append(callback)
+
+        def run_on_main(self, callback) -> None:
+            raise AssertionError("post should be preferred")
+
+    class _Client:
+        def health(self):
+            nonlocal health_calls
+            health_calls += 1
+            return SimpleNamespace(provider="mock")
+
+    class _Thread:
+        def __init__(self, *, target, daemon, name) -> None:
+            self.target = target
+            self.daemon = daemon
+            self.name = name
+
+        def start(self) -> None:
+            self.target()
+
+    monkeypatch.setattr(components_boot_module.threading, "Thread", _Thread)
+
+    components_boot_module._start_voice_worker_health_probe(
+        _Client(),
+        logger=SimpleNamespace(info=lambda *_args, **_kwargs: None),
+        scheduler=_Scheduler(),
+    )
+
+    assert health_calls == 0
+    assert len(callbacks) == 1
+    callbacks[0]()
+    assert health_calls == 1
 
 
 def test_cloud_voice_factory_preserves_local_stt_when_only_tts_uses_worker(monkeypatch) -> None:

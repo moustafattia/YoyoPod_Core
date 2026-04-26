@@ -119,7 +119,11 @@ class ComponentsBoot:
             client.mark_unavailable("start_failed")
             self.app.voice_worker_client = None
             return False
-        _start_voice_worker_health_probe(client, logger=self.logger)
+        _start_voice_worker_health_probe(
+            client,
+            logger=self.logger,
+            scheduler=self.app.scheduler,
+        )
         return True
 
     def init_core_components(self) -> bool:
@@ -281,8 +285,13 @@ def _mark_voice_worker_unavailable_on_degraded_state(
         client.mark_unavailable(event.reason or event.state)
 
 
-def _start_voice_worker_health_probe(client: VoiceWorkerClient, *, logger: Any) -> None:
-    """Probe provider health off the main thread after the runtime starts."""
+def _start_voice_worker_health_probe(
+    client: VoiceWorkerClient,
+    *,
+    logger: Any,
+    scheduler: Any,
+) -> None:
+    """Probe provider health off the main thread once the loop drains scheduled work."""
 
     def probe() -> None:
         try:
@@ -292,8 +301,15 @@ def _start_voice_worker_health_probe(client: VoiceWorkerClient, *, logger: Any) 
             return
         logger.info("Cloud voice worker ready: provider={}", result.provider)
 
-    threading.Thread(
-        target=probe,
-        daemon=True,
-        name="VoiceWorkerHealthProbe",
-    ).start()
+    def start_probe() -> None:
+        threading.Thread(
+            target=probe,
+            daemon=True,
+            name="VoiceWorkerHealthProbe",
+        ).start()
+
+    post = getattr(scheduler, "post", None)
+    if callable(post):
+        post(start_probe)
+        return
+    scheduler.run_on_main(start_probe)
