@@ -17,6 +17,7 @@ from yoyopod.integrations.voice import (
     VoiceCommandOutcome,
     VoiceRuntimeCoordinator,
     VoiceSettingsResolver,
+    VoiceWorkerAskResult,
     VoiceWorkerAskTurn,
 )
 from yoyopod.integrations.voice import (
@@ -188,12 +189,31 @@ class _FakeVoiceService:
     ) -> VoiceTranscript:
         return VoiceTranscript(text=self.transcript, confidence=0.91)
 
-    def speak(self, text: str) -> bool:
+    def speak(
+        self,
+        text: str,
+        *,
+        cancel_event: threading.Event | None = None,
+    ) -> bool:
         self.speak_calls.append(text)
         return True
 
     def release_resources(self) -> None:
         self.release_calls += 1
+
+
+class _SequenceVoiceService(_FakeVoiceService):
+    def __init__(self, transcripts: list[str]) -> None:
+        super().__init__("")
+        self._transcripts = transcripts
+
+    def transcribe(
+        self,
+        audio_path: Path,
+        *,
+        cancel_event: threading.Event | None = None,
+    ) -> VoiceTranscript:
+        return VoiceTranscript(text=self._transcripts.pop(0), confidence=0.91)
 
 
 class _NoAudioVoiceService(_FakeVoiceService):
@@ -208,6 +228,35 @@ class _NoAudioVoiceService(_FakeVoiceService):
 class _FakeOutputPlayer:
     def play_wav(self, path: Path, **kwargs) -> None:
         return None
+
+
+class _FakeAskClient:
+    def __init__(self, answers: list[str] | None = None, *, available: bool = True) -> None:
+        self.is_available = available
+        self.answers = answers or ["answer"]
+        self.ask_calls: list[dict[str, object]] = []
+
+    def ask(
+        self,
+        *,
+        question: str,
+        history: list[VoiceWorkerAskTurn],
+        model: str,
+        instructions: str,
+        max_output_chars: int,
+        cancel_event: threading.Event | None = None,
+    ) -> VoiceWorkerAskResult:
+        self.ask_calls.append(
+            {
+                "question": question,
+                "history": history,
+                "model": model,
+                "instructions": instructions,
+                "max_output_chars": max_output_chars,
+                "cancel_event": cancel_event,
+            }
+        )
+        return VoiceWorkerAskResult(answer=self.answers.pop(0), model=model)
 
 
 def _wait_until(predicate: Callable[[], bool], *, timeout_seconds: float = 1.0) -> None:
@@ -379,6 +428,364 @@ def test_voice_runtime_coordinator_runs_capture_and_emits_route() -> None:
     assert context.voice.last_spoken_text == "Starting local music."
     assert context.voice.interaction.phase == "reply"
     assert context.voice.interaction.headline == "Playing"
+
+
+def test_entry_cycle_uses_ask_mode_for_non_quick_and_ptt_for_quick() -> None:
+    context = AppContext()
+    ask_service = _FakeVoiceService("what is space")
+    ask_client = _FakeAskClient(["Space is everything around Earth."])
+    ask_outcomes: list[VoiceCommandOutcome] = []
+    ask_coordinator = VoiceRuntimeCoordinator(
+        context=context,
+        settings_resolver=VoiceSettingsResolver(
+            context=context,
+            settings_provider=lambda: VoiceSettings(mode="cloud"),
+        ),
+        command_executor=_build_executor(context=context),
+        voice_service_factory=lambda settings: ask_service,
+        output_player=_FakeOutputPlayer(),
+        ask_client=ask_client,
+    )
+    ask_coordinator.bind(state_listener=lambda state: None, outcome_listener=ask_outcomes.append)
+
+    ask_coordinator.begin_entry_cycle(quick_command=False, async_capture=False)
+
+    assert ask_service.capture_calls == 1
+    assert ask_client.ask_calls[0]["question"] == "what is space"
+    assert ask_outcomes[-1] == VoiceCommandOutcome(
+        "Answer",
+        "Space is everything around Earth.",
+        auto_return=False,
+    )
+
+    ptt_service = _NoAudioVoiceService()
+    ptt_ask_client = _FakeAskClient(["unused"])
+    ptt_coordinator = VoiceRuntimeCoordinator(
+        context=AppContext(),
+        settings_resolver=VoiceSettingsResolver(context=None),
+        command_executor=VoiceCommandExecutor(context=None),
+        voice_service_factory=lambda settings: ptt_service,
+        output_player=_FakeOutputPlayer(),
+        ask_client=ptt_ask_client,
+    )
+
+    ptt_coordinator.begin_entry_cycle(quick_command=True, async_capture=False)
+
+    _wait_until(lambda: ptt_service.capture_calls == 1)
+    assert ptt_ask_client.ask_calls == []
+
+
+def test_ask_success_appends_bounded_history_and_speaks_answer() -> None:
+    context = AppContext()
+    service = _FakeVoiceService("tell me about mars")
+    ask_client = _FakeAskClient(["Mars is red and dusty."])
+    outcomes: list[VoiceCommandOutcome] = []
+    coordinator = VoiceRuntimeCoordinator(
+        context=context,
+        settings_resolver=VoiceSettingsResolver(
+            context=context,
+            settings_provider=lambda: VoiceSettings(
+                mode="cloud",
+                cloud_worker_ask_model="test-ask",
+                cloud_worker_ask_max_history_turns=1,
+                cloud_worker_ask_max_response_chars=12,
+                cloud_worker_ask_instructions="Answer safely.",
+            ),
+        ),
+        command_executor=_build_executor(context=context),
+        voice_service_factory=lambda settings: service,
+        output_player=_FakeOutputPlayer(),
+        ask_client=ask_client,
+    )
+    coordinator.bind(state_listener=lambda state: None, outcome_listener=outcomes.append)
+
+    coordinator.begin_ask(async_capture=False)
+
+    _wait_until(lambda: service.speak_calls == ["Mars is red and dusty."])
+    assert ask_client.ask_calls == [
+        {
+            "question": "tell me about mars",
+            "history": [],
+            "model": "test-ask",
+            "instructions": "Answer safely.",
+            "max_output_chars": 12,
+            "cancel_event": ask_client.ask_calls[0]["cancel_event"],
+        }
+    ]
+    assert coordinator._ask_conversation._turns == [("tell me abou", "Mars is red ")]
+    assert outcomes[-1] == VoiceCommandOutcome(
+        "Answer",
+        "Mars is red and dusty.",
+        auto_return=False,
+    )
+    assert context.voice.last_spoken_text == "Mars is red and dusty."
+    assert context.voice.interaction.headline == "Answer"
+
+
+def test_second_ask_turn_sends_previous_user_and_assistant_history() -> None:
+    context = AppContext()
+    service = _SequenceVoiceService(["what is mars", "how far away is it"])
+    ask_client = _FakeAskClient(["Mars is a planet.", "It is very far away."])
+    coordinator = VoiceRuntimeCoordinator(
+        context=context,
+        settings_resolver=VoiceSettingsResolver(
+            context=context,
+            settings_provider=lambda: VoiceSettings(mode="cloud"),
+        ),
+        command_executor=_build_executor(context=context),
+        voice_service_factory=lambda settings: service,
+        output_player=_FakeOutputPlayer(),
+        ask_client=ask_client,
+    )
+
+    coordinator.begin_ask(async_capture=False)
+    coordinator.begin_ask(async_capture=False)
+
+    assert ask_client.ask_calls[0]["history"] == []
+    assert ask_client.ask_calls[1]["question"] == "how far away is it"
+    assert ask_client.ask_calls[1]["history"] == [
+        VoiceWorkerAskTurn(role="user", text="what is mars"),
+        VoiceWorkerAskTurn(role="assistant", text="Mars is a planet."),
+    ]
+
+
+def test_async_ask_thinking_transition_uses_dispatcher() -> None:
+    context = AppContext()
+    service = _FakeVoiceService("what is mars")
+    ask_started = threading.Event()
+    release_ask = threading.Event()
+    dispatched_callbacks: list[Callable[[], None]] = []
+
+    class _BlockingAskClient(_FakeAskClient):
+        def ask(
+            self,
+            *,
+            question: str,
+            history: list[VoiceWorkerAskTurn],
+            model: str,
+            instructions: str,
+            max_output_chars: int,
+            cancel_event: threading.Event | None = None,
+        ) -> VoiceWorkerAskResult:
+            ask_started.set()
+            release_ask.wait(timeout=1.0)
+            return super().ask(
+                question=question,
+                history=history,
+                model=model,
+                instructions=instructions,
+                max_output_chars=max_output_chars,
+                cancel_event=cancel_event,
+            )
+
+    ask_client = _BlockingAskClient(["Mars is a planet."])
+    coordinator = VoiceRuntimeCoordinator(
+        context=context,
+        settings_resolver=VoiceSettingsResolver(
+            context=context,
+            settings_provider=lambda: VoiceSettings(mode="cloud"),
+        ),
+        command_executor=_build_executor(context=context),
+        voice_service_factory=lambda settings: service,
+        output_player=_FakeOutputPlayer(),
+        ask_client=ask_client,
+    )
+    coordinator.bind(
+        state_listener=lambda state: None,
+        outcome_listener=lambda outcome: None,
+        dispatcher=dispatched_callbacks.append,
+    )
+
+    coordinator.begin_ask(async_capture=True)
+
+    assert ask_started.wait(timeout=1.0)
+    assert context.voice.interaction.headline == "Listening"
+    assert coordinator.state.headline == "Listening"
+    assert dispatched_callbacks
+
+    release_ask.set()
+    coordinator.cancel()
+
+
+def test_cancelled_ask_answer_is_not_spoken_or_recorded() -> None:
+    context = AppContext()
+    first_started = threading.Event()
+    first_release = threading.Event()
+    speak_calls: list[str] = []
+
+    class _BlockingVoiceService:
+        def speak(self, text: str) -> bool:
+            speak_calls.append(text)
+            if text == "Blocking command":
+                first_started.set()
+                first_release.wait(timeout=1.0)
+            return True
+
+    coordinator = VoiceRuntimeCoordinator(
+        context=context,
+        settings_resolver=VoiceSettingsResolver(context=context),
+        command_executor=VoiceCommandExecutor(context=context),
+        voice_service_factory=lambda _settings: _BlockingVoiceService(),
+        output_player=_FakeOutputPlayer(),
+    )
+
+    coordinator._apply_outcome(
+        VoiceCommandOutcome("Command", "Blocking command", should_speak=True)
+    )
+    assert first_started.wait(timeout=1.0)
+    ask_generation = coordinator.state.generation
+    coordinator._dispatch_ask_outcome(
+        VoiceCommandOutcome("Answer", "Stale answer", should_speak=True, auto_return=False),
+        generation=ask_generation,
+    )
+
+    coordinator.cancel()
+    first_release.set()
+    coordinator._tts_queue.join()
+
+    assert speak_calls == ["Blocking command"]
+    assert context.voice.last_spoken_text == "Blocking command"
+
+
+def test_cancel_stops_active_ask_tts() -> None:
+    context = AppContext()
+    speak_started = threading.Event()
+    cancel_seen = threading.Event()
+    speak_finished = threading.Event()
+    cancel_events: list[threading.Event | None] = []
+
+    class _CancellableVoiceService:
+        def speak(
+            self,
+            text: str,
+            *,
+            cancel_event: threading.Event | None = None,
+        ) -> bool:
+            cancel_events.append(cancel_event)
+            speak_started.set()
+            assert text == "Long answer"
+            assert cancel_event is not None
+            if cancel_event.wait(timeout=1.0):
+                cancel_seen.set()
+            speak_finished.set()
+            return not cancel_event.is_set()
+
+    coordinator = VoiceRuntimeCoordinator(
+        context=context,
+        settings_resolver=VoiceSettingsResolver(context=context),
+        command_executor=VoiceCommandExecutor(context=context),
+        voice_service_factory=lambda _settings: _CancellableVoiceService(),
+        output_player=_FakeOutputPlayer(),
+    )
+    generation = coordinator._next_generation()
+    coordinator._dispatch_ask_outcome(
+        VoiceCommandOutcome("Answer", "Long answer", should_speak=True, auto_return=False),
+        generation=generation,
+    )
+    assert speak_started.wait(timeout=1.0)
+
+    coordinator.cancel()
+
+    assert cancel_seen.wait(timeout=1.0)
+    assert speak_finished.wait(timeout=1.0)
+    coordinator._tts_queue.join()
+    assert len(cancel_events) == 1
+    assert context.voice.last_spoken_text == ""
+
+
+def test_ask_exit_phrase_routes_back_and_stale_outcomes_do_not_speak() -> None:
+    context = AppContext()
+    service = _FakeVoiceService("go back")
+    ask_client = _FakeAskClient(["unused"])
+    outcomes: list[VoiceCommandOutcome] = []
+    coordinator = VoiceRuntimeCoordinator(
+        context=context,
+        settings_resolver=VoiceSettingsResolver(
+            context=context,
+            settings_provider=lambda: VoiceSettings(mode="cloud"),
+        ),
+        command_executor=_build_executor(context=context),
+        voice_service_factory=lambda settings: service,
+        output_player=_FakeOutputPlayer(),
+        ask_client=ask_client,
+    )
+    coordinator.bind(state_listener=lambda state: None, outcome_listener=outcomes.append)
+    coordinator._ask_conversation.append("earlier question", "earlier answer")
+
+    coordinator.reset_to_idle()
+    assert coordinator._ask_conversation.history_for_worker() == [
+        VoiceWorkerAskTurn(role="user", text="earlier question"),
+        VoiceWorkerAskTurn(role="assistant", text="earlier answer"),
+    ]
+
+    coordinator.begin_ask(async_capture=False)
+    stale_generation = coordinator.state.generation - 1
+    coordinator._dispatch_ask_outcome(
+        VoiceCommandOutcome("Answer", "stale answer", should_speak=True, auto_return=False),
+        generation=stale_generation,
+    )
+
+    assert ask_client.ask_calls == []
+    assert outcomes[-1] == VoiceCommandOutcome(
+        "Ask",
+        "Going back.",
+        should_speak=False,
+        route_name="back",
+        auto_return=False,
+    )
+    assert service.speak_calls == []
+    assert coordinator._ask_conversation.history_for_worker() == [
+        VoiceWorkerAskTurn(role="user", text="earlier question"),
+        VoiceWorkerAskTurn(role="assistant", text="earlier answer"),
+    ]
+
+
+def test_unavailable_ask_client_reports_offline_without_capture() -> None:
+    context = AppContext()
+    service = _FakeVoiceService("what is mars")
+    coordinator = VoiceRuntimeCoordinator(
+        context=context,
+        settings_resolver=VoiceSettingsResolver(
+            context=context,
+            settings_provider=lambda: VoiceSettings(mode="cloud"),
+        ),
+        command_executor=_build_executor(context=context),
+        voice_service_factory=lambda settings: service,
+        output_player=_FakeOutputPlayer(),
+        ask_client=_FakeAskClient(available=False),
+    )
+
+    coordinator.begin_ask(async_capture=False)
+
+    assert service.capture_calls == 0
+    assert context.voice.interaction.phase == "reply"
+    assert context.voice.interaction.headline == "Ask Offline"
+    assert context.voice.interaction.body == (
+        "I cannot reach Ask right now. I can still help with music, calls, and volume."
+    )
+
+
+def test_ai_disabled_reports_ask_off_without_capture() -> None:
+    context = AppContext()
+    context.configure_voice(ai_requests_enabled=False)
+    service = _FakeVoiceService("what is mars")
+    ask_client = _FakeAskClient(["unused"])
+    coordinator = VoiceRuntimeCoordinator(
+        context=context,
+        settings_resolver=VoiceSettingsResolver(context=context),
+        command_executor=_build_executor(context=context),
+        voice_service_factory=lambda settings: service,
+        output_player=_FakeOutputPlayer(),
+        ask_client=ask_client,
+    )
+
+    coordinator.begin_ask(async_capture=False)
+
+    assert service.capture_calls == 0
+    assert ask_client.ask_calls == []
+    assert context.voice.interaction.phase == "reply"
+    assert context.voice.interaction.headline == "Ask Off"
+    assert context.voice.interaction.body == "Turn Ask on in Setup first."
 
 
 def test_listening_cycle_uses_cloud_worker_transcript(tmp_path: Path) -> None:
@@ -721,6 +1128,48 @@ def test_ptt_release_transcribes_with_fresh_cancel_event(tmp_path: Path) -> None
     assert len(transcribe_cancel_events) == 1
     assert not transcribe_cancel_events[0].is_set()
     assert outcomes[-1] == VoiceCommandOutcome("Done", "play music", should_speak=False)
+    assert not audio_path.exists()
+
+
+def test_ptt_release_skips_transcription_when_active_cancel_event_changed(
+    tmp_path: Path,
+) -> None:
+    audio_path = tmp_path / "ptt-race.wav"
+    audio_path.write_bytes(b"RIFF")
+    transcribe_calls = 0
+
+    class _PTTRaceVoiceService:
+        def capture_audio(self, _request) -> VoiceCaptureResult:
+            return VoiceCaptureResult(audio_path=audio_path, recorded=True)
+
+        def transcribe(
+            self,
+            path: Path,
+            *,
+            cancel_event: threading.Event | None = None,
+        ) -> VoiceTranscript:
+            nonlocal transcribe_calls
+            transcribe_calls += 1
+            return VoiceTranscript(text="play music", confidence=1.0, is_final=True)
+
+    coordinator = VoiceRuntimeCoordinator(
+        context=None,
+        settings_resolver=VoiceSettingsResolver(context=None),
+        command_executor=VoiceCommandExecutor(context=None),
+        output_player=_FakeOutputPlayer(),
+    )
+    release_event = threading.Event()
+    coordinator.state.generation = 7
+    coordinator.state.ptt_active = False
+    coordinator._active_capture_cancel = threading.Event()
+
+    coordinator._run_ptt_listening_cycle(
+        _PTTRaceVoiceService(),
+        7,
+        release_event,
+    )
+
+    assert transcribe_calls == 0
     assert not audio_path.exists()
 
 

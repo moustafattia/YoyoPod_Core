@@ -32,20 +32,35 @@ class AlsaOutputPlayer:
         device_id: str | None = None,
         timeout_seconds: float = 6.0,
         block_if_busy: bool = True,
+        cancel_event: threading.Event | None = None,
     ) -> bool:
         """Play one WAV file, retrying through likely ALSA devices."""
 
         if not self.is_available():
             return False
+        if cancel_event is not None and cancel_event.is_set():
+            return False
 
-        if not _PLAYBACK_LOCK.acquire(blocking=block_if_busy):
+        if cancel_event is not None and block_if_busy:
+            while not _PLAYBACK_LOCK.acquire(blocking=False):
+                if cancel_event.is_set():
+                    logger.debug("ALSA playback skipped because cancellation was requested")
+                    return False
+                time.sleep(0.02)
+            lock_acquired = True
+        else:
+            lock_acquired = _PLAYBACK_LOCK.acquire(blocking=block_if_busy)
+        if not lock_acquired:
             logger.debug("ALSA playback skipped because another playback is active")
             return False
         try:
+            if cancel_event is not None and cancel_event.is_set():
+                return False
             return self._play_wav_locked(
                 audio_path,
                 device_id=device_id,
                 timeout_seconds=timeout_seconds,
+                cancel_event=cancel_event,
             )
         finally:
             _PLAYBACK_LOCK.release()
@@ -56,23 +71,33 @@ class AlsaOutputPlayer:
         *,
         device_id: str | None,
         timeout_seconds: float = 6.0,
+        cancel_event: threading.Event | None = None,
     ) -> bool:
         """Inner play implementation, called with _PLAYBACK_LOCK held."""
 
-        for device in self._device_candidates(device_id):
+        for device in self._device_candidates(device_id, cancel_event=cancel_event):
+            if cancel_event is not None and cancel_event.is_set():
+                return False
             command = [self.aplay_binary, "-q"]
             if device:
                 command.extend(["-D", device])
             command.append(str(audio_path))
             started_at = time.monotonic()
             try:
-                result = subprocess.run(
-                    command,
-                    capture_output=True,
-                    text=True,
-                    timeout=timeout_seconds,
-                    check=False,
-                )
+                if cancel_event is None:
+                    result = subprocess.run(
+                        command,
+                        capture_output=True,
+                        text=True,
+                        timeout=timeout_seconds,
+                        check=False,
+                    )
+                else:
+                    result = self._run_cancellable_playback(
+                        command,
+                        timeout_seconds=timeout_seconds,
+                        cancel_event=cancel_event,
+                    )
             except subprocess.TimeoutExpired:
                 logger.warning(
                     "ALSA playback timed out for {} after {:.1f}s",
@@ -92,6 +117,9 @@ class AlsaOutputPlayer:
                 )
                 self._preferred_device = device
                 return True
+            if cancel_event is not None and cancel_event.is_set():
+                logger.info("ALSA playback cancelled on {}", device or "default")
+                return False
             stderr = result.stderr.strip().replace("\n", " ")[:180]
             logger.warning(
                 "ALSA playback failed on {} rc={} elapsed_ms={:.1f} stderr={}",
@@ -102,11 +130,69 @@ class AlsaOutputPlayer:
             )
         return False
 
-    def _device_candidates(self, configured_device_id: str | None) -> list[str | None]:
+    def _run_cancellable_playback(
+        self,
+        command: list[str],
+        *,
+        timeout_seconds: float,
+        cancel_event: threading.Event,
+    ) -> subprocess.CompletedProcess[str]:
+        """Run one aplay process while polling for cancellation."""
+
+        process = subprocess.Popen(
+            command,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+        deadline = time.monotonic() + max(0.0, timeout_seconds)
+        while True:
+            returncode = process.poll()
+            if returncode is not None:
+                stdout, stderr = process.communicate()
+                return subprocess.CompletedProcess(
+                    command,
+                    returncode,
+                    stdout or "",
+                    stderr or "",
+                )
+            if cancel_event.is_set():
+                process.terminate()
+                try:
+                    process.wait(timeout=0.25)
+                except subprocess.TimeoutExpired:
+                    process.kill()
+                    process.wait(timeout=0.25)
+                stdout, stderr = process.communicate()
+                return subprocess.CompletedProcess(
+                    command,
+                    process.returncode if process.returncode is not None else -15,
+                    stdout or "",
+                    stderr or "",
+                )
+            if time.monotonic() >= deadline:
+                process.kill()
+                try:
+                    process.wait(timeout=0.25)
+                except subprocess.TimeoutExpired:
+                    pass
+                raise subprocess.TimeoutExpired(command, timeout_seconds)
+            time.sleep(0.02)
+
+    def _device_candidates(
+        self,
+        configured_device_id: str | None,
+        *,
+        cancel_event: threading.Event | None = None,
+    ) -> list[str | None]:
         """Return playback-device candidates, prioritizing shared ALSA facade routes."""
 
+        if cancel_event is not None and cancel_event.is_set():
+            return []
         candidates: list[str | None] = []
-        discovered_devices = self._scan_devices()
+        discovered_devices = self._scan_devices(cancel_event=cancel_event)
+        if cancel_event is not None and cancel_event.is_set():
+            return []
         if configured_device_id:
             candidates.extend(
                 self._configured_device_candidates(
@@ -120,20 +206,28 @@ class AlsaOutputPlayer:
         candidates.extend([None, "default", "sysdefault"])
         return self._unique(candidates)
 
-    def _scan_devices(self) -> list[str]:
+    def _scan_devices(
+        self,
+        *,
+        cancel_event: threading.Event | None = None,
+    ) -> list[str]:
         """Return discovered ALSA playback devices in preferred order."""
 
+        if cancel_event is not None and cancel_event.is_set():
+            return []
         try:
             result = subprocess.run(
                 [self.aplay_binary, "-L"],
                 capture_output=True,
                 text=True,
-                timeout=5,
+                timeout=1 if cancel_event is not None else 5,
                 check=False,
             )
         except Exception:
             return []
 
+        if cancel_event is not None and cancel_event.is_set():
+            return []
         parsed: list[str] = []
         if result.returncode == 0:
             for line in result.stdout.splitlines():

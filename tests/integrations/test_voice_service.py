@@ -58,13 +58,19 @@ class FakeTtsBackend:
     """Simple TTS double for service wiring tests."""
 
     def __init__(self) -> None:
-        self.calls: list[tuple[str, VoiceSettings]] = []
+        self.calls: list[tuple[str, VoiceSettings, threading.Event | None]] = []
 
     def is_available(self, settings: VoiceSettings) -> bool:
         return settings.tts_enabled
 
-    def speak(self, text: str, settings: VoiceSettings) -> bool:
-        self.calls.append((text, settings))
+    def speak(
+        self,
+        text: str,
+        settings: VoiceSettings,
+        *,
+        cancel_event: threading.Event | None = None,
+    ) -> bool:
+        self.calls.append((text, settings, cancel_event))
         return True
 
 
@@ -146,7 +152,19 @@ def test_voice_service_uses_injected_backends() -> None:
     assert command.intent is VoiceCommandIntent.CALL_CONTACT
     assert command.contact_name == "mom"
     assert spoken is True
-    assert tts_backend.calls == [("Calling mom", settings)]
+    assert tts_backend.calls == [("Calling mom", settings, None)]
+
+
+def test_voice_service_passes_cancel_event_to_tts_backend() -> None:
+    """Service-level TTS should propagate cancellation to concrete backends."""
+
+    settings = VoiceSettings()
+    tts_backend = FakeTtsBackend()
+    service = VoiceService(settings=settings, tts_backend=tts_backend)
+    cancel_event = threading.Event()
+
+    assert service.speak("A long answer", cancel_event=cancel_event) is True
+    assert tts_backend.calls == [("A long answer", settings, cancel_event)]
 
 
 def test_voice_service_release_resources_clears_stt_backend_cache() -> None:
@@ -550,6 +568,100 @@ def test_espeak_backend_builds_expected_command(monkeypatch) -> None:
     assert playback_calls == [Path(calls[0][2])]
 
 
+def test_espeak_backend_passes_cancel_event_to_playback(monkeypatch) -> None:
+    """Rendered local TTS playback should remain cancellable."""
+
+    cancel_event = threading.Event()
+
+    class _SuccessfulEspeakPopen:
+        def __init__(self, args: list[str], **_kwargs) -> None:
+            self.args = args
+            self.returncode = 0
+            Path(args[2]).write_bytes(b"RIFF")
+
+        def poll(self) -> int | None:
+            return self.returncode
+
+        def communicate(self) -> tuple[str, str]:
+            return "", ""
+
+    monkeypatch.setattr(
+        "yoyopod.backends.voice.tts.shutil.which",
+        lambda binary: "/usr/bin/espeak-ng" if binary == "espeak-ng" else None,
+    )
+    monkeypatch.setattr(
+        "yoyopod.backends.voice.tts.subprocess.Popen",
+        lambda args, **kwargs: _SuccessfulEspeakPopen(args, **kwargs),
+    )
+
+    backend = EspeakNgTextToSpeechBackend()
+    playback_cancel_events: list[threading.Event | None] = []
+    monkeypatch.setattr(
+        backend.output_player,
+        "play_wav",
+        lambda path, timeout_seconds=10.0, cancel_event=None: playback_cancel_events.append(
+            cancel_event
+        )
+        or True,
+    )
+
+    assert backend.speak("Calling mama", VoiceSettings(), cancel_event=cancel_event) is True
+    assert playback_cancel_events == [cancel_event]
+
+
+def test_espeak_backend_cancel_event_terminates_active_render(monkeypatch) -> None:
+    """Cancellable local TTS should stop an active espeak-ng render process."""
+
+    cancel_event = threading.Event()
+    popens: list[object] = []
+
+    class _BlockingEspeakPopen:
+        def __init__(self, args: list[str], **_kwargs) -> None:
+            self.args = args
+            self.returncode: int | None = None
+            self.terminated = False
+            self.killed = False
+            self.poll_calls = 0
+
+        def poll(self) -> int | None:
+            self.poll_calls += 1
+            if self.poll_calls == 1:
+                cancel_event.set()
+            return self.returncode
+
+        def terminate(self) -> None:
+            self.terminated = True
+            self.returncode = -15
+
+        def wait(self, timeout: float | None = None) -> int:
+            return self.returncode if self.returncode is not None else 0
+
+        def kill(self) -> None:
+            self.killed = True
+            self.returncode = -9
+
+        def communicate(self) -> tuple[str, str]:
+            return "", ""
+
+    def fake_popen(args: list[str], **kwargs) -> _BlockingEspeakPopen:
+        proc = _BlockingEspeakPopen(args, **kwargs)
+        popens.append(proc)
+        return proc
+
+    monkeypatch.setattr(
+        "yoyopod.backends.voice.tts.shutil.which",
+        lambda binary: "/usr/bin/espeak-ng" if binary == "espeak-ng" else None,
+    )
+    monkeypatch.setattr("yoyopod.backends.voice.tts.subprocess.Popen", fake_popen)
+
+    backend = EspeakNgTextToSpeechBackend()
+
+    assert backend.speak("Calling mama", VoiceSettings(), cancel_event=cancel_event) is False
+    assert len(popens) == 1
+    assert popens[0].args[:2] == ["espeak-ng", "-w"]
+    assert popens[0].terminated is True
+
+
 def test_alsa_output_player_prefers_usb_card_routes(monkeypatch, tmp_path) -> None:
     """Playback should prefer discovered non-HDMI ALSA devices."""
 
@@ -678,6 +790,98 @@ def test_alsa_output_player_does_not_retry_after_playback_timeout(monkeypatch, t
         ["aplay", "-L"],
         ["aplay", "-q", "-D", "playback", str(audio_path)],
     ]
+
+
+def test_alsa_output_player_cancel_event_terminates_active_aplay(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    """Cancellable playback should stop an active aplay process promptly."""
+
+    audio_path = tmp_path / "tone.wav"
+    audio_path.write_bytes(b"RIFF")
+    cancel_event = threading.Event()
+    popens: list[object] = []
+
+    class _BlockingAplayPopen:
+        def __init__(self, args: list[str], **_kwargs) -> None:
+            self.args = args
+            self.returncode: int | None = None
+            self.terminated = False
+            self.killed = False
+            self.stdout = b""
+            self.stderr = b""
+            self.poll_calls = 0
+
+        def poll(self) -> int | None:
+            self.poll_calls += 1
+            if self.poll_calls == 1:
+                cancel_event.set()
+            return self.returncode
+
+        def terminate(self) -> None:
+            self.terminated = True
+            self.returncode = -15
+
+        def wait(self, timeout: float | None = None) -> int:
+            return self.returncode if self.returncode is not None else 0
+
+        def kill(self) -> None:
+            self.killed = True
+            self.returncode = -9
+
+        def communicate(self) -> tuple[str, str]:
+            return "", ""
+
+    def fake_popen(args: list[str], **kwargs) -> _BlockingAplayPopen:
+        proc = _BlockingAplayPopen(args, **kwargs)
+        popens.append(proc)
+        return proc
+
+    def fake_run(args: list[str], **_kwargs) -> subprocess.CompletedProcess[str]:
+        assert args == ["aplay", "-L"]
+        return subprocess.CompletedProcess(args=args, returncode=0, stdout="playback\n", stderr="")
+
+    monkeypatch.setattr(
+        "yoyopod.backends.voice.output.shutil.which",
+        lambda binary: "/usr/bin/aplay" if binary == "aplay" else None,
+    )
+    monkeypatch.setattr("yoyopod.backends.voice.output.subprocess.run", fake_run)
+    monkeypatch.setattr("yoyopod.backends.voice.output.subprocess.Popen", fake_popen)
+
+    player = AlsaOutputPlayer()
+
+    assert player.play_wav(audio_path, device_id="playback", cancel_event=cancel_event) is False
+    assert len(popens) == 1
+    assert popens[0].args == ["aplay", "-q", "-D", "playback", str(audio_path)]
+    assert popens[0].terminated is True
+    assert popens[0].killed is False
+
+
+def test_alsa_output_player_pre_cancel_skips_device_scan(monkeypatch, tmp_path) -> None:
+    """Already-cancelled playback should not block on ALSA device discovery."""
+
+    audio_path = tmp_path / "tone.wav"
+    audio_path.write_bytes(b"RIFF")
+    cancel_event = threading.Event()
+    cancel_event.set()
+
+    monkeypatch.setattr(
+        "yoyopod.backends.voice.output.shutil.which",
+        lambda binary: "/usr/bin/aplay" if binary == "aplay" else None,
+    )
+
+    scan_calls: list[list[str]] = []
+
+    def fake_scan(args: list[str], **_kwargs) -> subprocess.CompletedProcess[str]:
+        scan_calls.append(args)
+        return subprocess.CompletedProcess(args=args, returncode=0, stdout="playback\n", stderr="")
+
+    monkeypatch.setattr("yoyopod.backends.voice.output.subprocess.run", fake_scan)
+    player = AlsaOutputPlayer()
+
+    assert player.play_wav(audio_path, cancel_event=cancel_event) is False
+    assert scan_calls == []
 
 
 def test_vosk_backend_requires_module_and_model(tmp_path, monkeypatch) -> None:

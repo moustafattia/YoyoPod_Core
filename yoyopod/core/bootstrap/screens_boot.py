@@ -317,6 +317,7 @@ class ScreensBoot:
                     ),
                 ),
                 voice_service_factory=voice_service_factory,
+                ask_client=voice_worker_client,
             )
             self.app.ask_screen = AskScreen(
                 display,

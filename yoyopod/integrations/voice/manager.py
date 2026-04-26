@@ -90,10 +90,15 @@ class VoiceManager:
 
         return match_voice_command(transcript)
 
-    def speak(self, text: str) -> bool:
+    def speak(
+        self,
+        text: str,
+        *,
+        cancel_event: threading.Event | None = None,
+    ) -> bool:
         """Speak text using the configured TTS backend."""
 
-        return self.tts_backend.speak(text, self.settings)
+        return self.tts_backend.speak(text, self.settings, cancel_event=cancel_event)
 
     def release_resources(self) -> None:
         """Drop backend-owned caches when this service is being replaced."""

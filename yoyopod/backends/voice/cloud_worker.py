@@ -62,6 +62,7 @@ class _PlayWav(Protocol):
         *,
         device_id: str | None = None,
         timeout_seconds: float = 6.0,
+        cancel_event: threading.Event | None = None,
     ) -> bool:
         """Play one WAV file and return whether playback succeeded."""
 
@@ -130,9 +131,17 @@ class CloudWorkerTextToSpeechBackend:
             and self._client.is_available
         )
 
-    def speak(self, text: str, settings: VoiceSettings) -> bool:
+    def speak(
+        self,
+        text: str,
+        settings: VoiceSettings,
+        *,
+        cancel_event: threading.Event | None = None,
+    ) -> bool:
         normalized_text = text.strip()
         if not normalized_text or not self.is_available(settings):
+            return False
+        if cancel_event is not None and cancel_event.is_set():
             return False
 
         synthesis_started_at = time.monotonic()
@@ -149,9 +158,14 @@ class CloudWorkerTextToSpeechBackend:
                 model=settings.cloud_worker_tts_model,
                 instructions=settings.cloud_worker_tts_instructions,
                 sample_rate_hz=settings.sample_rate_hz,
+                cancel_event=cancel_event,
             )
         except Exception as exc:
             logger.warning("Cloud worker speech synthesis failed: {}", exc)
+            return False
+
+        if cancel_event is not None and cancel_event.is_set():
+            _unlink_output_audio(result.audio_path)
             return False
 
         try:
@@ -172,11 +186,13 @@ class CloudWorkerTextToSpeechBackend:
             )
             try:
                 playback_started_at = time.monotonic()
-                played = self._play_wav(
-                    result.audio_path,
-                    device_id=settings.speaker_device_id,
-                    timeout_seconds=timeout_seconds,
-                )
+                play_kwargs: dict[str, object] = {
+                    "device_id": settings.speaker_device_id,
+                    "timeout_seconds": timeout_seconds,
+                }
+                if cancel_event is not None:
+                    play_kwargs["cancel_event"] = cancel_event
+                played = self._play_wav(result.audio_path, **play_kwargs)
             except Exception as exc:
                 logger.warning("Cloud worker speech playback failed: {}", exc)
                 return False

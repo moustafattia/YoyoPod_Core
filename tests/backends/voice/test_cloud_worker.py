@@ -109,6 +109,7 @@ class FakeVoiceWorkerClient:
                 "model": model,
                 "instructions": instructions,
                 "sample_rate_hz": sample_rate_hz,
+                "cancel_event": cancel_event,
             }
         )
         if self.exc is not None:
@@ -130,12 +131,14 @@ class FakeWavPlayer:
         *,
         device_id: str | None = None,
         timeout_seconds: float = 6.0,
+        cancel_event: threading.Event | None = None,
     ) -> bool:
         self.calls.append(
             {
                 "audio_path": audio_path,
                 "device_id": device_id,
                 "timeout_seconds": timeout_seconds,
+                "cancel_event": cancel_event,
             }
         )
         if self.exc is not None:
@@ -287,6 +290,7 @@ def test_tts_speak_delegates_to_client_and_plays_returned_wav() -> None:
             "model": "tts-test-model",
             "instructions": "Short handheld response.",
             "sample_rate_hz": 22050,
+            "cancel_event": None,
         }
     ]
     assert play_wav.calls == [
@@ -294,8 +298,26 @@ def test_tts_speak_delegates_to_client_and_plays_returned_wav() -> None:
             "audio_path": Path("answer.wav"),
             "device_id": None,
             "timeout_seconds": 6.0,
+            "cancel_event": None,
         }
     ]
+
+
+def test_tts_speak_passes_cancel_event_to_client_and_playback() -> None:
+    cancel_event = threading.Event()
+    client = FakeVoiceWorkerClient(
+        speech=VoiceWorkerSpeakResult(
+            audio_path=Path("answer.wav"),
+            format="wav",
+            sample_rate_hz=22050,
+        )
+    )
+    play_wav = FakeWavPlayer()
+    backend = CloudWorkerTextToSpeechBackend(client=client, play_wav=play_wav)
+
+    assert backend.speak("Hello from the cloud", cloud_settings(), cancel_event=cancel_event)
+    assert client.speak_calls[0]["cancel_event"] is cancel_event
+    assert play_wav.calls[0]["cancel_event"] is cancel_event
 
 
 def test_tts_removes_worker_wav_after_successful_playback(tmp_path: Path) -> None:
