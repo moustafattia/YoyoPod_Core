@@ -92,7 +92,7 @@ class CloudWorkerTextToSpeechBackend:
         play_wav: _PlayWav | None = None,
     ) -> None:
         self._client = client
-        self._play_wav = play_wav or AlsaOutputPlayer().play_wav
+        self._play_wav = play_wav if play_wav is not None else AlsaOutputPlayer().play_wav
 
     def is_available(self, settings: VoiceSettings) -> bool:
         return bool(settings.tts_enabled and settings.tts_backend == "cloud-worker")
@@ -130,12 +130,19 @@ class CloudWorkerTextToSpeechBackend:
                 return False
             return True
         finally:
-            if result.audio_path.exists():
-                result.audio_path.unlink(missing_ok=True)
+            _unlink_output_audio(result.audio_path)
 
 
 def _empty_transcript() -> VoiceTranscript:
     return VoiceTranscript(text="", confidence=0.0, is_final=True)
+
+
+def _unlink_output_audio(path: Path) -> None:
+    try:
+        if path.is_file():
+            path.unlink(missing_ok=True)
+    except OSError as exc:
+        logger.warning("Cloud worker speech output cleanup failed for {}: {}", path, exc)
 
 
 __all__ = [

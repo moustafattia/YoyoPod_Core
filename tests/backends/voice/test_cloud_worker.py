@@ -291,14 +291,43 @@ def test_tts_client_exception_returns_false() -> None:
     assert play_wav.calls == []
 
 
-def test_tts_playback_exception_returns_false() -> None:
-    client = FakeVoiceWorkerClient()
+def test_tts_playback_exception_returns_false_and_removes_worker_wav(tmp_path: Path) -> None:
+    audio_path = tmp_path / "answer.wav"
+    audio_path.write_bytes(b"RIFF")
+    client = FakeVoiceWorkerClient(
+        speech=VoiceWorkerSpeakResult(
+            audio_path=audio_path,
+            format="wav",
+            sample_rate_hz=22050,
+        )
+    )
     play_wav = FakeWavPlayer(exc=RuntimeError("playback failed"))
     backend = CloudWorkerTextToSpeechBackend(client=client, play_wav=play_wav)
 
     assert not backend.speak("Hello", cloud_settings())
     assert len(client.speak_calls) == 1
     assert len(play_wav.calls) == 1
+    assert not audio_path.exists()
+
+
+def test_tts_cleanup_does_not_raise_for_directory_output_path(tmp_path: Path) -> None:
+    audio_path = tmp_path / "worker-output"
+    audio_path.mkdir()
+    client = FakeVoiceWorkerClient(
+        speech=VoiceWorkerSpeakResult(
+            audio_path=audio_path,
+            format="wav",
+            sample_rate_hz=22050,
+        )
+    )
+    backend = CloudWorkerTextToSpeechBackend(
+        client=client,
+        play_wav=FakeWavPlayer(result=False),
+    )
+
+    assert not backend.speak("Hello", cloud_settings())
+    assert audio_path.exists()
+    assert audio_path.is_dir()
 
 
 def test_tts_passes_configured_speaker_device_to_playback() -> None:
