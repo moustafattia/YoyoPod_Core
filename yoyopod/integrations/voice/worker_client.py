@@ -258,7 +258,10 @@ class VoiceWorkerClient:
             else:
                 return
         except Exception as exc:
-            self._complete_once(pending, error=exc)
+            self._complete_once(
+                pending,
+                error=VoiceWorkerUnavailable(f"malformed voice worker result: {exc}"),
+            )
             return
         self._complete_once(pending, result=result)
 

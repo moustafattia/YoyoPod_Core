@@ -420,6 +420,95 @@ def test_non_matching_expected_result_type_is_ignored() -> None:
     assert client.pending_count == 0
 
 
+def test_malformed_transcribe_result_raises_unavailable_and_cleans_pending() -> None:
+    scheduler = _Scheduler()
+    supervisor = _Supervisor()
+    client = VoiceWorkerClient(
+        scheduler=scheduler,
+        worker_supervisor=supervisor,
+        request_timeout_seconds=0.25,
+    )
+    errors: list[BaseException] = []
+
+    thread = threading.Thread(
+        target=lambda: _capture_error(
+            errors,
+            lambda: client.transcribe(
+                audio_path=Path("/tmp/input.wav"),
+                sample_rate_hz=16000,
+                language="en",
+                max_audio_seconds=5.0,
+            ),
+        )
+    )
+    thread.start()
+
+    _wait_until(lambda: len(scheduler.callbacks) == 1)
+    scheduler.drain()
+
+    client.handle_worker_message(
+        WorkerMessageReceivedEvent(
+            domain="voice",
+            kind="result",
+            type="voice.transcribe.result",
+            request_id=str(supervisor.requests[0]["request_id"]),
+            payload={"confidence": 0.8, "is_final": True},
+        )
+    )
+    thread.join(timeout=1.0)
+
+    assert not thread.is_alive()
+    assert len(errors) == 1
+    assert isinstance(errors[0], VoiceWorkerUnavailable)
+    assert "malformed voice worker result" in str(errors[0])
+    assert client.pending_count == 0
+
+
+def test_malformed_speak_result_raises_unavailable_and_cleans_pending() -> None:
+    scheduler = _Scheduler()
+    supervisor = _Supervisor()
+    client = VoiceWorkerClient(
+        scheduler=scheduler,
+        worker_supervisor=supervisor,
+        request_timeout_seconds=0.25,
+    )
+    errors: list[BaseException] = []
+
+    thread = threading.Thread(
+        target=lambda: _capture_error(
+            errors,
+            lambda: client.speak(
+                text="Playing music",
+                voice="alloy",
+                model="gpt-4o-mini-tts",
+                instructions="Speak clearly.",
+                sample_rate_hz=16000,
+            ),
+        )
+    )
+    thread.start()
+
+    _wait_until(lambda: len(scheduler.callbacks) == 1)
+    scheduler.drain()
+
+    client.handle_worker_message(
+        WorkerMessageReceivedEvent(
+            domain="voice",
+            kind="result",
+            type="voice.speak.result",
+            request_id=str(supervisor.requests[0]["request_id"]),
+            payload={"format": "wav", "sample_rate_hz": 16000},
+        )
+    )
+    thread.join(timeout=1.0)
+
+    assert not thread.is_alive()
+    assert len(errors) == 1
+    assert isinstance(errors[0], VoiceWorkerUnavailable)
+    assert "malformed voice worker result" in str(errors[0])
+    assert client.pending_count == 0
+
+
 def test_unavailable_send_result_raises_unavailable_and_cleans_pending() -> None:
     scheduler = _Scheduler()
     supervisor = _Supervisor()
