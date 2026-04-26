@@ -115,19 +115,23 @@ class CloudWorkerTextToSpeechBackend:
             return False
 
         try:
-            played = self._play_wav(
-                result.audio_path,
-                device_id=settings.speaker_device_id,
-                timeout_seconds=6.0,
-            )
-        except Exception as exc:
-            logger.warning("Cloud worker speech playback failed: {}", exc)
-            return False
+            try:
+                played = self._play_wav(
+                    result.audio_path,
+                    device_id=settings.speaker_device_id,
+                    timeout_seconds=6.0,
+                )
+            except Exception as exc:
+                logger.warning("Cloud worker speech playback failed: {}", exc)
+                return False
 
-        if not played:
-            logger.warning("Cloud worker speech playback returned false")
-            return False
-        return True
+            if not played:
+                logger.warning("Cloud worker speech playback returned false")
+                return False
+            return True
+        finally:
+            if result.audio_path.exists():
+                result.audio_path.unlink(missing_ok=True)
 
 
 def _empty_transcript() -> VoiceTranscript:

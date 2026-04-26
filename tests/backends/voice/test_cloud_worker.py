@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
-from typing import Any
+from typing import Any, NotRequired, TypedDict, Unpack
 
 from yoyopod.backends.voice import (
     CloudWorkerSpeechToTextBackend,
@@ -14,6 +15,21 @@ from yoyopod.integrations.voice.worker_contract import (
     VoiceWorkerSpeakResult,
     VoiceWorkerTranscribeResult,
 )
+
+
+class VoiceSettingsOverrides(TypedDict):
+    """Typed overrides accepted by the cloud-settings helper."""
+
+    stt_enabled: NotRequired[bool]
+    tts_enabled: NotRequired[bool]
+    stt_backend: NotRequired[str]
+    tts_backend: NotRequired[str]
+    speaker_device_id: NotRequired[str | None]
+    sample_rate_hz: NotRequired[int]
+    cloud_worker_max_audio_seconds: NotRequired[float]
+    cloud_worker_tts_model: NotRequired[str]
+    cloud_worker_tts_voice: NotRequired[str]
+    cloud_worker_tts_instructions: NotRequired[str]
 
 
 class FakeVoiceWorkerClient:
@@ -110,18 +126,17 @@ class FakeWavPlayer:
         return self.result
 
 
-def cloud_settings(**overrides: object) -> VoiceSettings:
-    values = {
-        "stt_backend": "cloud-worker",
-        "tts_backend": "cloud-worker",
-        "cloud_worker_max_audio_seconds": 11.5,
-        "cloud_worker_tts_model": "tts-test-model",
-        "cloud_worker_tts_voice": "verse",
-        "cloud_worker_tts_instructions": "Short handheld response.",
-        "sample_rate_hz": 22050,
-    }
-    values.update(overrides)
-    return VoiceSettings(**values)
+def cloud_settings(**overrides: Unpack[VoiceSettingsOverrides]) -> VoiceSettings:
+    defaults = VoiceSettings(
+        stt_backend="cloud-worker",
+        tts_backend="cloud-worker",
+        cloud_worker_max_audio_seconds=11.5,
+        cloud_worker_tts_model="tts-test-model",
+        cloud_worker_tts_voice="verse",
+        cloud_worker_tts_instructions="Short handheld response.",
+        sample_rate_hz=22050,
+    )
+    return replace(defaults, **overrides)
 
 
 def empty_final_transcript() -> VoiceTranscript:
@@ -219,6 +234,41 @@ def test_tts_speak_delegates_to_client_and_plays_returned_wav() -> None:
             "timeout_seconds": 6.0,
         }
     ]
+
+
+def test_tts_removes_worker_wav_after_successful_playback(tmp_path: Path) -> None:
+    audio_path = tmp_path / "answer.wav"
+    audio_path.write_bytes(b"RIFF")
+    client = FakeVoiceWorkerClient(
+        speech=VoiceWorkerSpeakResult(
+            audio_path=audio_path,
+            format="wav",
+            sample_rate_hz=22050,
+        )
+    )
+    backend = CloudWorkerTextToSpeechBackend(client=client, play_wav=FakeWavPlayer())
+
+    assert backend.speak("Hello from the cloud", cloud_settings())
+    assert not audio_path.exists()
+
+
+def test_tts_removes_worker_wav_after_failed_playback(tmp_path: Path) -> None:
+    audio_path = tmp_path / "answer.wav"
+    audio_path.write_bytes(b"RIFF")
+    client = FakeVoiceWorkerClient(
+        speech=VoiceWorkerSpeakResult(
+            audio_path=audio_path,
+            format="wav",
+            sample_rate_hz=22050,
+        )
+    )
+    backend = CloudWorkerTextToSpeechBackend(
+        client=client,
+        play_wav=FakeWavPlayer(result=False),
+    )
+
+    assert not backend.speak("Hello from the cloud", cloud_settings())
+    assert not audio_path.exists()
 
 
 def test_tts_empty_text_returns_false_without_calling_client() -> None:
