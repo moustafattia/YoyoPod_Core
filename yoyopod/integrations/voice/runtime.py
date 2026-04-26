@@ -100,8 +100,8 @@ class VoiceRuntimeCoordinator:
 
         if self._state.capture_in_flight:
             return
-        voice_service = self._voice_service()
-        readiness_error = self._prepare_capture(voice_service=voice_service)
+        voice_service, settings = self._voice_service_with_settings()
+        readiness_error = self._prepare_capture(voice_service=voice_service, settings=settings)
         if readiness_error is not None:
             self._apply_outcome(readiness_error)
             return
@@ -129,8 +129,12 @@ class VoiceRuntimeCoordinator:
     def begin_ptt_capture(self) -> None:
         """Start an open-ended PTT capture that ends on release."""
 
-        voice_service = self._voice_service()
-        readiness_error = self._prepare_capture(voice_service=voice_service, ptt_mode=True)
+        voice_service, settings = self._voice_service_with_settings()
+        readiness_error = self._prepare_capture(
+            voice_service=voice_service,
+            settings=settings,
+            ptt_mode=True,
+        )
         if readiness_error is not None:
             self._apply_outcome(readiness_error)
             return
@@ -228,6 +232,7 @@ class VoiceRuntimeCoordinator:
         self,
         *,
         voice_service: VoiceManager,
+        settings: VoiceSettings,
         ptt_mode: bool = False,
     ) -> VoiceCommandOutcome | None:
         if self._context is not None and not self._context.voice.commands_enabled:
@@ -258,7 +263,6 @@ class VoiceRuntimeCoordinator:
             )
             return VoiceCommandOutcome("Mic Unavailable", body, should_speak=False)
         if not voice_service.stt_available():
-            settings = self.settings()
             if settings.mode == "cloud":
                 return VoiceCommandOutcome(
                     "Speech Offline",
@@ -273,16 +277,19 @@ class VoiceRuntimeCoordinator:
         return None
 
     def _voice_service(self) -> VoiceManager:
+        return self._voice_service_with_settings()[0]
+
+    def _voice_service_with_settings(self) -> tuple[VoiceManager, VoiceSettings]:
         settings = self._settings_resolver.current()
         if self._voice_service_factory is not None:
-            return self._voice_service_factory(settings)
+            return self._voice_service_factory(settings), settings
         if self._cached_voice_service is None:
             self._cached_voice_service = VoiceManager(settings=settings)
-            return self._cached_voice_service
+            return self._cached_voice_service, settings
         if self._cached_voice_service.settings != settings:
             self._cached_voice_service.release_resources()
             self._cached_voice_service = VoiceManager(settings=settings)
-        return self._cached_voice_service
+        return self._cached_voice_service, settings
 
     def _next_generation(self) -> int:
         self._state.generation += 1

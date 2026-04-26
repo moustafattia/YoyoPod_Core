@@ -324,16 +324,22 @@ def test_listening_cycle_uses_cloud_worker_transcript(tmp_path: Path) -> None:
         def speak(self, _text: str) -> bool:
             return False
 
+    class _CommandExecutor:
+        def __init__(self) -> None:
+            self.transcripts: list[str] = []
+
+        def execute(self, transcript: str) -> VoiceCommandOutcome:
+            self.transcripts.append(transcript)
+            return VoiceCommandOutcome("Done", "play music", should_speak=False)
+
+    command_executor = _CommandExecutor()
     coordinator = VoiceRuntimeCoordinator(
         context=None,
         settings_resolver=VoiceSettingsResolver(
             context=None,
             settings_provider=lambda: VoiceSettings(mode="cloud"),
         ),
-        command_executor=VoiceCommandExecutor(
-            context=None,
-            play_music_action=lambda: True,
-        ),
+        command_executor=command_executor,
         voice_service_factory=lambda _settings: _WorkerLikeVoiceService(),
         output_player=_FakeOutputPlayer(),
     )
@@ -346,11 +352,9 @@ def test_listening_cycle_uses_cloud_worker_transcript(tmp_path: Path) -> None:
     coordinator.begin_listening(async_capture=False)
 
     assert outcomes
-    assert outcomes[-1] == VoiceCommandOutcome(
-        "Playing",
-        "Starting local music.",
-        route_name="shuffle_started",
-    )
+    assert command_executor.transcripts == ["play music"]
+    assert outcomes[-1] == VoiceCommandOutcome("Done", "play music", should_speak=False)
+    assert coordinator._tts_thread is None
     assert not audio_path.exists()
 
 
@@ -406,6 +410,51 @@ def test_cloud_voice_unavailable_keeps_local_feedback_message() -> None:
     assert outcomes
     assert coordinator.state.headline == "Speech Offline"
     assert "Local controls still work" in coordinator.state.body
+
+
+def test_cloud_voice_unavailable_uses_service_settings_snapshot() -> None:
+    class _VoiceService:
+        def __init__(self, settings: VoiceSettings) -> None:
+            self.settings = settings
+
+        def capture_available(self) -> bool:
+            return True
+
+        def stt_available(self) -> bool:
+            return False
+
+        def tts_available(self) -> bool:
+            return False
+
+    settings_calls = 0
+    service_settings: list[VoiceSettings] = []
+
+    def settings_provider() -> VoiceSettings:
+        nonlocal settings_calls
+        settings_calls += 1
+        return VoiceSettings(mode="cloud" if settings_calls == 1 else "local")
+
+    def voice_service_factory(settings: VoiceSettings) -> _VoiceService:
+        service_settings.append(settings)
+        return _VoiceService(settings)
+
+    coordinator = VoiceRuntimeCoordinator(
+        context=None,
+        settings_resolver=VoiceSettingsResolver(
+            context=None,
+            settings_provider=settings_provider,
+        ),
+        command_executor=VoiceCommandExecutor(context=None),
+        voice_service_factory=voice_service_factory,
+        output_player=_FakeOutputPlayer(),
+    )
+
+    coordinator.begin_listening(async_capture=False)
+
+    assert settings_calls == 1
+    assert service_settings == [VoiceSettings(mode="cloud")]
+    assert coordinator.state.headline == "Speech Offline"
+    assert "Cloud speech is unavailable" in coordinator.state.body
 
 
 def test_voice_runtime_coordinator_ptt_no_audio_resolves_to_no_speech() -> None:
