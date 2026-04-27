@@ -675,16 +675,6 @@ def test_voice_trace_last_ignores_corrupt_lines(tmp_path: Path) -> None:
     assert result.exit_code == 0, result.output
     assert "turn-1" in result.output
     assert "not-json" not in result.output
-
-
-def test_voice_dictionary_validate_default_missing_uses_builtins(monkeypatch, tmp_path: Path) -> None:
-    monkeypatch.chdir(tmp_path)
-
-    runner = CliRunner()
-    result = runner.invoke(app, ["voice", "dictionary", "validate"])
-
-    assert result.exit_code == 0, result.output
-    assert "built-ins only" in result.output
 ```
 
 In `tests/cli/test_yoyopod_cli_docgen.py`, add:
@@ -819,7 +809,7 @@ app.add_typer(_voice.app, name="voice")
 Run:
 
 ```bash
-uv run pytest tests/cli/test_yoyopod_cli_voice.py::test_voice_group_is_registered tests/cli/test_yoyopod_cli_voice.py::test_voice_trace_last_prints_recent_rows tests/cli/test_yoyopod_cli_voice.py::test_voice_trace_last_tolerates_missing_file tests/cli/test_yoyopod_cli_voice.py::test_voice_trace_last_ignores_corrupt_lines tests/cli/test_yoyopod_cli_voice.py::test_voice_dictionary_validate_default_missing_uses_builtins -q
+uv run pytest tests/cli/test_yoyopod_cli_voice.py::test_voice_group_is_registered tests/cli/test_yoyopod_cli_voice.py::test_voice_trace_last_prints_recent_rows tests/cli/test_yoyopod_cli_voice.py::test_voice_trace_last_tolerates_missing_file tests/cli/test_yoyopod_cli_voice.py::test_voice_trace_last_ignores_corrupt_lines -q
 ```
 
 Expected: PASS for trace CLI tests. The dictionary command may still fail when invoked because the validator is Task 3.
@@ -1319,6 +1309,16 @@ def test_voice_dictionary_validate_strict_fails_on_warnings(tmp_path: Path) -> N
 
     assert result.exit_code == 1
     assert "WARN" in result.output
+
+
+def test_voice_dictionary_validate_default_missing_uses_builtins(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.chdir(tmp_path)
+
+    runner = CliRunner()
+    result = runner.invoke(app, ["voice", "dictionary", "validate"])
+
+    assert result.exit_code == 0, result.output
+    assert "built-ins only" in result.output
 ```
 
 - [ ] **Step 6: Run dictionary CLI tests**
