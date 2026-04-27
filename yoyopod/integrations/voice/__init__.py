@@ -50,6 +50,11 @@ if TYPE_CHECKING:
         VoiceTranscript,
     )
     from yoyopod.integrations.voice.runtime import VoiceRuntimeCoordinator
+    from yoyopod.integrations.voice.router import (
+        VoiceRouteDecision,
+        VoiceRouteKind,
+        VoiceRouter,
+    )
     from yoyopod.integrations.voice.settings import VoiceCommandOutcome, VoiceSettingsResolver
     from yoyopod.integrations.voice.worker_client import (
         VoiceWorkerClient,
@@ -90,6 +95,9 @@ _PUBLIC_EXPORTS = {
     "VoiceCommandExecutor": ("yoyopod.integrations.voice.executor", "VoiceCommandExecutor"),
     "VoiceManager": ("yoyopod.integrations.voice.manager", "VoiceManager"),
     "VoiceRuntimeCoordinator": ("yoyopod.integrations.voice.runtime", "VoiceRuntimeCoordinator"),
+    "VoiceRouteDecision": ("yoyopod.integrations.voice.router", "VoiceRouteDecision"),
+    "VoiceRouteKind": ("yoyopod.integrations.voice.router", "VoiceRouteKind"),
+    "VoiceRouter": ("yoyopod.integrations.voice.router", "VoiceRouter"),
     "VoiceService": ("yoyopod.integrations.voice.manager", "VoiceService"),
     "VoiceSettings": ("yoyopod.integrations.voice.models", "VoiceSettings"),
     "VoiceSettingsResolver": ("yoyopod.integrations.voice.settings", "VoiceSettingsResolver"),
@@ -176,6 +184,9 @@ __all__ = [
     "VoiceCommandExecutor",
     "VoiceManager",
     "VoiceRuntimeCoordinator",
+    "VoiceRouteDecision",
+    "VoiceRouteKind",
+    "VoiceRouter",
     "VoiceService",
     "VoiceSettings",
     "VoiceSettingsResolver",
