@@ -196,6 +196,24 @@ class SidecarSupervisor:
             reader_thread.join(timeout=timeout_seconds)
 
         with self._lock:
+            # ``_LoopbackThreadRunner.terminate``/``kill`` are no-ops because
+            # CPython does not expose force-stop for a thread. If the loopback
+            # target refused to honor ``Shutdown`` and the closed pipe, the
+            # runner is still alive here. Mark the supervisor as ``"failed"``
+            # so subsequent ``start()`` calls raise instead of leaking a
+            # parallel runner alongside the stuck one.
+            if process is not None and process.is_alive():
+                self._state = "failed"
+                self._permanent_failure_reason = (
+                    f"sidecar runner {process.name!r} did not exit on stop; "
+                    "force-termination is unavailable for the loopback runner"
+                )
+                logger.error("Sidecar permanently failed: {}", self._permanent_failure_reason)
+                self._parent_conn = None
+                self._reader_thread = None
+                self._restart_timer = None
+                return
+
             self._process = None
             self._parent_conn = None
             self._reader_thread = None

@@ -58,6 +58,32 @@ def _exit_after_first_command_loopback_target(conn: Connection) -> None:
         pass
 
 
+# Released by the test that exercises the "stuck loopback target" path so the
+# rogue thread can finally exit during teardown. Module-level so the target
+# function below can reference it without closure capture (which would defeat
+# pickling in the unlikely case this target is reused with ``spawn``).
+_STUCK_LOOPBACK_RELEASE = threading.Event()
+
+
+def _stuck_loopback_target(conn: Connection) -> None:
+    """Loopback target that completes the handshake then ignores Shutdown.
+
+    The supervisor's stop path will send Shutdown, close the pipe, call
+    ``terminate`` and ``kill`` (both no-ops for the loopback runner), and
+    join with a tight timeout. Each of those steps is ineffective here:
+    this target neither reads the pipe nor watches its own ``conn``, so it
+    only exits when the test sets ``_STUCK_LOOPBACK_RELEASE``.
+    """
+
+    send_message(conn, Hello(version=PROTOCOL_VERSION))
+    try:
+        conn.recv_bytes()
+    except (BrokenPipeError, EOFError, OSError):
+        return
+    send_message(conn, Ready())
+    _STUCK_LOOPBACK_RELEASE.wait(timeout=10.0)
+
+
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
@@ -245,6 +271,47 @@ def test_loopback_uses_thread_runner_not_subprocess(
         assert isinstance(supervisor._process, threading.Thread)
     finally:
         supervisor.stop(timeout_seconds=LOOPBACK_BUDGET_SECONDS)
+
+
+def test_loopback_stop_marks_failed_when_runner_will_not_exit(
+    event_handler: Callable[[Any], None],
+) -> None:
+    """Stop must not claim "stopped" if the loopback thread is still alive.
+
+    ``_LoopbackThreadRunner.terminate``/``kill`` are no-ops because Python
+    cannot force-kill a thread. If the target ignores Shutdown and the
+    closed pipe, the supervisor must surface the stuck runner as a
+    permanent failure so subsequent ``start()`` calls cannot leak a
+    parallel runner alongside the original.
+    """
+
+    _STUCK_LOOPBACK_RELEASE.clear()
+    supervisor = SidecarSupervisor(
+        on_event=event_handler,
+        sidecar_target=_stuck_loopback_target,
+        use_loopback=True,
+        handshake_timeout_seconds=LOOPBACK_BUDGET_SECONDS,
+    )
+    try:
+        supervisor.start()
+        assert supervisor.wait_for_state("running", timeout_seconds=LOOPBACK_BUDGET_SECONDS)
+
+        # Stop with a tight timeout — the target ignores Shutdown so all join
+        # attempts will time out within ~0.3s combined.
+        supervisor.stop(timeout_seconds=0.1)
+
+        snapshot = supervisor.state_snapshot()
+        assert snapshot.state == "failed", snapshot
+        assert snapshot.permanent_failure_reason is not None
+        assert "did not exit" in snapshot.permanent_failure_reason
+
+        # And start() must refuse to launch a parallel runner alongside the stuck one.
+        with pytest.raises(RuntimeError, match="permanently failed"):
+            supervisor.start()
+    finally:
+        # Release the stuck thread so it can actually exit and the test process
+        # does not carry a leaked thread into subsequent tests.
+        _STUCK_LOOPBACK_RELEASE.set()
 
 
 def test_loopback_handshake_completes_faster_than_process_budget(
