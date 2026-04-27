@@ -21,6 +21,21 @@ DEFAULT_CLOUD_TTS_INSTRUCTIONS = (
 
 
 @dataclass(slots=True)
+class VoiceCommandRoutingConfig:
+    """Command-first routing policy for YoYo voice interactions."""
+
+    mode: str = config_value(default="command_first", env="YOYOPOD_VOICE_ROUTING_MODE")
+    ask_fallback_enabled: bool = config_value(
+        default=True,
+        env="YOYOPOD_VOICE_ASK_FALLBACK_ENABLED",
+    )
+    fallback_min_command_confidence: float = config_value(
+        default=0.82,
+        env="YOYOPOD_VOICE_COMMAND_CONFIDENCE",
+    )
+
+
+@dataclass(slots=True)
 class VoiceAssistantConfig:
     """Local voice-command and spoken-response policy."""
 
@@ -44,6 +59,17 @@ class VoiceAssistantConfig:
     sample_rate_hz: int = config_value(default=16000, env="YOYOPOD_VOICE_SAMPLE_RATE_HZ")
     tts_rate_wpm: int = config_value(default=155, env="YOYOPOD_TTS_RATE_WPM")
     tts_voice: str = config_value(default="en", env="YOYOPOD_TTS_VOICE")
+    activation_prefixes: list[str] = config_value(
+        default_factory=lambda: ["yoyo", "hey yoyo"],
+        env="YOYOPOD_VOICE_ACTIVATION_PREFIXES",
+    )
+    command_dictionary_path: str = config_value(
+        default="data/voice/commands.yaml",
+        env="YOYOPOD_VOICE_COMMAND_DICTIONARY",
+    )
+    command_routing: VoiceCommandRoutingConfig = config_value(
+        default_factory=VoiceCommandRoutingConfig
+    )
 
 
 @dataclass(slots=True)

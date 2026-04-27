@@ -42,6 +42,11 @@ class VoiceSettings:
     record_seconds: int = 4
     tts_rate_wpm: int = 155
     tts_voice: str = "en"
+    activation_prefixes: tuple[str, ...] = ("yoyo", "hey yoyo")
+    command_dictionary_path: str = "data/voice/commands.yaml"
+    command_routing_mode: str = "command_first"
+    ask_fallback_enabled: bool = True
+    fallback_min_command_confidence: float = 0.82
     cloud_worker_enabled: bool = False
     cloud_worker_domain: str = "voice"
     cloud_worker_provider: str = "mock"

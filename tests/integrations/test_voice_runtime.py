@@ -76,6 +76,13 @@ class _FakeConfigManager:
                 record_seconds=6,
                 tts_rate_wpm=180,
                 tts_voice="en-us",
+                activation_prefixes=["yoyo", "hey yoyo"],
+                command_dictionary_path="data/voice/commands.yaml",
+                command_routing=SimpleNamespace(
+                    mode="command_first",
+                    ask_fallback_enabled=True,
+                    fallback_min_command_confidence=0.82,
+                ),
             ),
             audio=SimpleNamespace(
                 speaker_device_id="",
@@ -1427,6 +1434,60 @@ def test_voice_settings_resolver_includes_cloud_worker_config() -> None:
     assert settings.cloud_worker_ask_max_response_chars == 222
     assert settings.cloud_worker_ask_instructions == "Answer safely."
     assert settings.local_feedback_enabled is False
+
+
+def test_voice_settings_resolver_includes_command_routing_config() -> None:
+    config_manager = _FakeConfigManager([])
+    voice_cfg = config_manager.get_voice_settings()
+    voice_cfg.assistant.activation_prefixes = ["yoyo", "hey yoyo"]
+    voice_cfg.assistant.command_dictionary_path = "data/voice/commands.yaml"
+    voice_cfg.assistant.command_routing = SimpleNamespace(
+        mode="command_first",
+        ask_fallback_enabled=False,
+        fallback_min_command_confidence=0.91,
+    )
+
+    settings = VoiceSettingsResolver(
+        context=None,
+        config_manager=config_manager,
+    ).defaults()
+
+    assert settings.activation_prefixes == ("yoyo", "hey yoyo")
+    assert settings.command_dictionary_path == "data/voice/commands.yaml"
+    assert settings.command_routing_mode == "command_first"
+    assert settings.ask_fallback_enabled is False
+    assert settings.fallback_min_command_confidence == 0.91
+
+
+def test_voice_settings_resolver_falls_back_for_empty_routing_config() -> None:
+    default_settings = VoiceSettings()
+    config_manager = _FakeConfigManager([])
+    voice_cfg = config_manager.get_voice_settings()
+
+    voice_cfg.assistant.activation_prefixes = None
+    voice_cfg.assistant.command_routing = None
+
+    null_settings = VoiceSettingsResolver(
+        context=None,
+        config_manager=config_manager,
+    ).defaults()
+
+    assert null_settings.activation_prefixes == default_settings.activation_prefixes
+    assert null_settings.command_routing_mode == default_settings.command_routing_mode
+    assert null_settings.ask_fallback_enabled == default_settings.ask_fallback_enabled
+    assert (
+        null_settings.fallback_min_command_confidence
+        == default_settings.fallback_min_command_confidence
+    )
+
+    voice_cfg.assistant.activation_prefixes = []
+
+    empty_settings = VoiceSettingsResolver(
+        context=None,
+        config_manager=config_manager,
+    ).defaults()
+
+    assert empty_settings.activation_prefixes == default_settings.activation_prefixes
 
 
 def test_spoken_outcome_does_not_block_main_thread() -> None:

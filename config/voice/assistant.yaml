@@ -15,6 +15,14 @@ assistant:
   sample_rate_hz: 16000
   tts_rate_wpm: 155
   tts_voice: "en"
+  activation_prefixes:
+    - "yoyo"
+    - "hey yoyo"
+  command_dictionary_path: "data/voice/commands.yaml"
+  command_routing:
+    mode: "command_first"
+    ask_fallback_enabled: true
+    fallback_min_command_confidence: 0.82
 
 worker:
   enabled: false

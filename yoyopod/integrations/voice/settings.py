@@ -135,6 +135,18 @@ class VoiceSettingsResolver:
         if callable(get_default_output_volume):
             output_volume = int(get_default_output_volume())
 
+        routing_cfg = getattr(assistant_cfg, "command_routing", None)
+        activation_prefix_values = getattr(
+            assistant_cfg,
+            "activation_prefixes",
+            defaults.activation_prefixes,
+        )
+        activation_prefixes = tuple(
+            str(prefix).strip()
+            for prefix in (activation_prefix_values or ())
+            if str(prefix).strip()
+        )
+
         return VoiceSettings(
             mode=getattr(assistant_cfg, "mode", defaults.mode),
             commands_enabled=getattr(assistant_cfg, "commands_enabled", defaults.commands_enabled),
@@ -169,6 +181,27 @@ class VoiceSettingsResolver:
             record_seconds=getattr(assistant_cfg, "record_seconds", defaults.record_seconds),
             tts_rate_wpm=getattr(assistant_cfg, "tts_rate_wpm", defaults.tts_rate_wpm),
             tts_voice=getattr(assistant_cfg, "tts_voice", defaults.tts_voice),
+            activation_prefixes=activation_prefixes or defaults.activation_prefixes,
+            command_dictionary_path=getattr(
+                assistant_cfg,
+                "command_dictionary_path",
+                defaults.command_dictionary_path,
+            ),
+            command_routing_mode=getattr(
+                routing_cfg,
+                "mode",
+                defaults.command_routing_mode,
+            ),
+            ask_fallback_enabled=getattr(
+                routing_cfg,
+                "ask_fallback_enabled",
+                defaults.ask_fallback_enabled,
+            ),
+            fallback_min_command_confidence=getattr(
+                routing_cfg,
+                "fallback_min_command_confidence",
+                defaults.fallback_min_command_confidence,
+            ),
             cloud_worker_enabled=getattr(
                 worker_cfg,
                 "enabled",
