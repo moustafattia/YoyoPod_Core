@@ -431,6 +431,12 @@ class SidecarBackendAdapter:
                 return
 
             if isinstance(event, BackendStopped):
+                # Treat as terminal for any in-flight call: the backend has
+                # gone down (typically because ``iterate()`` failed and the
+                # native shim is gone), so the tracked ``_current_call_id``
+                # would otherwise block future ``Dial`` commands with
+                # ``call_in_progress`` even after a recovery Configure.
+                self._reset_call_state()
                 self._safe_send(
                     Error(
                         code="backend_stopped",

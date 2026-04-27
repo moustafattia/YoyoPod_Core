@@ -674,6 +674,42 @@ def test_backend_stopped_emits_error_event(
     )
 
 
+def test_backend_stopped_clears_active_call_id(
+    adapter: SidecarBackendAdapter,
+    parent_conn: Connection,
+    mock_backend: MockVoIPBackend,
+) -> None:
+    """``BackendStopped`` mid-call must clear the tracked call id.
+
+    Codex follow-up review on #389 (P1): if the backend dies during an
+    active call (e.g. liblinphone's ``iterate()`` raises and emits
+    ``BackendStopped``), the stale ``_current_call_id`` would otherwise
+    block subsequent ``Dial`` commands with ``call_in_progress`` even
+    after a recovery ``Configure`` swaps in a fresh backend.
+    """
+
+    adapter.handle_command(Configure(config=_config_dict()))
+    adapter.handle_command(Register(cmd_id=1))
+    _drain(parent_conn)
+
+    mock_backend.emit(IncomingCallDetected(caller_address="sip:bob@example.com"))
+    _drain(parent_conn)
+    assert adapter._current_call_id is not None
+
+    mock_backend.emit(BackendStopped(reason="iterate failed"))
+    _drain(parent_conn)
+    assert adapter._current_call_id is None
+
+    # And a fresh Configure + Register + Dial cycle is no longer blocked.
+    adapter.handle_command(Configure(config=_config_dict()))
+    adapter.handle_command(Register(cmd_id=2))
+    _drain(parent_conn)
+    adapter.handle_command(Dial(uri="sip:carol@example.com", cmd_id=3))
+    events = _drain(parent_conn)
+    errors = [event for event in events if isinstance(event, Error)]
+    assert not any(error.code == "call_in_progress" for error in errors), errors
+
+
 # ---------------------------------------------------------------------------
 # Ping
 # ---------------------------------------------------------------------------
