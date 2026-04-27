@@ -838,6 +838,7 @@ def test_ask_screen_applies_local_device_actions() -> None:
     """Voice commands should update mic and volume state through local hooks."""
 
     context = AppContext()
+    context.settings["max_volume"] = 55
     volume_up_calls: list[int] = []
     voip_manager = _FakeVoipManager()
     screen = AskScreen(
@@ -850,8 +851,8 @@ def test_ask_screen_applies_local_device_actions() -> None:
     )
 
     screen.on_voice_command({"transcript": "volume up"})
-    assert volume_up_calls == [5]
-    assert context.voice.last_spoken_text == "Volume is 55."
+    assert volume_up_calls == [1]
+    assert context.voice.last_spoken_text == "Volume is 10 out of 10."
 
     screen.on_voice_command({"transcript": "mute mic"})
     assert context.voice.mic_muted is True
@@ -868,6 +869,7 @@ def test_ask_screen_can_resolve_dependencies_from_app() -> None:
     """AskScreen should resolve call, music, and volume hooks from the owning app seam."""
 
     context = AppContext()
+    context.settings["max_volume"] = 55
     volume_up_calls: list[int] = []
     voip_manager = _FakeVoipManager()
     app = SimpleNamespace(
@@ -898,8 +900,8 @@ def test_ask_screen_can_resolve_dependencies_from_app() -> None:
     assert screen.consume_navigation_request() == NavigationRequest.route("shuffle_started")
 
     screen.on_voice_command({"transcript": "volume up"})
-    assert volume_up_calls == [5]
-    assert context.voice.last_spoken_text == "Volume is 55."
+    assert volume_up_calls == [1]
+    assert context.voice.last_spoken_text == "Volume is 10 out of 10."
 
 
 def test_ask_screen_can_start_music_from_local_hook() -> None:

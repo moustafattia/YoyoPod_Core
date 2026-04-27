@@ -3,7 +3,28 @@ from __future__ import annotations
 import subprocess
 
 from yoyopod.backends.music import MockMusicBackend
-from yoyopod.core.audio_volume import OutputVolumeController
+from yoyopod.core import AppContext
+from yoyopod.core.audio_volume import AudioVolumeController, OutputVolumeController
+
+
+class FakeOutputVolume:
+    def __init__(self, volume: int | None = None) -> None:
+        self.volume = volume
+        self.set_calls: list[int] = []
+
+    def set_volume(self, volume: int) -> bool:
+        self.volume = volume
+        self.set_calls.append(volume)
+        return True
+
+    def get_volume(self) -> int | None:
+        return self.volume
+
+    def peek_cached_volume(self) -> int | None:
+        return self.volume
+
+    def attach_music_backend(self, _backend) -> None:
+        return None
 
 
 def test_output_volume_controller_parses_system_volume(monkeypatch) -> None:
@@ -236,3 +257,44 @@ Simple mixer control 'Headset',0
         "Could not read ALSA output volume for Master",
         "Could not read ALSA output volume for Master",
     ]
+
+
+def test_audio_volume_controller_maps_logical_levels_to_configured_max() -> None:
+    context = AppContext()
+    context.settings["max_volume"] = 55
+    output = FakeOutputVolume(50)
+    controller = AudioVolumeController(
+        context=context,
+        default_music_volume_provider=lambda: 55,
+        output_volume=output,
+    )
+
+    assert controller.get_output_volume_level() == 9
+
+    assert controller.set_output_volume_level(10) == 55
+    assert output.set_calls[-1] == 55
+    assert context.voice.output_volume == 55
+    assert controller.get_output_volume_level() == 10
+
+    assert controller.set_output_volume_level(0) == 0
+    assert output.set_calls[-1] == 0
+    assert context.voice.output_volume == 0
+
+
+def test_audio_volume_controller_steps_one_logical_level() -> None:
+    context = AppContext()
+    context.settings["max_volume"] = 55
+    output = FakeOutputVolume(50)
+    controller = AudioVolumeController(
+        context=context,
+        default_music_volume_provider=lambda: 55,
+        output_volume=output,
+    )
+
+    assert controller.volume_level_up() == 55
+    assert output.set_calls[-1] == 55
+    assert context.voice.output_volume == 55
+
+    assert controller.volume_level_down() == 50
+    assert output.set_calls[-1] == 50
+    assert context.voice.output_volume == 50

@@ -371,6 +371,7 @@ def test_voice_command_executor_routes_call_and_updates_context() -> None:
 
 def test_voice_command_executor_handles_local_device_actions() -> None:
     context = AppContext()
+    context.settings["max_volume"] = 55
     voip_manager = _FakeVoipManager()
     executor = _build_executor(context=context, voip_manager=voip_manager)
 
@@ -380,8 +381,57 @@ def test_voice_command_executor_handles_local_device_actions() -> None:
     assert mute_outcome.body == "Voice commands mic is muted."
     assert context.voice.mic_muted is True
     assert voip_manager.mute_calls == 1
-    assert volume_outcome.body == "Volume is 55."
+    assert volume_outcome.body == "Volume is 10 out of 10."
     assert context.voice.output_volume == 55
+
+
+def test_voice_command_executor_confirms_likely_call_before_dialing() -> None:
+    context = AppContext()
+    voip_manager = _FakeVoipManager()
+    executor = _build_executor(
+        context=context,
+        config_manager=_FakeConfigManager(
+            [_FakeContact("Hagar", "sip:mama@example.com", notes="Mama")]
+        ),
+        voip_manager=voip_manager,
+    )
+
+    prompt = executor.execute("mama please call")
+
+    assert prompt == VoiceCommandOutcome(
+        "Confirm Call",
+        "Did you want to call Mama? Say yes or no.",
+        auto_return=False,
+    )
+    assert voip_manager.make_calls == []
+
+    outcome = executor.execute("yes")
+
+    assert outcome == VoiceCommandOutcome(
+        "Calling",
+        "Calling Mama.",
+        auto_return=False,
+    )
+    assert voip_manager.make_calls == [("sip:mama@example.com", "Mama")]
+
+
+def test_voice_command_executor_cancels_pending_call_confirmation() -> None:
+    context = AppContext()
+    voip_manager = _FakeVoipManager()
+    executor = _build_executor(
+        context=context,
+        config_manager=_FakeConfigManager(
+            [_FakeContact("Hagar", "sip:mama@example.com", notes="Mama")]
+        ),
+        voip_manager=voip_manager,
+    )
+
+    prompt = executor.execute("mama call")
+    outcome = executor.execute("no")
+
+    assert prompt.headline == "Confirm Call"
+    assert outcome == VoiceCommandOutcome("Cancelled", "Okay, I will not call Mama.")
+    assert voip_manager.make_calls == []
 
 
 def test_voice_command_executor_respects_screen_read_toggle_with_provider() -> None:
@@ -420,6 +470,7 @@ def test_voice_command_executor_respects_screen_read_toggle_with_provider() -> N
 
 def test_voice_command_executor_volume_fallback_uses_app_context_audio_controller() -> None:
     context = AppContext()
+    context.settings["max_volume"] = 55
     context.audio_volume_controller = _FakeAudioVolumeController(context)
     executor = VoiceCommandExecutor(
         context=context,
@@ -428,7 +479,7 @@ def test_voice_command_executor_volume_fallback_uses_app_context_audio_controlle
 
     outcome = executor.execute("volume up")
 
-    assert outcome.body == "Volume is 55."
+    assert outcome.body == "Volume is 10 out of 10."
     assert context.audio_volume_controller.set_calls == [55]
     assert context.voice.output_volume == 55
 

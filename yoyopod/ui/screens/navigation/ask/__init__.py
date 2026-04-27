@@ -81,14 +81,20 @@ class AskScreen(Screen):
 
         resolved_voip_manager = voip_manager or getattr(app, "voip_manager", None)
         audio_volume_controller = getattr(app, "audio_volume_controller", None)
-        resolved_volume_up_action = volume_up_action or getattr(
-            audio_volume_controller, "volume_up", None
-        )
-        resolved_volume_down_action = volume_down_action or getattr(
-            audio_volume_controller,
-            "volume_down",
-            None,
-        )
+        resolved_volume_up_action = volume_up_action
+        if resolved_volume_up_action is None:
+            resolved_volume_up_action = getattr(
+                audio_volume_controller,
+                "volume_level_up",
+                None,
+            ) or getattr(audio_volume_controller, "volume_up", None)
+        resolved_volume_down_action = volume_down_action
+        if resolved_volume_down_action is None:
+            resolved_volume_down_action = getattr(
+                audio_volume_controller,
+                "volume_level_down",
+                None,
+            ) or getattr(audio_volume_controller, "volume_down", None)
         resolved_mute_action = mute_action or getattr(resolved_voip_manager, "mute", None)
         resolved_unmute_action = unmute_action or getattr(resolved_voip_manager, "unmute", None)
         local_music_service = getattr(app, "local_music_service", None)

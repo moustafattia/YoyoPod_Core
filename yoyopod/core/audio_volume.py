@@ -370,6 +370,33 @@ class AudioVolumeController:
         self._cache_context_volume(resolved if resolved is not None else target)
         return applied
 
+    def get_output_volume_level(self, *, refresh_system: bool = True) -> int:
+        """Return the current shared output volume on the 0-10 user scale."""
+
+        return self._context.output_volume_level(
+            self.get_output_volume(refresh_system=refresh_system)
+        )
+
+    def set_output_volume_level(self, level: int) -> int | None:
+        """Set shared output volume from a 0-10 user-facing level."""
+
+        target = self._context.output_volume_from_level(level)
+        self.set_output_volume(target)
+        resolved = self.get_output_volume(refresh_system=False)
+        return resolved if resolved is not None else target
+
+    def volume_level_up(self, step: int = 1) -> int | None:
+        """Increase shared output volume by one or more user-facing levels."""
+
+        current_level = self.get_output_volume_level()
+        return self.set_output_volume_level(current_level + max(1, int(step)))
+
+    def volume_level_down(self, step: int = 1) -> int | None:
+        """Decrease shared output volume by one or more user-facing levels."""
+
+        current_level = self.get_output_volume_level()
+        return self.set_output_volume_level(current_level - max(1, int(step)))
+
     def volume_up(self, step: int = 5) -> int | None:
         """Increase shared output volume."""
 
