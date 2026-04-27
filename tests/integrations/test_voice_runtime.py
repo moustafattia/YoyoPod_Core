@@ -73,8 +73,6 @@ class _FakeConfigManager:
                 tts_enabled=True,
                 stt_backend="dummy-stt",
                 tts_backend="dummy-tts",
-                vosk_model_path="models/custom-model",
-                vosk_model_keep_loaded=False,
                 sample_rate_hz=22050,
                 record_seconds=6,
                 tts_rate_wpm=180,
@@ -1731,7 +1729,7 @@ def test_voice_runtime_coordinator_releases_cached_service_when_settings_change(
 ) -> None:
     """Replacing the cached service should drop backend-owned resources explicitly."""
 
-    current_settings = VoiceSettings(vosk_model_keep_loaded=True)
+    current_settings = VoiceSettings(output_volume=50)
     created_services: list[object] = []
 
     class _TrackingVoiceManager:
@@ -1754,7 +1752,7 @@ def test_voice_runtime_coordinator_releases_cached_service_when_settings_change(
     )
 
     first = coordinator._voice_service()
-    current_settings = replace(current_settings, vosk_model_keep_loaded=False)
+    current_settings = replace(current_settings, output_volume=51)
     second = coordinator._voice_service()
 
     assert len(created_services) == 2

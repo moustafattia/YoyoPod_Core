@@ -6,7 +6,7 @@
 
 **Architecture:** Keep screen code presentation-only. Add focused voice integration units for activation normalization, mutable command dictionary loading, routing decisions, and future wake detection. `VoiceRuntimeCoordinator` owns command-first/Ask-fallback routing, while `VoiceCommandExecutor` owns allowlisted side effects.
 
-**Tech Stack:** Python 3.12, dataclasses, PyYAML through existing config helpers, pytest, existing Vosk/OpenAI STT seams, existing LVGL Ask screen.
+**Tech Stack:** Python 3.12, dataclasses, PyYAML through existing config helpers, pytest, existing OpenAI STT seam, existing LVGL Ask screen.
 
 ---
 

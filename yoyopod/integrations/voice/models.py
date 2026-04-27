@@ -1,4 +1,4 @@
-"""Canonical shared voice datatypes used by local STT/TTS flows."""
+"""Canonical shared voice datatypes used by capture, cloud STT, and TTS flows."""
 
 from __future__ import annotations
 
@@ -24,7 +24,7 @@ DEFAULT_CLOUD_TTS_INSTRUCTIONS = (
 class VoiceSettings:
     """Voice-related runtime settings passed into backends."""
 
-    mode: str = "local"
+    mode: str = "cloud"
     commands_enabled: bool = True
     ai_requests_enabled: bool = True
     screen_read_enabled: bool = False
@@ -32,10 +32,8 @@ class VoiceSettings:
     tts_enabled: bool = True
     mic_muted: bool = False
     output_volume: int = 50
-    stt_backend: str = "vosk"
-    tts_backend: str = "espeak-ng"
-    vosk_model_path: str = "models/vosk-model-small-en-us"
-    vosk_model_keep_loaded: bool = True
+    stt_backend: str = "cloud-worker"
+    tts_backend: str = "cloud-worker"
     speaker_device_id: str | None = None
     capture_device_id: str | None = None
     sample_rate_hz: int = 16000
@@ -47,7 +45,7 @@ class VoiceSettings:
     command_routing_mode: str = "command_first"
     ask_fallback_enabled: bool = True
     fallback_min_command_confidence: float = 0.82
-    cloud_worker_enabled: bool = False
+    cloud_worker_enabled: bool = True
     cloud_worker_domain: str = "voice"
     cloud_worker_provider: str = "mock"
     cloud_worker_request_timeout_seconds: float = 12.0

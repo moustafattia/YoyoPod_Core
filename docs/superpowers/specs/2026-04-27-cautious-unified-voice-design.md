@@ -78,7 +78,7 @@ The new behavior belongs in the voice integration seam, not in screen code.
 - outcome dispatch to the screen
 
 The coordinator should use one routing path regardless of whether the transcript came
-from local Vosk STT or cloud OpenAI STT. STT only converts audio to text. YoYoPod-owned
+from cloud OpenAI STT. STT only converts audio to text. YoYoPod-owned
 local code performs command matching.
 
 ### New Focused Pieces
@@ -209,7 +209,7 @@ Add focused tests for:
   YAML handling
 - routing decisions for command wins, Ask fallback, disabled fallback, and ambiguous calls
 - allowlisted action execution and unsafe action rejection
-- runtime proof that Vosk and OpenAI STT both feed the same local router
+- runtime proof that OpenAI STT feeds the same local router
 - `AskScreen` behavior proving screen code stays presentation-only
 
 Acceptance cases:

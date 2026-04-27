@@ -165,16 +165,6 @@ class VoiceSettingsResolver:
             output_volume=output_volume,
             stt_backend=getattr(assistant_cfg, "stt_backend", defaults.stt_backend),
             tts_backend=getattr(assistant_cfg, "tts_backend", defaults.tts_backend),
-            vosk_model_path=getattr(
-                assistant_cfg,
-                "vosk_model_path",
-                defaults.vosk_model_path,
-            ),
-            vosk_model_keep_loaded=getattr(
-                assistant_cfg,
-                "vosk_model_keep_loaded",
-                defaults.vosk_model_keep_loaded,
-            ),
             speaker_device_id=speaker_device_id,
             capture_device_id=capture_device_id,
             sample_rate_hz=getattr(assistant_cfg, "sample_rate_hz", defaults.sample_rate_hz),

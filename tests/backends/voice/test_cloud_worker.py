@@ -170,7 +170,7 @@ def test_stt_is_available_only_when_enabled_and_cloud_backend() -> None:
 
     assert backend.is_available(cloud_settings())
     assert not backend.is_available(cloud_settings(stt_enabled=False))
-    assert not backend.is_available(cloud_settings(stt_backend="vosk"))
+    assert not backend.is_available(cloud_settings(stt_backend="disabled"))
     assert not backend.is_available(cloud_settings(cloud_worker_enabled=False))
 
 

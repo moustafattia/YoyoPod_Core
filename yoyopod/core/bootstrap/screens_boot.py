@@ -153,22 +153,14 @@ class ScreensBoot:
                             else 50
                         ),
                         stt_backend=(
-                            voice_cfg.assistant.stt_backend if voice_cfg is not None else "vosk"
+                            voice_cfg.assistant.stt_backend
+                            if voice_cfg is not None
+                            else "cloud-worker"
                         ),
                         tts_backend=(
                             voice_cfg.assistant.tts_backend
                             if voice_cfg is not None
-                            else "espeak-ng"
-                        ),
-                        vosk_model_path=(
-                            voice_cfg.assistant.vosk_model_path
-                            if voice_cfg is not None
-                            else "models/vosk-model-small-en-us"
-                        ),
-                        vosk_model_keep_loaded=(
-                            voice_cfg.assistant.vosk_model_keep_loaded
-                            if voice_cfg is not None
-                            else True
+                            else "cloud-worker"
                         ),
                         speaker_device_id=(
                             self.app.context.voice.speaker_device_id
