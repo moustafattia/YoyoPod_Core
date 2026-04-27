@@ -22,6 +22,11 @@ from yoyopod.integrations.voice.worker_contract import (
 )
 
 if TYPE_CHECKING:
+    from yoyopod.integrations.voice.activation import (
+        VoiceActivationNormalizer,
+        VoiceActivationResult,
+        normalize_voice_activation,
+    )
     from yoyopod.integrations.voice.ask_conversation import AskConversationState
     from yoyopod.integrations.voice.commands import (
         VOICE_COMMAND_GRAMMAR,
@@ -55,6 +60,14 @@ _PUBLIC_EXPORTS = {
     "VOICE_COMMAND_GRAMMAR": ("yoyopod.integrations.voice.commands", "VOICE_COMMAND_GRAMMAR"),
     "VoiceCaptureRequest": ("yoyopod.integrations.voice.models", "VoiceCaptureRequest"),
     "VoiceCaptureResult": ("yoyopod.integrations.voice.models", "VoiceCaptureResult"),
+    "VoiceActivationNormalizer": (
+        "yoyopod.integrations.voice.activation",
+        "VoiceActivationNormalizer",
+    ),
+    "VoiceActivationResult": (
+        "yoyopod.integrations.voice.activation",
+        "VoiceActivationResult",
+    ),
     "VoiceCommandIntent": ("yoyopod.integrations.voice.commands", "VoiceCommandIntent"),
     "VoiceCommandMatch": ("yoyopod.integrations.voice.commands", "VoiceCommandMatch"),
     "VoiceCommandOutcome": ("yoyopod.integrations.voice.settings", "VoiceCommandOutcome"),
@@ -100,6 +113,10 @@ _PUBLIC_EXPORTS = {
         "build_transcribe_payload",
     ),
     "match_voice_command": ("yoyopod.integrations.voice.commands", "match_voice_command"),
+    "normalize_voice_activation": (
+        "yoyopod.integrations.voice.activation",
+        "normalize_voice_activation",
+    ),
     "parse_ask_result": ("yoyopod.integrations.voice.worker_contract", "parse_ask_result"),
     "parse_speak_result": ("yoyopod.integrations.voice.worker_contract", "parse_speak_result"),
     "parse_health_result": ("yoyopod.integrations.voice.worker_contract", "parse_health_result"),
@@ -126,6 +143,8 @@ def __getattr__(name: str) -> Any:
 __all__ = [
     "AskConversationState",
     "VOICE_COMMAND_GRAMMAR",
+    "VoiceActivationNormalizer",
+    "VoiceActivationResult",
     "VoiceCaptureRequest",
     "VoiceCaptureResult",
     "VoiceCommandIntent",
@@ -152,6 +171,7 @@ __all__ = [
     "build_speak_payload",
     "build_transcribe_payload",
     "match_voice_command",
+    "normalize_voice_activation",
     "parse_ask_result",
     "parse_speak_result",
     "parse_health_result",
