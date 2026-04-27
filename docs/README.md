@@ -55,7 +55,6 @@ Plan docs are useful, but they are not automatically the current implementation 
 - [`CLOUD_PROVISIONING_AND_BACKEND.md`](CLOUD_PROVISIONING_AND_BACKEND.md), claimed-device auth, config sync, cache/status files, MQTT telemetry, and current backend-integration status
 - [`CLOUD_VOICE_WORKER.md`](CLOUD_VOICE_WORKER.md), OpenAI cloud STT/TTS worker setup, secrets, and smoke validation
 - [`RUNTIME_EVENT_FLOW.md`](RUNTIME_EVENT_FLOW.md), current event pipeline and coordinator ownership
-- [`VOICE_STT_MODEL_LIFECYCLE.md`](VOICE_STT_MODEL_LIFECYCLE.md), offline Vosk retention policy and measured footprint
 - [`DISPLAY_HAL_ARCHITECTURE.md`](DISPLAY_HAL_ARCHITECTURE.md), display abstraction and adapters
 - [`INPUT_HAL_ARCHITECTURE.md`](INPUT_HAL_ARCHITECTURE.md), semantic input model and adapters
 - [`POWER_MODULE.md`](POWER_MODULE.md), power, battery, RTC, watchdog
@@ -79,6 +78,7 @@ These files are useful for context, but they are not all the same kind of docume
 
 - [`GLOBAL_AUDIO_DEVICE_FACADE_CONTRACT.md`](GLOBAL_AUDIO_DEVICE_FACADE_CONTRACT.md)
 - [`WHISPLAY_SIMULATION_PARITY_CONTRACT.md`](WHISPLAY_SIMULATION_PARITY_CONTRACT.md)
+- [`superpowers/specs/2026-04-27-cautious-unified-voice-design.md`](superpowers/specs/2026-04-27-cautious-unified-voice-design.md), current design for unified YoYo voice command and Ask routing
 - [`design-previews/`](design-previews/)
 
 If one of these conflicts with the current code or the current runtime docs above, trust the current code and the current runtime docs.
