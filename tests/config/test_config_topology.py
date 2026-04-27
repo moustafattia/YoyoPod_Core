@@ -154,6 +154,14 @@ def test_media_config_composes_domain_policy_with_device_owned_routing(tmp_path:
     )
 
 
+def test_rpi_zero_music_dir_inherits_device_owner_library() -> None:
+    """Packaged RPi Zero config should use the shared dev/prod device-owner library."""
+
+    manager = ConfigManager(config_dir="config", config_board="rpi-zero-2w")
+
+    assert manager.get_media_settings().music.music_dir == "/home/tifo/Music"
+
+
 def test_packaged_hardware_audio_uses_shared_alsa_facades() -> None:
     """Packaged Pi config should route app audio through shared ALSA facade PCMs."""
 
