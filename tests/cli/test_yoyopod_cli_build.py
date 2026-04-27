@@ -54,6 +54,14 @@ def test_voice_worker_build_help() -> None:
     assert "go cloud voice worker" in result.output.lower()
 
 
+def test_rust_ui_poc_build_help() -> None:
+    runner = CliRunner()
+    result = runner.invoke(app, ["rust-ui-poc", "--help"])
+
+    assert result.exit_code == 0
+    assert "rust ui poc" in result.output.lower()
+
+
 def test_voice_worker_build_command_invokes_builder(monkeypatch: pytest.MonkeyPatch) -> None:
     output = Path("/tmp/yoyopod-voice-worker")
     monkeypatch.setattr(build_cli, "build_voice_worker", lambda: output)
@@ -201,6 +209,34 @@ def test_build_voice_worker_invokes_go_build(monkeypatch: pytest.MonkeyPatch) ->
     assert env is not None
     assert env["GOMAXPROCS"] == "1"
     assert env["GOFLAGS"] == "-p=1"
+
+
+def test_build_rust_ui_poc_invokes_cargo(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    worker_dir = tmp_path / "workers" / "ui" / "rust"
+    worker_dir.mkdir(parents=True)
+    calls: list[tuple[list[str], Path | None, dict[str, str] | None]] = []
+    copies: list[tuple[Path, Path]] = []
+    monkeypatch.setattr(build_cli, "_rust_ui_poc_dir", lambda: worker_dir)
+    monkeypatch.setattr(
+        build_cli,
+        "_run",
+        lambda command, cwd=None, env=None: calls.append((command, cwd, env)),
+    )
+    monkeypatch.setattr(
+        build_cli.shutil,
+        "copy2",
+        lambda source, target: copies.append((Path(source), Path(target))),
+    )
+
+    output = build_cli.build_rust_ui_poc()
+
+    assert output.name.startswith("yoyopod-rust-ui-poc")
+    assert calls[0][0][:4] == ["cargo", "build", "--release", "--features"]
+    assert calls[0][1] == worker_dir
+    assert copies == [(worker_dir / "target" / "release" / output.name, output)]
 
 
 def test_voice_worker_build_env_preserves_explicit_go_parallelism(

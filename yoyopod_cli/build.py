@@ -201,6 +201,15 @@ def _voice_worker_binary_path() -> Path:
     return _voice_worker_dir() / "build" / f"yoyopod-voice-worker{suffix}"
 
 
+def _rust_ui_poc_dir() -> Path:
+    return _REPO_ROOT / "workers" / "ui" / "rust"
+
+
+def _rust_ui_poc_binary_path() -> Path:
+    suffix = ".exe" if os.name == "nt" else ""
+    return _rust_ui_poc_dir() / "build" / f"yoyopod-rust-ui-poc{suffix}"
+
+
 def _voice_worker_sources() -> tuple[Path, ...]:
     worker_dir = _voice_worker_dir()
     return (
@@ -221,6 +230,24 @@ def build_voice_worker() -> Path:
         cwd=worker_dir,
         env=_voice_worker_build_env(),
     )
+    return output
+
+
+def build_rust_ui_poc(*, hardware_feature: bool = True) -> Path:
+    """Build the Rust Whisplay UI PoC sidecar and return the copied binary path."""
+
+    worker_dir = _rust_ui_poc_dir()
+    output = _rust_ui_poc_binary_path()
+    output.parent.mkdir(parents=True, exist_ok=True)
+
+    command = ["cargo", "build", "--release"]
+    if hardware_feature:
+        command.extend(["--features", "whisplay-hardware"])
+    _run(command, cwd=worker_dir)
+
+    suffix = ".exe" if os.name == "nt" else ""
+    built_binary = worker_dir / "target" / "release" / f"yoyopod-rust-ui-poc{suffix}"
+    shutil.copy2(built_binary, output)
     return output
 
 
@@ -344,6 +371,22 @@ def build_voice_worker_command() -> None:
 
     output = build_voice_worker()
     typer.echo(f"Built Go voice worker: {output}")
+
+
+@app.command("rust-ui-poc")
+def build_rust_ui_poc_command(
+    no_hardware_feature: Annotated[
+        bool,
+        typer.Option(
+            "--no-hardware-feature",
+            help="Build without the Linux Whisplay hardware feature for host-only protocol tests.",
+        ),
+    ] = False,
+) -> None:
+    """Build the Rust UI PoC worker."""
+
+    output = build_rust_ui_poc(hardware_feature=not no_hardware_feature)
+    typer.echo(f"Built Rust UI PoC worker: {output}")
 
 
 @app.command("lvgl")

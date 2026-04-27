@@ -71,6 +71,7 @@ For live help, use `yoyopod <cmd> --help`.
 | `yoyopod build ensure-native` | Build missing or stale native shims required by the app. |
 | `yoyopod build liblinphone` | Build the native Liblinphone shim for the current platform. |
 | `yoyopod build lvgl` | Build the pinned LVGL shim for the current platform. |
+| `yoyopod build rust-ui-poc` | Build the Rust UI PoC worker. |
 | `yoyopod build simulation` | Build the LVGL native shim required by ``python yoyopod.py --simulate``. |
 | `yoyopod build voice-worker` | Build the Go cloud voice worker for the current platform. |
 
