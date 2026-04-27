@@ -17,6 +17,11 @@ from yoyopod.integrations.voice.commands import (
 )
 
 SAFE_VOICE_ROUTE_ACTIONS = frozenset({"open_talk", "open_listen", "open_setup", "go_home", "back"})
+_DEFAULT_TRANSCRIPTION_PROMPT = (
+    "Transcribe this YoYoPod voice command in English Latin letters. "
+    "Do not output Arabic, Persian, Korean, or other non-Latin scripts. "
+    "Preserve family names such as mama, baba, mom, dad, mommy, daddy, and papa."
+)
 
 
 @dataclass(slots=True, frozen=True)
@@ -68,6 +73,31 @@ class VoiceCommandDictionary:
             ):
                 return action
         return None
+
+
+def build_voice_command_transcription_prompt(
+    dictionary: VoiceCommandDictionary,
+    *,
+    activation_prefixes: tuple[str, ...] = (),
+    base_prompt: str = "",
+    max_phrases: int = 80,
+) -> str:
+    """Return an STT prompt biased toward configured YoYoPod command phrases."""
+
+    phrases = _dedupe(
+        tuple(prefix for prefix in activation_prefixes if prefix.strip())
+        + tuple(
+            phrase
+            for template in dictionary.to_grammar()
+            for phrase in (*template.examples, *template.trigger_phrases)
+        )
+        + tuple(alias for action in dictionary.actions.values() for alias in action.aliases)
+    )
+    selected = ", ".join(phrases[:max_phrases])
+    prompt = base_prompt.strip() or _DEFAULT_TRANSCRIPTION_PROMPT
+    if selected:
+        prompt = f"{prompt} Likely phrases include: {selected}."
+    return prompt
 
 
 def load_voice_command_dictionary(path: str | Path | None) -> VoiceCommandDictionary:
@@ -201,5 +231,6 @@ __all__ = [
     "SAFE_VOICE_ROUTE_ACTIONS",
     "VoiceCommandAction",
     "VoiceCommandDictionary",
+    "build_voice_command_transcription_prompt",
     "load_voice_command_dictionary",
 ]

@@ -222,6 +222,24 @@ class ScreensBoot:
                             if worker_cfg is not None
                             else "gpt-4o-mini-transcribe"
                         ),
+                        cloud_worker_stt_language=(
+                            getattr(
+                                worker_cfg,
+                                "stt_language",
+                                voice_settings_defaults.cloud_worker_stt_language,
+                            )
+                            if worker_cfg is not None
+                            else voice_settings_defaults.cloud_worker_stt_language
+                        ),
+                        cloud_worker_stt_prompt=(
+                            getattr(
+                                worker_cfg,
+                                "stt_prompt",
+                                voice_settings_defaults.cloud_worker_stt_prompt,
+                            )
+                            if worker_cfg is not None
+                            else voice_settings_defaults.cloud_worker_stt_prompt
+                        ),
                         cloud_worker_tts_model=(
                             getattr(worker_cfg, "tts_model", "gpt-4o-mini-tts")
                             if worker_cfg is not None

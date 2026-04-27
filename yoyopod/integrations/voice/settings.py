@@ -222,6 +222,16 @@ class VoiceSettingsResolver:
                 "stt_model",
                 defaults.cloud_worker_stt_model,
             ),
+            cloud_worker_stt_language=getattr(
+                worker_cfg,
+                "stt_language",
+                defaults.cloud_worker_stt_language,
+            ),
+            cloud_worker_stt_prompt=getattr(
+                worker_cfg,
+                "stt_prompt",
+                defaults.cloud_worker_stt_prompt,
+            ),
             cloud_worker_tts_model=getattr(
                 worker_cfg,
                 "tts_model",

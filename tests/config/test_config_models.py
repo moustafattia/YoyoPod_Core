@@ -165,6 +165,8 @@ def test_voice_config_includes_cloud_worker_defaults(tmp_path, monkeypatch) -> N
         "YOYOPOD_VOICE_WORKER_TIMEOUT_SECONDS",
         "YOYOPOD_VOICE_WORKER_MAX_AUDIO_SECONDS",
         "YOYOPOD_CLOUD_STT_MODEL",
+        "YOYOPOD_CLOUD_STT_LANGUAGE",
+        "YOYOPOD_CLOUD_STT_PROMPT",
         "YOYOPOD_CLOUD_TTS_MODEL",
         "YOYOPOD_CLOUD_TTS_VOICE",
         "YOYOPOD_CLOUD_TTS_INSTRUCTIONS",
@@ -188,6 +190,8 @@ def test_voice_config_includes_cloud_worker_defaults(tmp_path, monkeypatch) -> N
     assert settings.worker.request_timeout_seconds == 12.0
     assert settings.worker.max_audio_seconds == 30.0
     assert settings.worker.stt_model == "gpt-4o-mini-transcribe"
+    assert settings.worker.stt_language == "en"
+    assert "English Latin letters" in settings.worker.stt_prompt
     assert settings.worker.tts_model == "gpt-4o-mini-tts"
     assert settings.worker.tts_voice == "coral"
     assert settings.worker.tts_instructions == TTS_INSTRUCTIONS
@@ -270,6 +274,8 @@ def test_authored_voice_config_includes_cloud_worker_defaults(monkeypatch) -> No
         "YOYOPOD_VOICE_WORKER_PROVIDER",
         "YOYOPOD_VOICE_WORKER_ARGV",
         "YOYOPOD_CLOUD_STT_MODEL",
+        "YOYOPOD_CLOUD_STT_LANGUAGE",
+        "YOYOPOD_CLOUD_STT_PROMPT",
         "YOYOPOD_CLOUD_TTS_MODEL",
         "YOYOPOD_CLOUD_TTS_VOICE",
         "YOYOPOD_CLOUD_TTS_INSTRUCTIONS",
@@ -292,6 +298,8 @@ def test_authored_voice_config_includes_cloud_worker_defaults(monkeypatch) -> No
     assert settings.worker.request_timeout_seconds == 12.0
     assert settings.worker.max_audio_seconds == 30.0
     assert settings.worker.stt_model == "gpt-4o-mini-transcribe"
+    assert settings.worker.stt_language == "en"
+    assert "English Latin letters" in settings.worker.stt_prompt
     assert settings.worker.tts_model == "gpt-4o-mini-tts"
     assert settings.worker.tts_voice == "coral"
     assert settings.worker.tts_instructions == TTS_INSTRUCTIONS

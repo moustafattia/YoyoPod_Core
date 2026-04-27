@@ -18,6 +18,11 @@ DEFAULT_CLOUD_TTS_INSTRUCTIONS = (
     "Speak warmly and calmly for a child. Use simple words, friendly pacing, and brief answers. "
     "Avoid scary emphasis."
 )
+DEFAULT_CLOUD_STT_PROMPT = (
+    "Transcribe this YoYoPod voice command in English Latin letters. Do not output Arabic, "
+    "Persian, Korean, or other non-Latin scripts. Preserve family names such as mama, baba, "
+    "mom, dad, mommy, daddy, and papa."
+)
 
 
 @dataclass(slots=True)
@@ -94,6 +99,11 @@ class VoiceWorkerConfig:
     stt_model: str = config_value(
         default="gpt-4o-mini-transcribe",
         env="YOYOPOD_CLOUD_STT_MODEL",
+    )
+    stt_language: str = config_value(default="en", env="YOYOPOD_CLOUD_STT_LANGUAGE")
+    stt_prompt: str = config_value(
+        default=DEFAULT_CLOUD_STT_PROMPT,
+        env="YOYOPOD_CLOUD_STT_PROMPT",
     )
     tts_model: str = config_value(default="gpt-4o-mini-tts", env="YOYOPOD_CLOUD_TTS_MODEL")
     tts_voice: str = config_value(default="coral", env="YOYOPOD_CLOUD_TTS_VOICE")

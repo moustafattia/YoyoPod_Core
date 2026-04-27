@@ -46,6 +46,11 @@ _NEGATION_TOKEN_SEQUENCES = (
 )
 _EXACT_TRIGGER_SUFFIX_TOKENS = frozenset({"please", "now"})
 _SCRIPT_COMMAND_ALIASES = {
+    "\u06a9\u0648": "call",
+    "\u0643\u0648": "call",
+    "\u06a9\u0648\u0644": "call",
+    "\u0643\u0648\u0644": "call",
+    "\u0645\u0627\u0645\u0627": "mama",
     "\u0648\u0648\u0644\u06cc\u0648\u0645": "volume",
     "\u0648\u0648\u0644\u064a\u0648\u0645": "volume",
     "\u0648\u0644\u06cc\u0648\u0645": "volume",

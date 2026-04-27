@@ -18,6 +18,11 @@ DEFAULT_CLOUD_TTS_INSTRUCTIONS = (
     "Speak warmly and calmly for a child. Use simple words, friendly pacing, and brief answers. "
     "Avoid scary emphasis."
 )
+DEFAULT_CLOUD_STT_PROMPT = (
+    "Transcribe this YoYoPod voice command in English Latin letters. Do not output Arabic, "
+    "Persian, Korean, or other non-Latin scripts. Preserve family names such as mama, baba, "
+    "mom, dad, mommy, daddy, and papa."
+)
 
 
 @dataclass(slots=True, frozen=True)
@@ -51,6 +56,8 @@ class VoiceSettings:
     cloud_worker_request_timeout_seconds: float = 12.0
     cloud_worker_max_audio_seconds: float = 30.0
     cloud_worker_stt_model: str = "gpt-4o-mini-transcribe"
+    cloud_worker_stt_language: str = "en"
+    cloud_worker_stt_prompt: str = DEFAULT_CLOUD_STT_PROMPT
     cloud_worker_tts_model: str = "gpt-4o-mini-tts"
     cloud_worker_tts_voice: str = "coral"
     cloud_worker_tts_instructions: str = DEFAULT_CLOUD_TTS_INSTRUCTIONS

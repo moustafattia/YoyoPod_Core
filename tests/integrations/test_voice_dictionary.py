@@ -10,6 +10,7 @@ from yoyopod.integrations.voice.commands import VoiceCommandIntent, match_voice_
 from yoyopod.integrations.voice.dictionary import (
     SAFE_VOICE_ROUTE_ACTIONS,
     VoiceCommandDictionary,
+    build_voice_command_transcription_prompt,
     load_voice_command_dictionary,
 )
 
@@ -51,6 +52,45 @@ def test_dictionary_adds_aliases_from_mutable_yaml(tmp_path: Path) -> None:
         match_voice_command("boost sound", grammar=dictionary.to_grammar()).intent
         is VoiceCommandIntent.VOLUME_UP
     )
+
+
+def test_dictionary_transcription_prompt_includes_mutable_yaml_phrases(
+    tmp_path: Path,
+) -> None:
+    commands_file = tmp_path / "commands.yaml"
+    commands_file.write_text(
+        yaml.safe_dump(
+            {
+                "version": 1,
+                "intents": {
+                    "volume_up": {
+                        "aliases": ["boost sound"],
+                        "examples": ["boost sound"],
+                    }
+                },
+                "actions": {
+                    "open_talk": {
+                        "aliases": ["open talk"],
+                        "route": "open_talk",
+                    }
+                },
+            },
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+
+    dictionary = load_voice_command_dictionary(commands_file)
+
+    prompt = build_voice_command_transcription_prompt(
+        dictionary,
+        activation_prefixes=("yoyo", "hey yoyo"),
+    )
+
+    assert "English Latin letters" in prompt
+    assert "boost sound" in prompt
+    assert "open talk" in prompt
+    assert "hey yoyo" in prompt
 
 
 def test_dictionary_can_disable_mutable_intent(tmp_path: Path) -> None:

@@ -141,6 +141,8 @@ def test_match_voice_command_handles_family_call_variations(
     [
         "Kual mama?",
         "\uace0 \ub9c8\ub9c8",
+        "\u06a9\u0648\u0644 \u0645\u0627\u0645\u0627",
+        "\u06a9\u0648 \u0645\u0627\u0645\u0627",
     ],
 )
 def test_match_voice_command_handles_observed_stt_noise_for_call_mama(phrase: str) -> None:
