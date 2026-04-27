@@ -2,10 +2,25 @@
 
 from __future__ import annotations
 
+import os
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from yoyopod.core.application import YoyoPodApp
+
+
+def _voip_sidecar_enabled() -> bool:
+    """Return whether the VoIP sidecar process should back the manager.
+
+    Off by default; opt in via the ``YOYOPOD_VOIP_SIDECAR`` env var. Phase
+    2B.3 ships the sidecar path as opt-in so production keeps using the
+    in-process :class:`LiblinphoneBackend` until the call surface has been
+    smoke-tested on the Pi. Phase 2B.4 will extend the sidecar protocol to
+    cover messaging / voice notes; Phase 2B.5 will flip the default.
+    """
+
+    raw = os.environ.get("YOYOPOD_VOIP_SIDECAR", "").strip().lower()
+    return raw in {"1", "true", "yes", "on"}
 
 
 class ManagersBoot:
@@ -50,11 +65,25 @@ class ManagersBoot:
         try:
             self.logger.info("  - VoIPManager")
             voip_config = self.voip_config_cls.from_config_manager(config_manager)
+            sidecar_backed_backend = None
+            background_iterate_enabled = True
+            if _voip_sidecar_enabled():
+                self.logger.info("    YOYOPOD_VOIP_SIDECAR=1 — using sidecar-backed VoIP backend")
+                from yoyopod.backends.voip.supervisor_backed import (
+                    SupervisorBackedBackend,
+                )
+
+                sidecar_backed_backend = SupervisorBackedBackend(voip_config)
+                # The sidecar drives its own iterate cadence; the manager's
+                # background-iterate worker would do nothing useful here and
+                # would just add noise to the loop instrumentation.
+                background_iterate_enabled = False
             self.app.voip_manager = self.voip_manager_cls(
                 voip_config,
                 people_directory=self.app.people_directory,
+                backend=sidecar_backed_backend,
                 event_scheduler=self.app.scheduler.run_on_main,
-                background_iterate_enabled=True,
+                background_iterate_enabled=background_iterate_enabled,
             )
             set_configured_interval = getattr(
                 self.app.runtime_loop,
