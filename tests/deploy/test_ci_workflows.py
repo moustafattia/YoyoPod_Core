@@ -18,3 +18,13 @@ def test_slot_arm64_pr_build_is_label_gated() -> None:
     assert "workflow_dispatch:" in workflow
     assert "contains(github.event.pull_request.labels.*.name, 'build-arm-slot')" in workflow
     assert "github.event_name == 'push'" in workflow
+
+
+def test_rust_ui_ci_builds_arm64_binary_artifact() -> None:
+    workflow = CI_YML.read_text(encoding="utf-8")
+
+    assert "runs-on: ubuntu-24.04-arm" in workflow
+    assert "cargo build --release --features whisplay-hardware --locked" in workflow
+    assert "uses: actions/upload-artifact@v4" in workflow
+    assert "name: yoyopod-rust-ui-poc-${{ github.sha }}" in workflow
+    assert "workers/ui/rust/build/yoyopod-rust-ui-poc" in workflow

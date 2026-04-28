@@ -15,6 +15,11 @@ For host-only protocol tests:
 yoyopod build rust-ui-poc --no-hardware-feature
 ```
 
+CI also builds the Whisplay worker on a native Linux ARM64 runner and uploads it
+as the `yoyopod-rust-ui-poc-${{ github.sha }}` artifact. Use that artifact, or a
+binary built on another ARM64 Linux board, when the Pi Zero 2W is too slow to
+compile the Rust dependencies directly.
+
 ## Required Whisplay Environment
 
 The first hardware backend reads explicit GPIO/SPI settings:
@@ -34,6 +39,13 @@ The button default is GPIO 26, active low, matching the current Python fallback.
 
 ```bash
 yoyopod pi rust-ui-poc --worker workers/ui/rust/build/yoyopod-rust-ui-poc --frames 10
+```
+
+If the worker came from CI artifacts, make it executable after copying it to the
+Pi:
+
+```bash
+chmod +x workers/ui/rust/build/yoyopod-rust-ui-poc
 ```
 
 Expected result:

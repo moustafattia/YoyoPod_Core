@@ -117,7 +117,7 @@ jobs:
         run: go test ./...
 
   ui-rust:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
 
     steps:
       - name: Check out repository
@@ -128,7 +128,22 @@ jobs:
 
       - name: Run Rust UI worker tests
         working-directory: workers/ui/rust
-        run: cargo test
+        run: cargo test --locked
+
+      - name: Build Rust UI Whisplay worker
+        working-directory: workers/ui/rust
+        run: |
+          set -euo pipefail
+          cargo build --release --features whisplay-hardware --locked
+          mkdir -p build
+          cp target/release/yoyopod-rust-ui-poc build/yoyopod-rust-ui-poc
+
+      - name: Upload Rust UI ARM64 worker
+        uses: actions/upload-artifact@v4
+        with:
+          name: yoyopod-rust-ui-poc-${{ github.sha }}
+          path: workers/ui/rust/build/yoyopod-rust-ui-poc
+          if-no-files-found: error
 
   slot-arm64:
     runs-on: ubuntu-latest
