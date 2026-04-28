@@ -7,10 +7,14 @@ use libloading::Library;
 
 use crate::framebuffer::Framebuffer;
 use crate::hub::HubSnapshot;
+use crate::ui_state::{RuntimeSnapshot, UiScreen, UiView};
 
 type LvglFlushCb =
     unsafe extern "C" fn(c_int, c_int, c_int, c_int, *const c_uchar, u32, *mut c_void);
+type LvglBuildFn = unsafe extern "C" fn() -> c_int;
+type LvglDestroyFn = unsafe extern "C" fn();
 
+#[allow(dead_code)]
 struct LvglShim {
     _library: Library,
     init: unsafe extern "C" fn() -> c_int,
@@ -31,6 +35,169 @@ struct LvglShim {
         c_int,
         c_int,
     ) -> c_int,
+    talk_build: LvglBuildFn,
+    talk_sync: unsafe extern "C" fn(
+        *const c_char,
+        *const c_char,
+        c_int,
+        *const c_char,
+        c_int,
+        c_int,
+        c_int,
+        c_int,
+        c_int,
+        c_int,
+        u32,
+    ) -> c_int,
+    talk_destroy: LvglDestroyFn,
+    listen_build: LvglBuildFn,
+    listen_sync: unsafe extern "C" fn(
+        *const c_char,
+        *const c_char,
+        *const c_char,
+        *const c_char,
+        *const c_char,
+        *const c_char,
+        *const c_char,
+        *const c_char,
+        *const c_char,
+        *const c_char,
+        *const c_char,
+        *const c_char,
+        *const c_char,
+        *const c_char,
+        c_int,
+        c_int,
+        c_int,
+        c_int,
+        c_int,
+        c_int,
+        u32,
+        *const c_char,
+        *const c_char,
+    ) -> c_int,
+    listen_destroy: LvglDestroyFn,
+    playlist_build: LvglBuildFn,
+    playlist_sync: unsafe extern "C" fn(
+        *const c_char,
+        *const c_char,
+        *const c_char,
+        c_int,
+        *const c_char,
+        *const c_char,
+        *const c_char,
+        *const c_char,
+        *const c_char,
+        *const c_char,
+        *const c_char,
+        *const c_char,
+        *const c_char,
+        *const c_char,
+        *const c_char,
+        *const c_char,
+        *const c_char,
+        *const c_char,
+        *const c_char,
+        *const c_char,
+        *const c_char,
+        c_int,
+        c_int,
+        c_int,
+        c_int,
+        c_int,
+        c_int,
+        u32,
+        *const c_char,
+        *const c_char,
+        *const c_char,
+    ) -> c_int,
+    playlist_destroy: LvglDestroyFn,
+    now_playing_build: LvglBuildFn,
+    now_playing_sync: unsafe extern "C" fn(
+        *const c_char,
+        *const c_char,
+        *const c_char,
+        *const c_char,
+        c_int,
+        c_int,
+        c_int,
+        c_int,
+        c_int,
+        u32,
+    ) -> c_int,
+    now_playing_destroy: LvglDestroyFn,
+    incoming_call_build: LvglBuildFn,
+    incoming_call_sync: unsafe extern "C" fn(
+        *const c_char,
+        *const c_char,
+        *const c_char,
+        c_int,
+        c_int,
+        c_int,
+        c_int,
+        u32,
+    ) -> c_int,
+    incoming_call_destroy: LvglDestroyFn,
+    outgoing_call_build: LvglBuildFn,
+    outgoing_call_sync: unsafe extern "C" fn(
+        *const c_char,
+        *const c_char,
+        *const c_char,
+        c_int,
+        c_int,
+        c_int,
+        c_int,
+        u32,
+    ) -> c_int,
+    outgoing_call_destroy: LvglDestroyFn,
+    in_call_build: LvglBuildFn,
+    in_call_sync: unsafe extern "C" fn(
+        *const c_char,
+        *const c_char,
+        *const c_char,
+        *const c_char,
+        c_int,
+        c_int,
+        c_int,
+        c_int,
+        c_int,
+        u32,
+    ) -> c_int,
+    in_call_destroy: LvglDestroyFn,
+    ask_build: LvglBuildFn,
+    ask_sync: unsafe extern "C" fn(
+        *const c_char,
+        *const c_char,
+        *const c_char,
+        *const c_char,
+        c_int,
+        c_int,
+        c_int,
+        c_int,
+        u32,
+    ) -> c_int,
+    ask_destroy: LvglDestroyFn,
+    power_build: LvglBuildFn,
+    power_sync: unsafe extern "C" fn(
+        *const c_char,
+        *const c_char,
+        *const c_char,
+        *const c_char,
+        *const c_char,
+        *const c_char,
+        *const c_char,
+        *const c_char,
+        *const c_char,
+        c_int,
+        c_int,
+        c_int,
+        c_int,
+        c_int,
+        c_int,
+        c_int,
+        u32,
+    ) -> c_int,
+    power_destroy: LvglDestroyFn,
     force_refresh: unsafe extern "C" fn(),
     timer_handler: unsafe extern "C" fn() -> u32,
     last_error: unsafe extern "C" fn() -> *const c_char,
@@ -46,6 +213,43 @@ impl LvglShim {
             unsafe { load_symbol(&library, b"yoyopod_lvgl_register_display\0")? };
         let hub_build = unsafe { load_symbol(&library, b"yoyopod_lvgl_hub_build\0")? };
         let hub_sync = unsafe { load_symbol(&library, b"yoyopod_lvgl_hub_sync\0")? };
+        let talk_build = unsafe { load_symbol(&library, b"yoyopod_lvgl_talk_build\0")? };
+        let talk_sync = unsafe { load_symbol(&library, b"yoyopod_lvgl_talk_sync\0")? };
+        let talk_destroy = unsafe { load_symbol(&library, b"yoyopod_lvgl_talk_destroy\0")? };
+        let listen_build = unsafe { load_symbol(&library, b"yoyopod_lvgl_listen_build\0")? };
+        let listen_sync = unsafe { load_symbol(&library, b"yoyopod_lvgl_listen_sync\0")? };
+        let listen_destroy = unsafe { load_symbol(&library, b"yoyopod_lvgl_listen_destroy\0")? };
+        let playlist_build = unsafe { load_symbol(&library, b"yoyopod_lvgl_playlist_build\0")? };
+        let playlist_sync = unsafe { load_symbol(&library, b"yoyopod_lvgl_playlist_sync\0")? };
+        let playlist_destroy =
+            unsafe { load_symbol(&library, b"yoyopod_lvgl_playlist_destroy\0")? };
+        let now_playing_build =
+            unsafe { load_symbol(&library, b"yoyopod_lvgl_now_playing_build\0")? };
+        let now_playing_sync =
+            unsafe { load_symbol(&library, b"yoyopod_lvgl_now_playing_sync\0")? };
+        let now_playing_destroy =
+            unsafe { load_symbol(&library, b"yoyopod_lvgl_now_playing_destroy\0")? };
+        let incoming_call_build =
+            unsafe { load_symbol(&library, b"yoyopod_lvgl_incoming_call_build\0")? };
+        let incoming_call_sync =
+            unsafe { load_symbol(&library, b"yoyopod_lvgl_incoming_call_sync\0")? };
+        let incoming_call_destroy =
+            unsafe { load_symbol(&library, b"yoyopod_lvgl_incoming_call_destroy\0")? };
+        let outgoing_call_build =
+            unsafe { load_symbol(&library, b"yoyopod_lvgl_outgoing_call_build\0")? };
+        let outgoing_call_sync =
+            unsafe { load_symbol(&library, b"yoyopod_lvgl_outgoing_call_sync\0")? };
+        let outgoing_call_destroy =
+            unsafe { load_symbol(&library, b"yoyopod_lvgl_outgoing_call_destroy\0")? };
+        let in_call_build = unsafe { load_symbol(&library, b"yoyopod_lvgl_in_call_build\0")? };
+        let in_call_sync = unsafe { load_symbol(&library, b"yoyopod_lvgl_in_call_sync\0")? };
+        let in_call_destroy = unsafe { load_symbol(&library, b"yoyopod_lvgl_in_call_destroy\0")? };
+        let ask_build = unsafe { load_symbol(&library, b"yoyopod_lvgl_ask_build\0")? };
+        let ask_sync = unsafe { load_symbol(&library, b"yoyopod_lvgl_ask_sync\0")? };
+        let ask_destroy = unsafe { load_symbol(&library, b"yoyopod_lvgl_ask_destroy\0")? };
+        let power_build = unsafe { load_symbol(&library, b"yoyopod_lvgl_power_build\0")? };
+        let power_sync = unsafe { load_symbol(&library, b"yoyopod_lvgl_power_sync\0")? };
+        let power_destroy = unsafe { load_symbol(&library, b"yoyopod_lvgl_power_destroy\0")? };
         let force_refresh = unsafe { load_symbol(&library, b"yoyopod_lvgl_force_refresh\0")? };
         let timer_handler = unsafe { load_symbol(&library, b"yoyopod_lvgl_timer_handler\0")? };
         let last_error = unsafe { load_symbol(&library, b"yoyopod_lvgl_last_error\0")? };
@@ -57,6 +261,33 @@ impl LvglShim {
             register_display,
             hub_build,
             hub_sync,
+            talk_build,
+            talk_sync,
+            talk_destroy,
+            listen_build,
+            listen_sync,
+            listen_destroy,
+            playlist_build,
+            playlist_sync,
+            playlist_destroy,
+            now_playing_build,
+            now_playing_sync,
+            now_playing_destroy,
+            incoming_call_build,
+            incoming_call_sync,
+            incoming_call_destroy,
+            outgoing_call_build,
+            outgoing_call_sync,
+            outgoing_call_destroy,
+            in_call_build,
+            in_call_sync,
+            in_call_destroy,
+            ask_build,
+            ask_sync,
+            ask_destroy,
+            power_build,
+            power_sync,
+            power_destroy,
             force_refresh,
             timer_handler,
             last_error,
@@ -108,6 +339,19 @@ pub fn render_hub_with_lvgl(
     let shim_path = resolve_shim_path(explicit_shim_path)?;
     let shim = unsafe { LvglShim::load(&shim_path)? };
     let result = unsafe { render_hub_with_loaded_shim(&shim, framebuffer, snapshot) };
+    unsafe { (shim.shutdown)() };
+    result
+}
+
+pub fn render_view_with_lvgl(
+    framebuffer: &mut Framebuffer,
+    view: &UiView,
+    snapshot: &RuntimeSnapshot,
+    explicit_shim_path: Option<&Path>,
+) -> Result<()> {
+    let shim_path = resolve_shim_path(explicit_shim_path)?;
+    let shim = unsafe { LvglShim::load(&shim_path)? };
+    let result = unsafe { render_view_with_loaded_shim(&shim, framebuffer, view, snapshot) };
     unsafe { (shim.shutdown)() };
     result
 }
@@ -164,6 +408,405 @@ unsafe fn render_hub_with_loaded_shim(
     Ok(())
 }
 
+unsafe fn render_view_with_loaded_shim(
+    shim: &LvglShim,
+    framebuffer: &mut Framebuffer,
+    view: &UiView,
+    snapshot: &RuntimeSnapshot,
+) -> Result<()> {
+    let mut target = LvglFlushTarget {
+        framebuffer: framebuffer as *mut Framebuffer,
+    };
+    shim.check(unsafe { (shim.init)() }, "init")?;
+    shim.check(
+        unsafe {
+            (shim.register_display)(
+                framebuffer.width() as c_int,
+                framebuffer.height() as c_int,
+                (framebuffer.width() * 40) as u32,
+                lvgl_flush_callback,
+                &mut target as *mut LvglFlushTarget as *mut c_void,
+            )
+        },
+        "register_display",
+    )?;
+
+    match view.screen {
+        UiScreen::Hub => unsafe { sync_hub_view(shim, view, snapshot)? },
+        UiScreen::Listen => unsafe { sync_listen_view(shim, view, snapshot)? },
+        UiScreen::Playlists => unsafe { sync_playlist_view(shim, view, snapshot)? },
+        UiScreen::NowPlaying => unsafe { sync_now_playing_view(shim, view, snapshot)? },
+        UiScreen::Call => unsafe { sync_talk_view(shim, view, snapshot)? },
+        UiScreen::IncomingCall => unsafe { sync_incoming_call_view(shim, view, snapshot)? },
+        UiScreen::OutgoingCall => unsafe { sync_outgoing_call_view(shim, view, snapshot)? },
+        UiScreen::InCall => unsafe { sync_in_call_view(shim, view, snapshot)? },
+        UiScreen::Ask | UiScreen::Loading | UiScreen::Error => unsafe {
+            sync_ask_view(shim, view, snapshot)?
+        },
+        UiScreen::Power => unsafe { sync_power_view(shim, view, snapshot)? },
+    }
+
+    unsafe { (shim.force_refresh)() };
+    let _ = unsafe { (shim.timer_handler)() };
+    Ok(())
+}
+
+unsafe fn sync_hub_view(shim: &LvglShim, view: &UiView, snapshot: &RuntimeSnapshot) -> Result<()> {
+    let focused = snapshot
+        .hub
+        .cards
+        .get(view.focus_index)
+        .or_else(|| snapshot.hub.cards.first());
+    let icon_key = c_string(
+        "icon_key",
+        focused.map(|card| card.key.as_str()).unwrap_or("listen"),
+    )?;
+    let title = c_string("title", &view.title)?;
+    let subtitle = c_string("subtitle", &view.subtitle)?;
+    let footer = c_string("footer", &view.footer)?;
+    let time_text = c_string("time_text", "")?;
+    shim.check(unsafe { (shim.hub_build)() }, "hub_build")?;
+    shim.check(
+        unsafe {
+            (shim.hub_sync)(
+                icon_key.as_ptr(),
+                title.as_ptr(),
+                subtitle.as_ptr(),
+                footer.as_ptr(),
+                time_text.as_ptr(),
+                focused.map(|card| card.accent).unwrap_or(0x00FF88),
+                view.focus_index as c_int,
+                snapshot.hub.cards.len().max(1) as c_int,
+                voip_state(snapshot),
+                battery_percent(snapshot),
+                bool_to_c_int(snapshot.power.charging),
+                bool_to_c_int(snapshot.power.power_available),
+            )
+        },
+        "hub_sync",
+    )
+}
+
+unsafe fn sync_listen_view(
+    shim: &LvglShim,
+    view: &UiView,
+    snapshot: &RuntimeSnapshot,
+) -> Result<()> {
+    let page = c_string("page_text", "Listen")?;
+    let footer = c_string("footer", &view.footer)?;
+    let items = fixed_item_strings(view, 4, |item| item.title.as_str())?;
+    let subtitles = fixed_item_strings(view, 4, |item| item.subtitle.as_str())?;
+    let icons = fixed_item_strings(view, 4, |item| item.icon_key.as_str())?;
+    let empty_title = c_string("empty_title", "No music yet")?;
+    let empty_subtitle = c_string("empty_subtitle", "Add music to the library")?;
+    shim.check(unsafe { (shim.listen_build)() }, "listen_build")?;
+    shim.check(
+        unsafe {
+            (shim.listen_sync)(
+                page.as_ptr(),
+                footer.as_ptr(),
+                items[0].as_ptr(),
+                items[1].as_ptr(),
+                items[2].as_ptr(),
+                items[3].as_ptr(),
+                subtitles[0].as_ptr(),
+                subtitles[1].as_ptr(),
+                subtitles[2].as_ptr(),
+                subtitles[3].as_ptr(),
+                icons[0].as_ptr(),
+                icons[1].as_ptr(),
+                icons[2].as_ptr(),
+                icons[3].as_ptr(),
+                view.items.len() as c_int,
+                view.focus_index as c_int,
+                voip_state(snapshot),
+                battery_percent(snapshot),
+                bool_to_c_int(snapshot.power.charging),
+                bool_to_c_int(snapshot.power.power_available),
+                0x00FF88,
+                empty_title.as_ptr(),
+                empty_subtitle.as_ptr(),
+            )
+        },
+        "listen_sync",
+    )
+}
+
+unsafe fn sync_playlist_view(
+    shim: &LvglShim,
+    view: &UiView,
+    snapshot: &RuntimeSnapshot,
+) -> Result<()> {
+    let title = c_string("title_text", &view.title)?;
+    let page = c_string("page_text", "Music")?;
+    let status = c_string("status_chip_text", "")?;
+    let footer = c_string("footer", &view.footer)?;
+    let items = fixed_item_strings(view, 4, |item| item.title.as_str())?;
+    let subtitles = fixed_item_strings(view, 4, |item| item.subtitle.as_str())?;
+    let badges = fixed_item_strings(view, 4, |_| "")?;
+    let icons = fixed_item_strings(view, 4, |item| item.icon_key.as_str())?;
+    let empty_title = c_string("empty_title", "No playlists")?;
+    let empty_subtitle = c_string("empty_subtitle", "Sync music first")?;
+    let empty_icon = c_string("empty_icon_key", "playlist")?;
+    shim.check(unsafe { (shim.playlist_build)() }, "playlist_build")?;
+    shim.check(
+        unsafe {
+            (shim.playlist_sync)(
+                title.as_ptr(),
+                page.as_ptr(),
+                status.as_ptr(),
+                0,
+                footer.as_ptr(),
+                items[0].as_ptr(),
+                items[1].as_ptr(),
+                items[2].as_ptr(),
+                items[3].as_ptr(),
+                subtitles[0].as_ptr(),
+                subtitles[1].as_ptr(),
+                subtitles[2].as_ptr(),
+                subtitles[3].as_ptr(),
+                badges[0].as_ptr(),
+                badges[1].as_ptr(),
+                badges[2].as_ptr(),
+                badges[3].as_ptr(),
+                icons[0].as_ptr(),
+                icons[1].as_ptr(),
+                icons[2].as_ptr(),
+                icons[3].as_ptr(),
+                view.items.len() as c_int,
+                view.focus_index as c_int,
+                voip_state(snapshot),
+                battery_percent(snapshot),
+                bool_to_c_int(snapshot.power.charging),
+                bool_to_c_int(snapshot.power.power_available),
+                0x00FF88,
+                empty_title.as_ptr(),
+                empty_subtitle.as_ptr(),
+                empty_icon.as_ptr(),
+            )
+        },
+        "playlist_sync",
+    )
+}
+
+unsafe fn sync_now_playing_view(
+    shim: &LvglShim,
+    view: &UiView,
+    snapshot: &RuntimeSnapshot,
+) -> Result<()> {
+    let title = c_string("title_text", &view.title)?;
+    let artist = c_string("artist_text", &view.subtitle)?;
+    let state = c_string(
+        "state_text",
+        if snapshot.music.playing {
+            "Playing"
+        } else if snapshot.music.paused {
+            "Paused"
+        } else {
+            "Stopped"
+        },
+    )?;
+    let footer = c_string("footer", &view.footer)?;
+    shim.check(unsafe { (shim.now_playing_build)() }, "now_playing_build")?;
+    shim.check(
+        unsafe {
+            (shim.now_playing_sync)(
+                title.as_ptr(),
+                artist.as_ptr(),
+                state.as_ptr(),
+                footer.as_ptr(),
+                snapshot.music.progress_permille.clamp(0, 1000),
+                voip_state(snapshot),
+                battery_percent(snapshot),
+                bool_to_c_int(snapshot.power.charging),
+                bool_to_c_int(snapshot.power.power_available),
+                0x00FF88,
+            )
+        },
+        "now_playing_sync",
+    )
+}
+
+unsafe fn sync_talk_view(shim: &LvglShim, view: &UiView, snapshot: &RuntimeSnapshot) -> Result<()> {
+    let title = c_string("title_text", &view.title)?;
+    let icon = c_string("icon_key", "talk")?;
+    let footer = c_string("footer", &view.footer)?;
+    shim.check(unsafe { (shim.talk_build)() }, "talk_build")?;
+    shim.check(
+        unsafe {
+            (shim.talk_sync)(
+                title.as_ptr(),
+                icon.as_ptr(),
+                0,
+                footer.as_ptr(),
+                view.focus_index as c_int,
+                view.items.len().max(1) as c_int,
+                voip_state(snapshot),
+                battery_percent(snapshot),
+                bool_to_c_int(snapshot.power.charging),
+                bool_to_c_int(snapshot.power.power_available),
+                0x00D4FF,
+            )
+        },
+        "talk_sync",
+    )
+}
+
+unsafe fn sync_incoming_call_view(
+    shim: &LvglShim,
+    view: &UiView,
+    snapshot: &RuntimeSnapshot,
+) -> Result<()> {
+    let name = c_string("caller_name", &view.title)?;
+    let address = c_string("caller_address", &view.subtitle)?;
+    let footer = c_string("footer", &view.footer)?;
+    shim.check(
+        unsafe { (shim.incoming_call_build)() },
+        "incoming_call_build",
+    )?;
+    shim.check(
+        unsafe {
+            (shim.incoming_call_sync)(
+                name.as_ptr(),
+                address.as_ptr(),
+                footer.as_ptr(),
+                voip_state(snapshot),
+                battery_percent(snapshot),
+                bool_to_c_int(snapshot.power.charging),
+                bool_to_c_int(snapshot.power.power_available),
+                0x00D4FF,
+            )
+        },
+        "incoming_call_sync",
+    )
+}
+
+unsafe fn sync_outgoing_call_view(
+    shim: &LvglShim,
+    view: &UiView,
+    snapshot: &RuntimeSnapshot,
+) -> Result<()> {
+    let name = c_string("callee_name", &view.title)?;
+    let address = c_string("callee_address", &view.subtitle)?;
+    let footer = c_string("footer", &view.footer)?;
+    shim.check(
+        unsafe { (shim.outgoing_call_build)() },
+        "outgoing_call_build",
+    )?;
+    shim.check(
+        unsafe {
+            (shim.outgoing_call_sync)(
+                name.as_ptr(),
+                address.as_ptr(),
+                footer.as_ptr(),
+                voip_state(snapshot),
+                battery_percent(snapshot),
+                bool_to_c_int(snapshot.power.charging),
+                bool_to_c_int(snapshot.power.power_available),
+                0x00D4FF,
+            )
+        },
+        "outgoing_call_sync",
+    )
+}
+
+unsafe fn sync_in_call_view(
+    shim: &LvglShim,
+    view: &UiView,
+    snapshot: &RuntimeSnapshot,
+) -> Result<()> {
+    let name = c_string("caller_name", &view.title)?;
+    let duration = c_string("duration_text", &view.subtitle)?;
+    let mute = c_string(
+        "mute_text",
+        if snapshot.call.muted {
+            "Muted"
+        } else {
+            "Mic on"
+        },
+    )?;
+    let footer = c_string("footer", &view.footer)?;
+    shim.check(unsafe { (shim.in_call_build)() }, "in_call_build")?;
+    shim.check(
+        unsafe {
+            (shim.in_call_sync)(
+                name.as_ptr(),
+                duration.as_ptr(),
+                mute.as_ptr(),
+                footer.as_ptr(),
+                bool_to_c_int(snapshot.call.muted),
+                voip_state(snapshot),
+                battery_percent(snapshot),
+                bool_to_c_int(snapshot.power.charging),
+                bool_to_c_int(snapshot.power.power_available),
+                0x00D4FF,
+            )
+        },
+        "in_call_sync",
+    )
+}
+
+unsafe fn sync_ask_view(shim: &LvglShim, view: &UiView, snapshot: &RuntimeSnapshot) -> Result<()> {
+    let icon = c_string("icon_key", "ask")?;
+    let title = c_string("title_text", &view.title)?;
+    let subtitle = c_string("subtitle_text", &view.subtitle)?;
+    let footer = c_string("footer", &view.footer)?;
+    shim.check(unsafe { (shim.ask_build)() }, "ask_build")?;
+    shim.check(
+        unsafe {
+            (shim.ask_sync)(
+                icon.as_ptr(),
+                title.as_ptr(),
+                subtitle.as_ptr(),
+                footer.as_ptr(),
+                voip_state(snapshot),
+                battery_percent(snapshot),
+                bool_to_c_int(snapshot.power.charging),
+                bool_to_c_int(snapshot.power.power_available),
+                0x9F7AEA,
+            )
+        },
+        "ask_sync",
+    )
+}
+
+unsafe fn sync_power_view(
+    shim: &LvglShim,
+    view: &UiView,
+    snapshot: &RuntimeSnapshot,
+) -> Result<()> {
+    let title = c_string("title_text", &view.title)?;
+    let page = c_string("page_text", &view.subtitle)?;
+    let icon = c_string("icon_key", "battery")?;
+    let footer = c_string("footer", &view.footer)?;
+    let rows = fixed_item_strings(view, 5, |item| item.title.as_str())?;
+    shim.check(unsafe { (shim.power_build)() }, "power_build")?;
+    shim.check(
+        unsafe {
+            (shim.power_sync)(
+                title.as_ptr(),
+                page.as_ptr(),
+                icon.as_ptr(),
+                footer.as_ptr(),
+                rows[0].as_ptr(),
+                rows[1].as_ptr(),
+                rows[2].as_ptr(),
+                rows[3].as_ptr(),
+                rows[4].as_ptr(),
+                view.items.len() as c_int,
+                view.focus_index as c_int,
+                view.items.len().max(1) as c_int,
+                voip_state(snapshot),
+                battery_percent(snapshot),
+                bool_to_c_int(snapshot.power.charging),
+                bool_to_c_int(snapshot.power.power_available),
+                0xF6AD55,
+            )
+        },
+        "power_sync",
+    )
+}
+
 unsafe extern "C" fn lvgl_flush_callback(
     x: c_int,
     y: c_int,
@@ -191,6 +834,29 @@ unsafe extern "C" fn lvgl_flush_callback(
 
 fn c_string(name: &str, value: &str) -> Result<CString> {
     CString::new(value).with_context(|| format!("Hub field {name} contains a NUL byte"))
+}
+
+fn fixed_item_strings<F>(view: &UiView, count: usize, field: F) -> Result<Vec<CString>>
+where
+    F: Fn(&crate::ui_state::ListItemSnapshot) -> &str,
+{
+    let mut values = Vec::with_capacity(count);
+    for index in 0..count {
+        let value = view.items.get(index).map(&field).unwrap_or("");
+        values.push(c_string("item", value)?);
+    }
+    Ok(values)
+}
+
+fn voip_state(snapshot: &RuntimeSnapshot) -> c_int {
+    match snapshot.call.state.as_str() {
+        "incoming" | "outgoing" | "active" => 2,
+        _ => 1,
+    }
+}
+
+fn battery_percent(snapshot: &RuntimeSnapshot) -> c_int {
+    snapshot.power.battery_percent.clamp(0, 100)
 }
 
 fn bool_to_c_int(value: bool) -> c_int {
@@ -258,6 +924,7 @@ mod tests {
     use super::*;
     use crate::framebuffer::Framebuffer;
     use crate::hub::HubSnapshot;
+    use crate::ui_state::{RuntimeSnapshot, UiRuntime};
     use std::path::Path;
 
     #[test]
@@ -281,5 +948,22 @@ mod tests {
             .to_string_lossy()
             .replace('\\', "/")
             .contains("yoyopod/ui/lvgl_binding/native/build")));
+    }
+
+    #[test]
+    fn missing_explicit_shim_path_returns_contextual_error_for_runtime_view() {
+        let mut framebuffer = Framebuffer::new(240, 280);
+        let mut runtime = UiRuntime::default();
+        runtime.apply_snapshot(RuntimeSnapshot::default());
+        let view = runtime.active_view();
+        let error = render_view_with_lvgl(
+            &mut framebuffer,
+            &view,
+            runtime.snapshot(),
+            Some(Path::new("missing-yoyopod-lvgl-shim.so")),
+        )
+        .expect_err("missing shim must fail");
+
+        assert!(error.to_string().contains("native LVGL shim"));
     }
 }

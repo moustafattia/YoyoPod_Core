@@ -172,6 +172,41 @@ for line in sys.stdin:
     assert any(message.type == "voice.cancelled" for message in message_events)
 
 
+def test_supervisor_sends_untracked_command_without_request_deadline() -> None:
+    bus = Bus()
+    scheduler = MainThreadScheduler()
+    sent_commands: list[dict[str, object]] = []
+    supervisor = WorkerSupervisor(scheduler=scheduler, bus=bus)
+    supervisor.register("ui", WorkerProcessConfig(name="ui", argv=["unused"]))
+    slot = supervisor._workers["ui"]
+    slot.runtime = cast(
+        object,
+        SimpleNamespace(
+            running=True,
+            drain_messages=lambda limit=None: [],
+            send_command=lambda **kwargs: sent_commands.append(kwargs) or True,
+        ),
+    )
+    slot.state = "running"
+
+    assert supervisor.send_command(
+        "ui",
+        type="ui.runtime_snapshot",
+        payload={"app_state": "hub"},
+    )
+
+    assert sent_commands == [
+        {
+            "type": "ui.runtime_snapshot",
+            "payload": {"app_state": "hub"},
+            "request_id": None,
+            "timestamp_ms": 0,
+            "deadline_ms": 0,
+        }
+    ]
+    assert slot.request_deadlines == {}
+
+
 def test_supervisor_drops_late_result_after_request_timeout() -> None:
     bus = Bus()
     scheduler = MainThreadScheduler()

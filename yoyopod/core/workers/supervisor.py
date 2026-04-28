@@ -214,6 +214,30 @@ class WorkerSupervisor:
             slot.request_deadlines[request_id] = now + timeout_seconds
         return sent
 
+    def send_command(
+        self,
+        domain: str,
+        *,
+        type: str,
+        payload: dict[str, Any] | None = None,
+        request_id: str | None = None,
+        timestamp_ms: int = 0,
+        deadline_ms: int = 0,
+    ) -> bool:
+        """Send one untracked command without creating request-timeout state."""
+
+        slot = self._workers[domain]
+        runtime = slot.runtime
+        if runtime is None:
+            return False
+        return runtime.send_command(
+            type=type,
+            payload=payload or {},
+            request_id=request_id,
+            timestamp_ms=timestamp_ms,
+            deadline_ms=deadline_ms,
+        )
+
     def drain_worker_messages(self, domain: str) -> list[WorkerEnvelope]:
         """Testing helper for messages that have not yet been consumed by poll."""
 

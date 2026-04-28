@@ -53,6 +53,11 @@ def test_app_shell_defaults_do_not_require_a_file(tmp_path, monkeypatch) -> None
     assert settings.display.hardware == "auto"
     assert settings.display.whisplay_renderer == "lvgl"
     assert settings.display.lvgl_buffer_lines == 40
+    assert settings.display.rust_ui_sidecar_enabled is False
+    assert (
+        settings.display.rust_ui_worker
+        == "workers/ui/rust/build/yoyopod-rust-ui-poc"
+    )
     assert settings.logging.file == "logs/yoyopod.log"
     assert settings.logging.error_file == "logs/yoyopod_errors.log"
     assert settings.logging.pid_file == "/tmp/yoyopod.pid"
@@ -592,6 +597,19 @@ def test_display_config_defaults_pimoroni_gpio_to_none():
 
     config = build_config_model(AppDisplayConfig, {})
     assert config.pimoroni_gpio is None
+
+
+def test_display_config_exposes_rust_ui_sidecar_env(monkeypatch):
+    """Rust UI sidecar settings should be opt-in and env-overridable."""
+    from yoyopod.config.models import AppDisplayConfig, build_config_model
+
+    monkeypatch.setenv("YOYOPOD_RUST_UI_SIDECAR_ENABLED", "true")
+    monkeypatch.setenv("YOYOPOD_RUST_UI_WORKER", "/opt/yoyopod/ui-worker")
+
+    config = build_config_model(AppDisplayConfig, {})
+
+    assert config.rust_ui_sidecar_enabled is True
+    assert config.rust_ui_worker == "/opt/yoyopod/ui-worker"
 
 
 def test_top_level_config_exports_config_value() -> None:

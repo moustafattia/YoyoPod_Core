@@ -1,7 +1,9 @@
 # Rust UI PoC
 
-The Rust UI PoC is an opt-in Whisplay-only hardware I/O test. It does not
-replace the production Python LVGL UI.
+The Rust UI PoC is the Whisplay-only hardware I/O and sidecar UI port path.
+Python still owns the app/runtime services for now; Rust owns the sidecar UI
+state machine, screen focus, one-button transitions, and Whisplay rendering when
+the sidecar is enabled or launched directly.
 
 ## Build
 
@@ -69,3 +71,33 @@ Expected result:
 - the Whisplay display shows changing test frames
 - the command prints a `ui.ready` payload
 - the command prints a `ui.health` payload
+
+## Runtime Sidecar Protocol
+
+The Rust worker accepts these UI-owner commands over the same line-delimited
+JSON envelope used by the PoC:
+
+- `ui.runtime_snapshot` -- Python sends the latest app/runtime snapshot. Rust
+  applies call/loading/error preemption, owns the active screen, renders the
+  screen, and emits `ui.screen_changed` when the Rust route changes.
+- `ui.input_action` -- Python or tests inject one semantic action
+  (`advance`, `select`, `back`, `ptt_press`, `ptt_release`). Rust applies it to
+  the active screen and emits `ui.intent` when Python runtime work is needed.
+- `ui.tick` -- Rust polls the Whisplay button, runs the one-button gesture
+  machine, applies generated actions, emits intents, and renders dirty screens.
+
+Rust-owned screens in this slice are Hub, Listen, Playlists, Now Playing, Ask,
+Talk/Calls, Incoming Call, Outgoing Call, In Call, Power/Status, Loading, and
+Error. Runtime intents are narrow domain requests such as `music.shuffle_all`,
+`music.load_playlist`, `music.play_pause`, `call.answer`, `call.reject`,
+`call.hangup`, and `voice.capture_start`.
+
+The Python bridge lives in `yoyopod/ui/rust_sidecar/`. It serializes
+`RustUiRuntimeSnapshot` from the current app context and dispatches `ui.intent`
+events back into registered Python services. Snapshot and tick sends use the
+untracked worker command path so UI updates do not create request timeout state.
+
+Config fields are available but opt-in:
+
+- `display.rust_ui_sidecar_enabled` / `YOYOPOD_RUST_UI_SIDECAR_ENABLED`
+- `display.rust_ui_worker` / `YOYOPOD_RUST_UI_WORKER`

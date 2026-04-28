@@ -63,6 +63,14 @@ class AppDisplayConfig:
         default=40,
         env="YOYOPOD_LVGL_BUFFER_LINES",
     )
+    rust_ui_sidecar_enabled: bool = config_value(
+        default=False,
+        env="YOYOPOD_RUST_UI_SIDECAR_ENABLED",
+    )
+    rust_ui_worker: str = config_value(
+        default="workers/ui/rust/build/yoyopod-rust-ui-poc",
+        env="YOYOPOD_RUST_UI_WORKER",
+    )
     brightness: int = 80
     rotation: int = 0
     backlight_timeout_seconds: int = 60
