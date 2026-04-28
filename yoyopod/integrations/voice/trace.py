@@ -121,6 +121,88 @@ class VoiceTraceEntry:
 
 
 @dataclass(slots=True)
+class VoiceTraceRecorder:
+    """Mutable builder for one voice interaction trace entry."""
+
+    store: VoiceTraceStore
+    turn_id: str
+    started_at: str
+    source: str
+    mode: str
+    include_transcripts: bool = True
+    body_preview_chars: int = 160
+    route_kind: str = "unknown"
+    outcome: str = "unknown"
+    transcript_raw: str | None = None
+    transcript_normalized: str | None = None
+    activation_prefix: str | None = None
+    command_intent: str | None = None
+    command_confidence: float | None = None
+    route_name: str | None = None
+    ask_fallback: bool | None = None
+    assistant_status: str | None = None
+    assistant_title: str | None = None
+    assistant_body_preview: str | None = None
+    should_speak: bool | None = None
+    auto_return: bool | None = None
+    timings_ms: dict[str, Any] = field(default_factory=dict)
+    audio_focus_before: dict[str, Any] = field(default_factory=dict)
+    audio_focus_after: dict[str, Any] = field(default_factory=dict)
+    music_before: dict[str, Any] = field(default_factory=dict)
+    music_after: dict[str, Any] = field(default_factory=dict)
+    error: dict[str, Any] | None = None
+    _completed: bool = False
+
+    def record_error(self, stage: str, exc: BaseException) -> None:
+        """Record a trace-scoped error without raising into voice handling."""
+
+        self.route_kind = "error"
+        self.error = {
+            "stage": stage,
+            "type": type(exc).__name__,
+            "message": str(exc),
+        }
+
+    def complete(self) -> None:
+        """Append the trace once with the recorder's current fields."""
+
+        if self._completed:
+            return
+        self._completed = True
+        self.store.append(
+            VoiceTraceEntry(
+                turn_id=self.turn_id,
+                started_at=self.started_at,
+                completed_at=utc_now_iso(),
+                source=self.source,
+                mode=self.mode,
+                route_kind=self.route_kind,
+                outcome=self.outcome,
+                transcript_raw=self.transcript_raw,
+                transcript_normalized=self.transcript_normalized,
+                activation_prefix=self.activation_prefix,
+                command_intent=self.command_intent,
+                command_confidence=self.command_confidence,
+                route_name=self.route_name,
+                ask_fallback=self.ask_fallback,
+                assistant_status=self.assistant_status,
+                assistant_title=self.assistant_title,
+                assistant_body_preview=self.assistant_body_preview,
+                should_speak=self.should_speak,
+                auto_return=self.auto_return,
+                timings_ms=self.timings_ms,
+                audio_focus_before=self.audio_focus_before,
+                audio_focus_after=self.audio_focus_after,
+                music_before=self.music_before,
+                music_after=self.music_after,
+                error=self.error,
+                include_transcripts=self.include_transcripts,
+                body_preview_chars=self.body_preview_chars,
+            )
+        )
+
+
+@dataclass(slots=True)
 class VoiceTraceStore:
     """Bounded JSONL trace store for recent voice turns."""
 
@@ -194,6 +276,7 @@ __all__ = [
     "DEFAULT_TRANSCRIPT_LIMIT",
     "DEFAULT_VOICE_TRACE_PATH",
     "VoiceTraceEntry",
+    "VoiceTraceRecorder",
     "VoiceTraceStore",
     "new_turn_id",
     "utc_now_iso",

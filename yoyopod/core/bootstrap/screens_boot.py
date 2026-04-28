@@ -15,6 +15,7 @@ from yoyopod.integrations.voice import (
     VoiceSettings,
     VoiceSettingsResolver,
 )
+from yoyopod.integrations.voice.trace import VoiceTraceStore
 from yoyopod.ui.input import InteractionProfile
 
 if TYPE_CHECKING:
@@ -97,6 +98,7 @@ class ScreensBoot:
                     )
 
             voice_settings_defaults = VoiceSettings()
+            trace_cfg = getattr(voice_cfg, "trace", None) if voice_cfg is not None else None
 
             def ask_screen_summary() -> str:
                 ask_screen = getattr(self.app, "ask_screen", None)
@@ -324,6 +326,51 @@ class ScreensBoot:
                             if worker_cfg is not None
                             else True
                         ),
+                        voice_trace_enabled=(
+                            getattr(
+                                trace_cfg,
+                                "enabled",
+                                voice_settings_defaults.voice_trace_enabled,
+                            )
+                            if trace_cfg is not None
+                            else voice_settings_defaults.voice_trace_enabled
+                        ),
+                        voice_trace_path=(
+                            getattr(
+                                trace_cfg,
+                                "path",
+                                voice_settings_defaults.voice_trace_path,
+                            )
+                            if trace_cfg is not None
+                            else voice_settings_defaults.voice_trace_path
+                        ),
+                        voice_trace_max_turns=(
+                            getattr(
+                                trace_cfg,
+                                "max_turns",
+                                voice_settings_defaults.voice_trace_max_turns,
+                            )
+                            if trace_cfg is not None
+                            else voice_settings_defaults.voice_trace_max_turns
+                        ),
+                        voice_trace_include_transcripts=(
+                            getattr(
+                                trace_cfg,
+                                "include_transcripts",
+                                voice_settings_defaults.voice_trace_include_transcripts,
+                            )
+                            if trace_cfg is not None
+                            else voice_settings_defaults.voice_trace_include_transcripts
+                        ),
+                        voice_trace_body_preview_chars=(
+                            getattr(
+                                trace_cfg,
+                                "body_preview_chars",
+                                voice_settings_defaults.voice_trace_body_preview_chars,
+                            )
+                            if trace_cfg is not None
+                            else voice_settings_defaults.voice_trace_body_preview_chars
+                        ),
                     ),
                 ),
                 command_executor=VoiceCommandExecutor(
@@ -350,6 +397,7 @@ class ScreensBoot:
                 ask_client=voice_worker_client,
                 music_backend=getattr(self.app, "music_backend", None),
                 call_music_handoff=handoff_voice_music_pause_to_call,
+                trace_store_factory=VoiceTraceStore.from_settings,
             )
             self.app.ask_screen = AskScreen(
                 display,
