@@ -7,9 +7,11 @@ use crate::framebuffer::Framebuffer;
 use crate::hardware::{ButtonDevice, DisplayDevice};
 use crate::hub::{HubCommand, HubRenderer};
 use crate::input::{ButtonTiming, InputAction, OneButtonMachine};
-use crate::lvgl_bridge::{render_hub_with_lvgl, render_view_with_lvgl};
+use crate::lvgl_bridge::render_hub_with_lvgl;
 use crate::protocol::{Envelope, EnvelopeKind};
-use crate::render::{render_hub_fallback, render_test_scene, render_ui_view_fallback};
+use crate::render::{
+    render_hub_fallback, render_test_scene, FramebufferRenderer, LvglRenderer, RendererMode,
+};
 use crate::runtime::{RuntimeSnapshot, UiIntent, UiRuntime, UiScreen};
 
 pub fn run_worker<R, W, E, D, B>(
@@ -34,6 +36,16 @@ where
     let mut button_machine = OneButtonMachine::new(ButtonTiming::default());
     let mut ui_runtime = UiRuntime::default();
     let mut last_active_screen: Option<UiScreen> = None;
+    let mut lvgl_renderer = match LvglRenderer::open(None) {
+        Ok(renderer) => Some(renderer),
+        Err(err) => {
+            writeln!(
+                errors,
+                "LVGL runtime renderer unavailable; using framebuffer diagnostic renderer: {err}"
+            )?;
+            None
+        }
+    };
 
     emit(
         output,
@@ -129,6 +141,7 @@ where
                             &mut last_active_screen,
                             renderer,
                             &mut last_ui_renderer,
+                            &mut lvgl_renderer,
                         )? {
                             frames += 1;
                         }
@@ -147,6 +160,7 @@ where
                             &mut last_active_screen,
                             renderer,
                             &mut last_ui_renderer,
+                            &mut lvgl_renderer,
                         )? {
                             frames += 1;
                         }
@@ -181,6 +195,7 @@ where
                             &mut last_active_screen,
                             renderer,
                             &mut last_ui_renderer,
+                            &mut lvgl_renderer,
                         )? {
                             frames += 1;
                         }
@@ -266,8 +281,9 @@ fn render_runtime_if_dirty<W, D>(
     framebuffer: &mut Framebuffer,
     ui_runtime: &mut UiRuntime,
     last_active_screen: &mut Option<UiScreen>,
-    renderer: HubRenderer,
+    renderer: RendererMode,
     last_ui_renderer: &mut String,
+    lvgl_renderer: &mut Option<LvglRenderer>,
 ) -> Result<bool>
 where
     W: Write,
@@ -279,28 +295,33 @@ where
 
     let view = ui_runtime.active_view();
     match renderer {
-        HubRenderer::Auto => {
-            match render_view_with_lvgl(framebuffer, &view, ui_runtime.snapshot(), None) {
-                Ok(()) => {
-                    *last_ui_renderer = HubRenderer::Lvgl.as_str().to_string();
-                }
-                Err(err) => {
-                    writeln!(
-                        errors,
-                        "LVGL runtime renderer unavailable; falling back: {err}"
-                    )?;
-                    render_ui_view_fallback(framebuffer, &view, ui_runtime.snapshot());
-                    *last_ui_renderer = HubRenderer::Framebuffer.as_str().to_string();
-                }
+        RendererMode::Auto => {
+            if let Some(renderer) = lvgl_renderer.as_mut() {
+                renderer.render_view(framebuffer, &view, ui_runtime.snapshot())?;
+                *last_ui_renderer = RendererMode::Lvgl.as_str().to_string();
+            } else {
+                writeln!(
+                    errors,
+                    "LVGL runtime renderer unavailable; using framebuffer diagnostic renderer"
+                )?;
+                FramebufferRenderer::render_view(framebuffer, &view, ui_runtime.snapshot());
+                *last_ui_renderer = RendererMode::Framebuffer.as_str().to_string();
             }
         }
-        HubRenderer::Framebuffer => {
-            render_ui_view_fallback(framebuffer, &view, ui_runtime.snapshot());
-            *last_ui_renderer = HubRenderer::Framebuffer.as_str().to_string();
+        RendererMode::Framebuffer => {
+            FramebufferRenderer::render_view(framebuffer, &view, ui_runtime.snapshot());
+            *last_ui_renderer = RendererMode::Framebuffer.as_str().to_string();
         }
-        HubRenderer::Lvgl => {
-            render_view_with_lvgl(framebuffer, &view, ui_runtime.snapshot(), None)?;
-            *last_ui_renderer = HubRenderer::Lvgl.as_str().to_string();
+        RendererMode::Lvgl => {
+            let Some(renderer) = lvgl_renderer.as_mut() else {
+                emit(
+                    output,
+                    Envelope::error("lvgl_unavailable", "LVGL runtime renderer unavailable"),
+                )?;
+                bail!("LVGL runtime renderer unavailable");
+            };
+            renderer.render_view(framebuffer, &view, ui_runtime.snapshot())?;
+            *last_ui_renderer = RendererMode::Lvgl.as_str().to_string();
         }
     }
     display.flush_full_frame(framebuffer)?;
@@ -339,15 +360,15 @@ fn parse_input_action(payload: &serde_json::Value) -> Result<InputAction> {
     }
 }
 
-fn renderer_from_payload(payload: &serde_json::Value) -> Result<HubRenderer> {
+fn renderer_from_payload(payload: &serde_json::Value) -> Result<RendererMode> {
     match payload
         .get("renderer")
         .and_then(|value| value.as_str())
         .unwrap_or("auto")
     {
-        "auto" => Ok(HubRenderer::Auto),
-        "lvgl" => Ok(HubRenderer::Lvgl),
-        "framebuffer" => Ok(HubRenderer::Framebuffer),
+        "auto" => Ok(RendererMode::Auto),
+        "lvgl" => Ok(RendererMode::Lvgl),
+        "framebuffer" => Ok(RendererMode::Framebuffer),
         value => bail!("unknown UI renderer {value:?}"),
     }
 }

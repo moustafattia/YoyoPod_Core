@@ -7,6 +7,7 @@ use libloading::Library;
 
 use crate::framebuffer::Framebuffer;
 use crate::hub::HubSnapshot;
+use crate::render::RendererState;
 use crate::runtime::{ListItemSnapshot, RuntimeSnapshot, UiScreen, UiView};
 
 type LvglFlushCb =
@@ -35,6 +36,7 @@ struct LvglShim {
         c_int,
         c_int,
     ) -> c_int,
+    hub_destroy: LvglDestroyFn,
     talk_build: LvglBuildFn,
     talk_sync: unsafe extern "C" fn(
         *const c_char,
@@ -213,6 +215,7 @@ impl LvglShim {
             unsafe { load_symbol(&library, b"yoyopod_lvgl_register_display\0")? };
         let hub_build = unsafe { load_symbol(&library, b"yoyopod_lvgl_hub_build\0")? };
         let hub_sync = unsafe { load_symbol(&library, b"yoyopod_lvgl_hub_sync\0")? };
+        let hub_destroy = unsafe { load_symbol(&library, b"yoyopod_lvgl_hub_destroy\0")? };
         let talk_build = unsafe { load_symbol(&library, b"yoyopod_lvgl_talk_build\0")? };
         let talk_sync = unsafe { load_symbol(&library, b"yoyopod_lvgl_talk_sync\0")? };
         let talk_destroy = unsafe { load_symbol(&library, b"yoyopod_lvgl_talk_destroy\0")? };
@@ -261,6 +264,7 @@ impl LvglShim {
             register_display,
             hub_build,
             hub_sync,
+            hub_destroy,
             talk_build,
             talk_sync,
             talk_destroy,
@@ -329,6 +333,83 @@ fn symbol_name(name: &[u8]) -> String {
 
 struct LvglFlushTarget {
     framebuffer: *mut Framebuffer,
+}
+
+pub struct LvglRenderer {
+    shim: LvglShim,
+    target: LvglFlushTarget,
+    state: RendererState,
+    registered_size: Option<(usize, usize)>,
+}
+
+impl LvglRenderer {
+    pub fn open(explicit_shim_path: Option<&Path>) -> Result<Self> {
+        let shim_path = resolve_shim_path(explicit_shim_path)?;
+        let shim = unsafe { LvglShim::load(&shim_path)? };
+        shim.check(unsafe { (shim.init)() }, "init")?;
+        Ok(Self {
+            shim,
+            target: LvglFlushTarget {
+                framebuffer: std::ptr::null_mut(),
+            },
+            state: RendererState::default(),
+            registered_size: None,
+        })
+    }
+
+    pub fn render_view(
+        &mut self,
+        framebuffer: &mut Framebuffer,
+        view: &UiView,
+        snapshot: &RuntimeSnapshot,
+    ) -> Result<()> {
+        self.target.framebuffer = framebuffer as *mut Framebuffer;
+        self.ensure_display_registered(framebuffer)?;
+        if self.state.needs_rebuild(view.screen) {
+            self.destroy_active_screen();
+            unsafe { build_screen(&self.shim, view.screen)? };
+            self.state.mark_screen_built(view.screen);
+        }
+        unsafe { sync_view_with_loaded_shim(&self.shim, view, snapshot)? };
+        unsafe { (self.shim.force_refresh)() };
+        let _ = unsafe { (self.shim.timer_handler)() };
+        Ok(())
+    }
+
+    fn ensure_display_registered(&mut self, framebuffer: &Framebuffer) -> Result<()> {
+        let size = (framebuffer.width(), framebuffer.height());
+        if self.registered_size == Some(size) {
+            return Ok(());
+        }
+        self.shim.check(
+            unsafe {
+                (self.shim.register_display)(
+                    framebuffer.width() as c_int,
+                    framebuffer.height() as c_int,
+                    (framebuffer.width() * 40) as u32,
+                    lvgl_flush_callback,
+                    &mut self.target as *mut LvglFlushTarget as *mut c_void,
+                )
+            },
+            "register_display",
+        )?;
+        self.registered_size = Some(size);
+        Ok(())
+    }
+
+    fn destroy_active_screen(&mut self) {
+        if let Some(screen) = self.state.active_screen() {
+            unsafe { destroy_screen(&self.shim, screen) };
+            self.state.clear();
+        }
+    }
+}
+
+impl Drop for LvglRenderer {
+    fn drop(&mut self) {
+        self.destroy_active_screen();
+        unsafe { (self.shim.shutdown)() };
+    }
 }
 
 pub fn render_hub_with_lvgl(
@@ -431,27 +512,108 @@ unsafe fn render_view_with_loaded_shim(
         "register_display",
     )?;
 
-    match view.screen {
-        UiScreen::Hub => unsafe { sync_hub_view(shim, view, snapshot)? },
-        UiScreen::Listen => unsafe { sync_listen_view(shim, view, snapshot)? },
-        UiScreen::Playlists
-        | UiScreen::RecentTracks
-        | UiScreen::Contacts
-        | UiScreen::CallHistory => unsafe { sync_playlist_view(shim, view, snapshot)? },
-        UiScreen::NowPlaying => unsafe { sync_now_playing_view(shim, view, snapshot)? },
-        UiScreen::Talk => unsafe { sync_talk_view(shim, view, snapshot)? },
-        UiScreen::IncomingCall => unsafe { sync_incoming_call_view(shim, view, snapshot)? },
-        UiScreen::OutgoingCall => unsafe { sync_outgoing_call_view(shim, view, snapshot)? },
-        UiScreen::InCall => unsafe { sync_in_call_view(shim, view, snapshot)? },
-        UiScreen::Ask | UiScreen::VoiceNote | UiScreen::Loading | UiScreen::Error => unsafe {
-            sync_ask_view(shim, view, snapshot)?
-        },
-        UiScreen::Power => unsafe { sync_power_view(shim, view, snapshot)? },
-    }
+    unsafe { build_screen(shim, view.screen)? };
+    unsafe { sync_view_with_loaded_shim(shim, view, snapshot)? };
 
     unsafe { (shim.force_refresh)() };
     let _ = unsafe { (shim.timer_handler)() };
     Ok(())
+}
+
+unsafe fn build_screen(shim: &LvglShim, screen: UiScreen) -> Result<()> {
+    match native_scene(screen) {
+        NativeScene::Hub => shim.check(unsafe { (shim.hub_build)() }, "hub_build"),
+        NativeScene::Listen => shim.check(unsafe { (shim.listen_build)() }, "listen_build"),
+        NativeScene::Playlist => shim.check(unsafe { (shim.playlist_build)() }, "playlist_build"),
+        NativeScene::NowPlaying => {
+            shim.check(unsafe { (shim.now_playing_build)() }, "now_playing_build")
+        }
+        NativeScene::Talk => shim.check(unsafe { (shim.talk_build)() }, "talk_build"),
+        NativeScene::IncomingCall => shim.check(
+            unsafe { (shim.incoming_call_build)() },
+            "incoming_call_build",
+        ),
+        NativeScene::OutgoingCall => shim.check(
+            unsafe { (shim.outgoing_call_build)() },
+            "outgoing_call_build",
+        ),
+        NativeScene::InCall => shim.check(unsafe { (shim.in_call_build)() }, "in_call_build"),
+        NativeScene::Ask => shim.check(unsafe { (shim.ask_build)() }, "ask_build"),
+        NativeScene::Power => shim.check(unsafe { (shim.power_build)() }, "power_build"),
+    }
+}
+
+unsafe fn destroy_screen(shim: &LvglShim, screen: UiScreen) {
+    match native_scene(screen) {
+        NativeScene::Hub => unsafe { (shim.hub_destroy)() },
+        NativeScene::Listen => unsafe { (shim.listen_destroy)() },
+        NativeScene::Playlist => unsafe { (shim.playlist_destroy)() },
+        NativeScene::NowPlaying => unsafe { (shim.now_playing_destroy)() },
+        NativeScene::Talk => unsafe { (shim.talk_destroy)() },
+        NativeScene::IncomingCall => unsafe { (shim.incoming_call_destroy)() },
+        NativeScene::OutgoingCall => unsafe { (shim.outgoing_call_destroy)() },
+        NativeScene::InCall => unsafe { (shim.in_call_destroy)() },
+        NativeScene::Ask => unsafe { (shim.ask_destroy)() },
+        NativeScene::Power => unsafe { (shim.power_destroy)() },
+    }
+}
+
+unsafe fn sync_view_with_loaded_shim(
+    shim: &LvglShim,
+    view: &UiView,
+    snapshot: &RuntimeSnapshot,
+) -> Result<()> {
+    match view.screen {
+        UiScreen::Hub => unsafe { sync_hub_view(shim, view, snapshot) },
+        UiScreen::Listen => unsafe { sync_listen_view(shim, view, snapshot) },
+        UiScreen::Playlists
+        | UiScreen::RecentTracks
+        | UiScreen::Contacts
+        | UiScreen::CallHistory => unsafe { sync_playlist_view(shim, view, snapshot) },
+        UiScreen::NowPlaying => unsafe { sync_now_playing_view(shim, view, snapshot) },
+        UiScreen::Talk => unsafe { sync_talk_view(shim, view, snapshot) },
+        UiScreen::IncomingCall => unsafe { sync_incoming_call_view(shim, view, snapshot) },
+        UiScreen::OutgoingCall => unsafe { sync_outgoing_call_view(shim, view, snapshot) },
+        UiScreen::InCall => unsafe { sync_in_call_view(shim, view, snapshot) },
+        UiScreen::Ask | UiScreen::VoiceNote | UiScreen::Loading | UiScreen::Error => unsafe {
+            sync_ask_view(shim, view, snapshot)
+        },
+        UiScreen::Power => unsafe { sync_power_view(shim, view, snapshot) },
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum NativeScene {
+    Hub,
+    Listen,
+    Playlist,
+    NowPlaying,
+    Talk,
+    IncomingCall,
+    OutgoingCall,
+    InCall,
+    Ask,
+    Power,
+}
+
+fn native_scene(screen: UiScreen) -> NativeScene {
+    match screen {
+        UiScreen::Hub => NativeScene::Hub,
+        UiScreen::Listen => NativeScene::Listen,
+        UiScreen::Playlists
+        | UiScreen::RecentTracks
+        | UiScreen::Contacts
+        | UiScreen::CallHistory => NativeScene::Playlist,
+        UiScreen::NowPlaying => NativeScene::NowPlaying,
+        UiScreen::Talk => NativeScene::Talk,
+        UiScreen::IncomingCall => NativeScene::IncomingCall,
+        UiScreen::OutgoingCall => NativeScene::OutgoingCall,
+        UiScreen::InCall => NativeScene::InCall,
+        UiScreen::Ask | UiScreen::VoiceNote | UiScreen::Loading | UiScreen::Error => {
+            NativeScene::Ask
+        }
+        UiScreen::Power => NativeScene::Power,
+    }
 }
 
 unsafe fn sync_hub_view(shim: &LvglShim, view: &UiView, snapshot: &RuntimeSnapshot) -> Result<()> {
@@ -468,7 +630,6 @@ unsafe fn sync_hub_view(shim: &LvglShim, view: &UiView, snapshot: &RuntimeSnapsh
     let subtitle = c_string("subtitle", &view.subtitle)?;
     let footer = c_string("footer", &view.footer)?;
     let time_text = c_string("time_text", "")?;
-    shim.check(unsafe { (shim.hub_build)() }, "hub_build")?;
     shim.check(
         unsafe {
             (shim.hub_sync)(
@@ -502,7 +663,6 @@ unsafe fn sync_listen_view(
     let icons = fixed_item_strings(view, 4, |item| item.icon_key.as_str())?;
     let empty_title = c_string("empty_title", "No music yet")?;
     let empty_subtitle = c_string("empty_subtitle", "Add music to the library")?;
-    shim.check(unsafe { (shim.listen_build)() }, "listen_build")?;
     shim.check(
         unsafe {
             (shim.listen_sync)(
@@ -551,7 +711,6 @@ unsafe fn sync_playlist_view(
     let empty_title = c_string("empty_title", "No playlists")?;
     let empty_subtitle = c_string("empty_subtitle", "Sync music first")?;
     let empty_icon = c_string("empty_icon_key", "playlist")?;
-    shim.check(unsafe { (shim.playlist_build)() }, "playlist_build")?;
     shim.check(
         unsafe {
             (shim.playlist_sync)(
@@ -610,7 +769,6 @@ unsafe fn sync_now_playing_view(
         },
     )?;
     let footer = c_string("footer", &view.footer)?;
-    shim.check(unsafe { (shim.now_playing_build)() }, "now_playing_build")?;
     shim.check(
         unsafe {
             (shim.now_playing_sync)(
@@ -634,7 +792,6 @@ unsafe fn sync_talk_view(shim: &LvglShim, view: &UiView, snapshot: &RuntimeSnaps
     let title = c_string("title_text", &view.title)?;
     let icon = c_string("icon_key", "talk")?;
     let footer = c_string("footer", &view.footer)?;
-    shim.check(unsafe { (shim.talk_build)() }, "talk_build")?;
     shim.check(
         unsafe {
             (shim.talk_sync)(
@@ -664,10 +821,6 @@ unsafe fn sync_incoming_call_view(
     let address = c_string("caller_address", &view.subtitle)?;
     let footer = c_string("footer", &view.footer)?;
     shim.check(
-        unsafe { (shim.incoming_call_build)() },
-        "incoming_call_build",
-    )?;
-    shim.check(
         unsafe {
             (shim.incoming_call_sync)(
                 name.as_ptr(),
@@ -692,10 +845,6 @@ unsafe fn sync_outgoing_call_view(
     let name = c_string("callee_name", &view.title)?;
     let address = c_string("callee_address", &view.subtitle)?;
     let footer = c_string("footer", &view.footer)?;
-    shim.check(
-        unsafe { (shim.outgoing_call_build)() },
-        "outgoing_call_build",
-    )?;
     shim.check(
         unsafe {
             (shim.outgoing_call_sync)(
@@ -729,7 +878,6 @@ unsafe fn sync_in_call_view(
         },
     )?;
     let footer = c_string("footer", &view.footer)?;
-    shim.check(unsafe { (shim.in_call_build)() }, "in_call_build")?;
     shim.check(
         unsafe {
             (shim.in_call_sync)(
@@ -754,7 +902,6 @@ unsafe fn sync_ask_view(shim: &LvglShim, view: &UiView, snapshot: &RuntimeSnapsh
     let title = c_string("title_text", &view.title)?;
     let subtitle = c_string("subtitle_text", &view.subtitle)?;
     let footer = c_string("footer", &view.footer)?;
-    shim.check(unsafe { (shim.ask_build)() }, "ask_build")?;
     shim.check(
         unsafe {
             (shim.ask_sync)(
@@ -783,7 +930,6 @@ unsafe fn sync_power_view(
     let icon = c_string("icon_key", "battery")?;
     let footer = c_string("footer", &view.footer)?;
     let rows = fixed_item_strings(view, 5, |item| item.title.as_str())?;
-    shim.check(unsafe { (shim.power_build)() }, "power_build")?;
     shim.check(
         unsafe {
             (shim.power_sync)(

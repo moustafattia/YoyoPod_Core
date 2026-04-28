@@ -2,6 +2,14 @@ use crate::framebuffer::{rgb565, Framebuffer};
 use crate::hub::HubSnapshot;
 use crate::runtime::{RuntimeSnapshot, UiScreen, UiView};
 
+pub struct FramebufferRenderer;
+
+impl FramebufferRenderer {
+    pub fn render_view(framebuffer: &mut Framebuffer, view: &UiView, snapshot: &RuntimeSnapshot) {
+        render_ui_view_fallback(framebuffer, view, snapshot);
+    }
+}
+
 pub fn render_test_scene(framebuffer: &mut Framebuffer, counter: u64) {
     framebuffer.clear(rgb565(8, 10, 14));
 
