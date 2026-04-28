@@ -174,5 +174,9 @@ def test_validate_alias_with_rust_ui_poc_flag(monkeypatch) -> None:
     result = runner.invoke(app, ["validate", "--with-rust-ui-poc"])
     assert result.exit_code == 0, result.output
     assert len(calls) == 1
-    assert "/opt/yoyopod-dev/venv/bin/python -m yoyopod_cli.main build rust-ui-poc" in calls[0]
-    assert "/opt/yoyopod-dev/venv/bin/python -m yoyopod_cli.main pi rust-ui-poc" in calls[0]
+    assert "build rust-ui-poc" not in calls[0]
+    assert "test -x workers/ui/rust/build/yoyopod-rust-ui-poc" in calls[0]
+    assert (
+        "/opt/yoyopod-dev/venv/bin/python -m yoyopod_cli.main pi rust-ui-poc "
+        "--worker workers/ui/rust/build/yoyopod-rust-ui-poc"
+    ) in calls[0]

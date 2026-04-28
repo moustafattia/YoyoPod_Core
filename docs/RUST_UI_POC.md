@@ -15,10 +15,19 @@ For host-only protocol tests:
 yoyopod build rust-ui-poc --no-hardware-feature
 ```
 
-CI also builds the Whisplay worker on a native Linux ARM64 runner and uploads it
-as the `yoyopod-rust-ui-poc-${{ github.sha }}` artifact. Use that artifact, or a
-binary built on another ARM64 Linux board, when the Pi Zero 2W is too slow to
-compile the Rust dependencies directly.
+CI builds the Whisplay worker on a native Linux ARM64 runner and uploads it as
+the `yoyopod-rust-ui-poc-${{ github.sha }}` artifact.
+
+For Raspberry Pi Zero 2W hardware validation, the deploy path is always:
+
+1. Commit and push the branch.
+2. Wait for the GitHub Actions `ui-rust` job to pass for the exact commit.
+3. Download the matching `yoyopod-rust-ui-poc-<sha>` artifact.
+4. Copy it to `workers/ui/rust/build/yoyopod-rust-ui-poc` on the Pi checkout.
+
+Do not run `cargo build` or `yoyopod build rust-ui-poc` on the Pi Zero 2W unless
+the user explicitly overrides this rule. Local builds are for developer
+workstations or faster ARM64 boards only.
 
 ## Required Whisplay Environment
 
@@ -37,15 +46,15 @@ The button default is GPIO 26, active low, matching the current Python fallback.
 
 ## Run On Pi
 
+First copy the CI artifact into the dev checkout and make it executable:
+
 ```bash
-yoyopod pi rust-ui-poc --worker workers/ui/rust/build/yoyopod-rust-ui-poc --frames 10
+mkdir -p workers/ui/rust/build
+chmod +x workers/ui/rust/build/yoyopod-rust-ui-poc
 ```
 
-If the worker came from CI artifacts, make it executable after copying it to the
-Pi:
-
 ```bash
-chmod +x workers/ui/rust/build/yoyopod-rust-ui-poc
+yoyopod pi rust-ui-poc --worker workers/ui/rust/build/yoyopod-rust-ui-poc --frames 10
 ```
 
 Expected result:

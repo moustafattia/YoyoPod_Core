@@ -241,7 +241,7 @@ def _validate_shortcut(
     with_rust_ui_poc: bool = typer.Option(
         False,
         "--with-rust-ui-poc",
-        help="Build and run the Whisplay-only Rust UI hardware I/O PoC on the target.",
+        help="Run the Whisplay-only Rust UI hardware I/O PoC using a preinstalled CI artifact.",
     ),
     verbose: bool = typer.Option(False, "--verbose"),
 ) -> None:

@@ -87,8 +87,13 @@ def test_build_validate_with_rust_ui_poc() -> None:
         with_rust_ui_poc=True,
     )
 
-    assert "venv/bin/python -m yoyopod_cli.main build rust-ui-poc" in shell
-    assert "venv/bin/python -m yoyopod_cli.main pi rust-ui-poc" in shell
+    assert "build rust-ui-poc" not in shell
+    assert "test -x workers/ui/rust/build/yoyopod-rust-ui-poc" in shell
+    assert "CI-built Rust UI artifact" in shell
+    assert (
+        "venv/bin/python -m yoyopod_cli.main pi rust-ui-poc "
+        "--worker workers/ui/rust/build/yoyopod-rust-ui-poc"
+    ) in shell
 
 
 def test_build_validate_only_music() -> None:

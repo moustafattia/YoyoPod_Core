@@ -21,6 +21,8 @@ from yoyopod_cli.remote_transport import (
 
 app = build_remote_app("validate_app", "Validate commit + health on the Pi.")
 
+_RUST_UI_POC_WORKER = "workers/ui/rust/build/yoyopod-rust-ui-poc"
+
 
 def _build_preflight_steps() -> list[tuple[str, list[str]]]:
     """Preflight steps as (label, argv) tuples. Run them sequentially; exit on first failure."""
@@ -157,8 +159,22 @@ def _build_validate(
     if with_navigation:
         steps.append(checkout_module_command(venv_relpath, "pi", "validate", "navigation"))
     if with_rust_ui_poc:
-        steps.append(checkout_module_command(venv_relpath, "build", "rust-ui-poc"))
-        steps.append(checkout_module_command(venv_relpath, "pi", "rust-ui-poc"))
+        worker = shell_quote(_RUST_UI_POC_WORKER)
+        message = shell_quote(
+            "Missing executable CI-built Rust UI artifact at "
+            f"{_RUST_UI_POC_WORKER}. Download the GitHub Actions artifact "
+            "for this exact commit before --with-rust-ui-poc; do not build Rust on the Pi."
+        )
+        steps.append(f"test -x {worker} || (echo {message} >&2 && exit 1)")
+        steps.append(
+            checkout_module_command(
+                venv_relpath,
+                "pi",
+                "rust-ui-poc",
+                "--worker",
+                _RUST_UI_POC_WORKER,
+            )
+        )
     return " && ".join(steps)
 
 
@@ -194,7 +210,7 @@ def validate(
     with_rust_ui_poc: bool = typer.Option(
         False,
         "--with-rust-ui-poc",
-        help="Build and run the Whisplay-only Rust UI hardware I/O PoC on the target.",
+        help="Run the Whisplay-only Rust UI hardware I/O PoC using a preinstalled CI artifact.",
     ),
     verbose: bool = typer.Option(False, "--verbose"),
 ) -> None:
