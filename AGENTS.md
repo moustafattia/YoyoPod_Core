@@ -1,6 +1,6 @@
 # YoYoPod - Agent Instructions
 
-Last Updated: 2026-04-27
+Last Updated: 2026-04-28
 Target Hardware: Raspberry Pi Zero 2W
 Project: iPod-inspired VoIP + local music device with small-screen button UI
 
@@ -33,6 +33,7 @@ Canonical deploy/debug skills
 - `skills/yoyopod-restart/SKILL.md`
 - `skills/yoyopod-status/SKILL.md`
 - `skills/yoyopod-screenshot/SKILL.md`
+- `skills/yoyopod-rust-artifact/SKILL.md`
 - `docs/operations/SLOT_DEPLOY.md` (slot-deploy + OTA-ready flow; coexists with the legacy skills above)
 
 Current runtime summary
@@ -54,6 +55,7 @@ Pi lanes and bootstrap
 - Migration: `--migrate` preserves old config/logs for reference only. It does not copy old `~/yoyopod-core` into dev; live dev truth is `/opt/yoyopod-dev/checkout`.
 - Hard cut: supported runtime owners are only `yoyopod-dev.service` and `yoyopod-prod.service`; `yoyopod@*.service`, `yoyopod-slot.service`, unmanaged `python yoyopod.py`, and `remote service ...` are legacy contamination paths.
 - Dev deploy loop: `yoyopod remote mode activate dev`, then `yoyopod remote setup` once, then `yoyopod remote sync --branch <branch>`; add `--clean-native` after native/CMake/lib changes or branch switches.
+- Rust binary deploy rule: commit and push first, then use the GitHub Actions artifact for the exact commit under test. Do not build Rust binaries on the Pi Zero 2W with `cargo build` or `yoyopod build rust-ui-poc` unless the user explicitly overrides this rule. Native C shim rebuilds via `--clean-native` remain allowed.
 - Lane details live in `docs/operations/DEV_PROD_LANES.md`, dev workflow in `docs/operations/PI_DEV_WORKFLOW.md`, prod slot/OTA flow in `docs/operations/SLOT_DEPLOY.md`.
 
 Source-of-truth files

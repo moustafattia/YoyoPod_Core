@@ -72,6 +72,53 @@ def test_build_validate_all_flags() -> None:
     assert ".venv/bin/python -m yoyopod_cli.main pi validate navigation" in shell
 
 
+def test_build_validate_with_rust_ui_poc() -> None:
+    shell = _build_validate(
+        branch="feature",
+        venv_relpath="venv",
+        sha="",
+        with_music=False,
+        with_voip=False,
+        with_power=False,
+        with_rtc=False,
+        with_cloud_voice=False,
+        with_lvgl_soak=False,
+        with_navigation=False,
+        with_rust_ui_poc=True,
+    )
+
+    assert "build rust-ui-poc" not in shell
+    assert "test -x src/crates/ui-host/build/yoyopod-ui-host" in shell
+    assert "CI-built Rust UI artifact" in shell
+    assert (
+        "venv/bin/python -m yoyopod_cli.main pi rust-ui-host "
+        "--worker src/crates/ui-host/build/yoyopod-ui-host"
+    ) in shell
+
+
+def test_build_validate_with_rust_ui_host() -> None:
+    shell = _build_validate(
+        branch="feature",
+        venv_relpath="venv",
+        sha="",
+        with_music=False,
+        with_voip=False,
+        with_power=False,
+        with_rtc=False,
+        with_cloud_voice=False,
+        with_lvgl_soak=False,
+        with_navigation=False,
+        with_rust_ui_host=True,
+    )
+
+    assert "build rust-ui-host" not in shell
+    assert "test -x src/crates/ui-host/build/yoyopod-ui-host" in shell
+    assert (
+        "venv/bin/python -m yoyopod_cli.main pi rust-ui-host "
+        "--worker src/crates/ui-host/build/yoyopod-ui-host"
+    ) in shell
+
+
 def test_build_validate_only_music() -> None:
     shell = _build_validate(
         branch="main",
@@ -181,6 +228,8 @@ def test_validate_has_all_with_flags() -> None:
         "--with-cloud-voice",
         "--with-lvgl-soak",
         "--with-navigation",
+        "--with-rust-ui-host",
+        "--with-rust-ui-poc",
     ):
         assert flag in names
 

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-from yoyopod.core import ScreenChangedEvent, UserActivityEvent
+from yoyopod.core import ScreenChangedEvent, UserActivityEvent, WorkerMessageReceivedEvent
 from yoyopod.integrations.location.events import NetworkGpsFixEvent, NetworkGpsNoFixEvent
 from yoyopod.integrations.network.events import (
     NetworkPppDownEvent,
@@ -59,3 +59,38 @@ def test_runtime_event_subscriptions_register_all_runtime_handlers() -> None:
         (NetworkGpsNoFixEvent, "gps_no_fix"),
         (NetworkPppDownEvent, "ppp_down"),
     ]
+
+
+def test_runtime_event_subscriptions_register_rust_ui_host_when_present() -> None:
+    subscriptions: list[tuple[type[object], object]] = []
+
+    def rust_ui_message(_event: object) -> None:
+        return None
+
+    rust_ui_host = SimpleNamespace(handle_worker_message=rust_ui_message)
+    app = SimpleNamespace(
+        bus=SimpleNamespace(
+            subscribe=lambda event_type, handler: subscriptions.append((event_type, handler))
+        ),
+        screen_power_service=SimpleNamespace(
+            handle_screen_changed_event="screen_changed",
+            handle_user_activity_event="user_activity",
+            handle_low_battery_warning_event="low_battery",
+        ),
+        shutdown_service=SimpleNamespace(
+            handle_graceful_shutdown_requested_event="shutdown_requested",
+            handle_graceful_shutdown_cancelled_event="shutdown_cancelled",
+        ),
+        network_events=SimpleNamespace(
+            handle_network_ppp_up="ppp_up",
+            handle_network_signal_update="signal_update",
+            handle_network_gps_fix="gps_fix",
+            handle_network_gps_no_fix="gps_no_fix",
+            handle_network_ppp_down="ppp_down",
+        ),
+        rust_ui_host=rust_ui_host,
+    )
+
+    RuntimeEventSubscriptions(app).register()
+
+    assert (WorkerMessageReceivedEvent, rust_ui_message) in subscriptions

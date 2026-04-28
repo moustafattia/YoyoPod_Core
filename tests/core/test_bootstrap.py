@@ -1080,6 +1080,51 @@ def test_setup_event_subscriptions_keeps_legacy_runtime_helper_flow() -> None:
     assert calls == ["ensure"]
 
 
+def test_setup_rust_ui_host_sends_initial_backlight(monkeypatch) -> None:
+    """Rust UI host boot should apply configured brightness after the worker starts."""
+
+    calls: list[tuple[str, object]] = []
+
+    class _FakeRustUiFacade:
+        def __init__(self, app, *, worker_domain: str) -> None:
+            self.app = app
+            self.worker_domain = worker_domain
+
+        def start_worker(self, worker_path: str, *, hardware: str) -> bool:
+            calls.append(("start", (worker_path, hardware)))
+            return True
+
+        def send_snapshot(self) -> bool:
+            calls.append(("snapshot", None))
+            return True
+
+        def send_backlight(self, *, brightness: float) -> bool:
+            calls.append(("backlight", brightness))
+            return True
+
+        def handle_worker_message(self, _event) -> None:
+            return None
+
+    monkeypatch.setattr("yoyopod.ui.rust_host.RustUiFacade", _FakeRustUiFacade)
+    app = SimpleNamespace(
+        app_settings=SimpleNamespace(
+            display=SimpleNamespace(
+                rust_ui_worker_path="src/crates/ui-host/build/yoyopod-ui-host"
+            )
+        ),
+        bus=SimpleNamespace(subscribe=lambda *_args: None),
+        _active_brightness=0.8,
+    )
+
+    assert RuntimeBootService(app).setup_rust_ui_host()
+
+    assert calls == [
+        ("start", ("src/crates/ui-host/build/yoyopod-ui-host", "whisplay")),
+        ("backlight", 0.8),
+        ("snapshot", None),
+    ]
+
+
 def test_managers_boot_starts_network_and_syncs_context_without_event_wiring() -> None:
     """Network startup should use the dedicated runtime handler instead of deleted wiring glue."""
 

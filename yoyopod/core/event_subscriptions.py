@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from yoyopod.core import ScreenChangedEvent, UserActivityEvent
+from yoyopod.core import ScreenChangedEvent, UserActivityEvent, WorkerMessageReceivedEvent
 from yoyopod.integrations.location.events import (
     NetworkGpsFixEvent,
     NetworkGpsNoFixEvent,
@@ -71,6 +71,10 @@ class RuntimeEventSubscriptions:
             NetworkPppDownEvent,
             self.app.network_events.handle_network_ppp_down,
         )
+        rust_ui_host = getattr(self.app, "rust_ui_host", None)
+        handle_worker_message = getattr(rust_ui_host, "handle_worker_message", None)
+        if callable(handle_worker_message):
+            bus.subscribe(WorkerMessageReceivedEvent, handle_worker_message)
 
 
 __all__ = ["RuntimeEventSubscriptions"]

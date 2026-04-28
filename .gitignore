@@ -32,6 +32,11 @@ ENV/
 .uv/
 uv.lock
 
+# Rust
+target/
+Cargo.lock
+!workers/ui/rust/Cargo.lock
+
 # IDEs
 .vscode/
 .idea/
@@ -73,6 +78,7 @@ deploy/pi-deploy.local.yaml
 *.bak
 *.swp
 .cache/
+.artifacts/
 data/*.json
 data/communication/
 data/cloud/

@@ -242,6 +242,16 @@ def _validate_shortcut(
     ),
     with_lvgl_soak: bool = typer.Option(False, "--with-lvgl-soak"),
     with_navigation: bool = typer.Option(False, "--with-navigation"),
+    with_rust_ui_host: bool = typer.Option(
+        False,
+        "--with-rust-ui-host",
+        help="Run the Rust UI host using a preinstalled CI artifact.",
+    ),
+    with_rust_ui_poc: bool = typer.Option(
+        False,
+        "--with-rust-ui-poc",
+        help="Compatibility alias for --with-rust-ui-host.",
+    ),
     verbose: bool = typer.Option(False, "--verbose"),
 ) -> None:
     """Run staged Pi validation (alias for `remote validate`)."""
@@ -255,6 +265,8 @@ def _validate_shortcut(
         with_cloud_voice=with_cloud_voice,
         with_lvgl_soak=with_lvgl_soak,
         with_navigation=with_navigation,
+        with_rust_ui_host=with_rust_ui_host,
+        with_rust_ui_poc=with_rust_ui_poc,
         verbose=verbose,
     )
 

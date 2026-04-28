@@ -7,6 +7,8 @@ from dataclasses import dataclass
 from yoyopod.config.models.core import config_value
 from yoyopod.config.models.power import PimoroniGpioConfig, PimoroniGpioInputConfig
 
+_RUST_UI_HOST_DEFAULT_WORKER = "src/crates/ui-host/build/yoyopod-ui-host"
+
 
 @dataclass(slots=True)
 class AppMetadataConfig:
@@ -63,10 +65,36 @@ class AppDisplayConfig:
         default=40,
         env="YOYOPOD_LVGL_BUFFER_LINES",
     )
+    rust_ui_host_enabled: bool = config_value(
+        default=False,
+        env="YOYOPOD_RUST_UI_HOST_ENABLED",
+    )
+    rust_ui_host_worker: str = config_value(
+        default=_RUST_UI_HOST_DEFAULT_WORKER,
+        env="YOYOPOD_RUST_UI_HOST_WORKER",
+    )
+    rust_ui_sidecar_enabled: bool = config_value(
+        default=False,
+        env="YOYOPOD_RUST_UI_SIDECAR_ENABLED",
+    )
+    rust_ui_worker: str = config_value(
+        default=_RUST_UI_HOST_DEFAULT_WORKER,
+        env="YOYOPOD_RUST_UI_WORKER",
+    )
     brightness: int = 80
     rotation: int = 0
     backlight_timeout_seconds: int = 60
     pimoroni_gpio: PimoroniGpioConfig | None = None
+
+    @property
+    def rust_ui_enabled(self) -> bool:
+        return self.rust_ui_host_enabled or self.rust_ui_sidecar_enabled
+
+    @property
+    def rust_ui_worker_path(self) -> str:
+        if self.rust_ui_host_worker.strip() != _RUST_UI_HOST_DEFAULT_WORKER:
+            return self.rust_ui_host_worker
+        return self.rust_ui_worker
 
 
 @dataclass(slots=True)

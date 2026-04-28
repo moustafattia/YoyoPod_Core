@@ -31,6 +31,7 @@ from yoyopod.integrations.music.events import (
     TrackChangedEvent,
 )
 from yoyopod.core.app_state import AppRuntimeState, AppStateRuntime
+from yoyopod.core.events import WorkerMessageReceivedEvent
 from yoyopod.integrations.call import (
     CallFSM,
     CallInterruptionPolicy,
@@ -43,6 +44,7 @@ from yoyopod.core import UserActivityEvent
 from yoyopod.integrations.power import PowerAlert
 from yoyopod.integrations.network.models import ModemPhase, ModemState, SignalInfo
 from yoyopod.ui.input import InputManager, InteractionProfile
+from yoyopod.ui.rust_host.facade import RustUiFacade
 from yoyopod.ui.screens.manager import VisibleTickRefreshResult
 
 
@@ -124,6 +126,17 @@ class FakeDisplay:
 
     def set_backlight(self, brightness: float) -> None:
         self.set_backlight_calls.append(brightness)
+
+
+class FakeRustUiHost:
+    """Minimal Rust UI host double for screen-power ownership tests."""
+
+    def __init__(self) -> None:
+        self.backlight_calls: list[float] = []
+
+    def send_backlight(self, *, brightness: float) -> bool:
+        self.backlight_calls.append(brightness)
+        return True
 
 
 class FakeLvglBackend:
@@ -1326,6 +1339,68 @@ def test_worker_navigation_waits_for_coordinator_drain_before_syncing_state() ->
     assert app.app_state_runtime.current_app_state == AppRuntimeState.CALL_IDLE
 
 
+def test_rust_ui_screen_changed_event_wakes_screen_power_and_syncs_state() -> None:
+    """Rust screen changes should enter the Python screen-power/state event path."""
+
+    app, _, _ = _build_app(playback_state="stopped")
+    app.display = FakeDisplay()
+    app.app_settings = SimpleNamespace(
+        ui=SimpleNamespace(screen_timeout_seconds=300),
+        display=SimpleNamespace(brightness=75, backlight_timeout_seconds=30),
+    )
+    app._screen_timeout_seconds = app.screen_power_service.resolve_screen_timeout_seconds()
+    app._active_brightness = app.screen_power_service.resolve_active_brightness()
+    app.screen_power_service.configure_screen_power(initial_now=0.0)
+    app.screen_power_service.sleep_screen(31.0)
+
+    RustUiFacade(app, worker_domain="ui").handle_worker_message(
+        WorkerMessageReceivedEvent(
+            domain="ui",
+            kind="event",
+            type="ui.screen_changed",
+            request_id=None,
+            payload={"screen": "contacts"},
+        )
+    )
+
+    assert app.runtime_loop.process_pending_main_thread_actions() >= 1
+    assert app.display.set_backlight_calls[-1] == 0.75
+    assert app.context.screen.awake is True
+    assert app.app_state_runtime.current_app_state == AppRuntimeState.CALL_IDLE
+
+
+def test_rust_ui_call_screen_changed_event_wakes_without_overriding_call_state() -> None:
+    """Call-owned Rust screens should wake display without becoming base UI state."""
+
+    app, _, _ = _build_app(playback_state="stopped")
+    app.display = FakeDisplay()
+    app.app_settings = SimpleNamespace(
+        ui=SimpleNamespace(screen_timeout_seconds=300),
+        display=SimpleNamespace(brightness=75, backlight_timeout_seconds=30),
+    )
+    app.call_fsm.sync(CallSessionState.INCOMING)
+    app.app_state_runtime.sync_app_state("incoming_call")
+    app._screen_timeout_seconds = app.screen_power_service.resolve_screen_timeout_seconds()
+    app._active_brightness = app.screen_power_service.resolve_active_brightness()
+    app.screen_power_service.configure_screen_power(initial_now=0.0)
+    app.screen_power_service.sleep_screen(31.0)
+
+    RustUiFacade(app, worker_domain="ui").handle_worker_message(
+        WorkerMessageReceivedEvent(
+            domain="ui",
+            kind="event",
+            type="ui.screen_changed",
+            request_id=None,
+            payload={"screen": "incoming_call"},
+        )
+    )
+
+    assert app.runtime_loop.process_pending_main_thread_actions() >= 1
+    assert app.display.set_backlight_calls[-1] == 0.75
+    assert app.context.screen.awake is True
+    assert app.app_state_runtime.current_app_state == AppRuntimeState.CALL_INCOMING
+
+
 def test_main_thread_callback_errors_are_contained_and_drain_continues() -> None:
     """Scheduled UI callbacks should not abort later callbacks or queued app events."""
 
@@ -1917,6 +1992,28 @@ def test_screen_power_service_turns_backlight_off_after_inactivity() -> None:
     assert app.context.screen.idle_seconds == 31
 
 
+def test_screen_power_service_forwards_backlight_to_rust_ui_host() -> None:
+    """Rust-host mode should preserve physical backlight sleep/wake commands."""
+
+    app, _, _ = _build_app(playback_state="stopped")
+    rust_ui_host = FakeRustUiHost()
+    app.display = None
+    app.rust_ui_host = rust_ui_host
+    app.app_settings = SimpleNamespace(
+        ui=SimpleNamespace(screen_timeout_seconds=300),
+        display=SimpleNamespace(brightness=80, backlight_timeout_seconds=30),
+    )
+
+    app._screen_timeout_seconds = app.screen_power_service.resolve_screen_timeout_seconds()
+    app._active_brightness = app.screen_power_service.resolve_active_brightness()
+    app.screen_power_service.configure_screen_power(initial_now=0.0)
+    app.screen_power_service.update_screen_power(31.0)
+    app.screen_power_service.wake_screen(40.0, render_current=False)
+
+    assert rust_ui_host.backlight_calls == [0.8, 0.0, 0.8]
+    assert app.context.screen.awake is True
+
+
 def test_user_activity_event_wakes_screen_and_refreshes_current_screen() -> None:
     """Queued user activity should wake a sleeping screen and re-render the visible route."""
 
@@ -1937,6 +2034,44 @@ def test_user_activity_event_wakes_screen_and_refreshes_current_screen() -> None
 
     _publish_from_worker(app, UserActivityEvent(action_name="select"))
 
+    assert app.runtime_loop.process_pending_main_thread_actions() >= 1
+    assert app.display.set_backlight_calls[-1] == 0.75
+    assert app.context.screen.awake is True
+    assert app.menu_screen.render_calls == render_calls_before + 1
+
+
+def test_rust_ui_input_event_wakes_screen_power_service() -> None:
+    """Rust worker input events should use the same activity path as Python input."""
+
+    app, _, _ = _build_app(playback_state="stopped")
+    app.display = FakeDisplay()
+    app.app_settings = SimpleNamespace(
+        ui=SimpleNamespace(screen_timeout_seconds=300),
+        display=SimpleNamespace(brightness=75, backlight_timeout_seconds=30),
+    )
+
+    app._screen_timeout_seconds = app.screen_power_service.resolve_screen_timeout_seconds()
+    app._active_brightness = app.screen_power_service.resolve_active_brightness()
+    app.screen_power_service.configure_screen_power(initial_now=0.0)
+    app.screen_power_service.sleep_screen(31.0)
+
+    render_calls_before = app.menu_screen.render_calls
+    RustUiFacade(app, worker_domain="ui").handle_worker_message(
+        WorkerMessageReceivedEvent(
+            domain="ui",
+            kind="event",
+            type="ui.input",
+            request_id=None,
+            payload={
+                "action": "select",
+                "method": "short",
+                "timestamp_ms": 1234,
+                "duration_ms": 30,
+            },
+        )
+    )
+
+    assert app.runtime_metrics.last_input_activity_action_name == "select"
     assert app.runtime_loop.process_pending_main_thread_actions() >= 1
     assert app.display.set_backlight_calls[-1] == 0.75
     assert app.context.screen.awake is True
