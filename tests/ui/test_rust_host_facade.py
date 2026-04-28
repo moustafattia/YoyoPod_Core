@@ -14,17 +14,38 @@ from yoyopod.ui.rust_host.facade import RustUiFacade
 
 
 class _Supervisor:
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        *,
+        messages: list[SimpleNamespace] | None = None,
+        start_result: bool = True,
+    ) -> None:
         self.sent: list[tuple[str, str, dict[str, Any] | None, str | None]] = []
         self.registered: list[tuple[str, object]] = []
         self.started: list[str] = []
+        self.drain_calls: list[str] = []
+        self.stopped: list[str] = []
+        self._messages = list(messages or [])
+        self._start_result = start_result
 
     def register(self, domain: str, config: object) -> None:
         self.registered.append((domain, config))
 
     def start(self, domain: str) -> bool:
         self.started.append(domain)
-        return True
+        return self._start_result
+
+    def drain_worker_messages(self, domain: str) -> list[SimpleNamespace]:
+        self.drain_calls.append(domain)
+        messages = self._messages
+        self._messages = []
+        return messages
+
+    def snapshot(self) -> dict[str, dict[str, object]]:
+        return {"ui": {"running": True}}
+
+    def stop(self, domain: str, *, grace_seconds: float = 1.0) -> None:
+        self.stopped.append(domain)
 
     def send_command(
         self,
@@ -47,13 +68,14 @@ class _Services:
 
 
 def test_facade_starts_ui_host_worker() -> None:
-    supervisor = _Supervisor()
+    supervisor = _Supervisor(messages=[SimpleNamespace(kind="event", type="ui.ready", payload={})])
     app = SimpleNamespace(worker_supervisor=supervisor)
     facade = RustUiFacade(app, worker_domain="ui")
 
     assert facade.start_worker("src/crates/ui-host/build/yoyopod-ui-host", hardware="whisplay")
 
     assert supervisor.started == ["ui"]
+    assert supervisor.drain_calls == ["ui"]
     domain, config = supervisor.registered[0]
     assert domain == "ui"
     assert getattr(config, "argv") == [
@@ -61,6 +83,43 @@ def test_facade_starts_ui_host_worker() -> None:
         "--hardware",
         "whisplay",
     ]
+
+
+def test_facade_rejects_worker_start_without_ready_event() -> None:
+    supervisor = _Supervisor()
+    app = SimpleNamespace(worker_supervisor=supervisor)
+    facade = RustUiFacade(app, worker_domain="ui")
+
+    assert not facade.start_worker(
+        "src/crates/ui-host/build/yoyopod-ui-host",
+        ready_timeout_seconds=0.0,
+        ready_poll_interval_seconds=0.0,
+    )
+
+    assert supervisor.started == ["ui"]
+    assert supervisor.stopped == ["ui"]
+
+
+def test_facade_rejects_worker_startup_error_before_ready() -> None:
+    supervisor = _Supervisor(
+        messages=[
+            SimpleNamespace(
+                kind="error",
+                type="display_open_failed",
+                payload={"message": "no framebuffer"},
+            )
+        ]
+    )
+    app = SimpleNamespace(worker_supervisor=supervisor)
+    facade = RustUiFacade(app, worker_domain="ui")
+
+    assert not facade.start_worker(
+        "src/crates/ui-host/build/yoyopod-ui-host",
+        ready_timeout_seconds=0.0,
+        ready_poll_interval_seconds=0.0,
+    )
+
+    assert supervisor.stopped == ["ui"]
 
 
 def test_facade_sends_snapshot_and_tick_without_request_tracking() -> None:

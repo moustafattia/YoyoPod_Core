@@ -9,10 +9,11 @@ from yoyopod.ui.rust_sidecar.coordinator import RustUiSidecarCoordinator
 
 
 class _Supervisor:
-    def __init__(self) -> None:
+    def __init__(self, *, messages: list[SimpleNamespace] | None = None) -> None:
         self.sent: list[tuple[str, str, dict[str, Any] | None, str | None]] = []
         self.registered: list[tuple[str, object]] = []
         self.started: list[str] = []
+        self._messages = list(messages or [])
 
     def register(self, domain: str, config: object) -> None:
         self.registered.append((domain, config))
@@ -20,6 +21,17 @@ class _Supervisor:
     def start(self, domain: str) -> bool:
         self.started.append(domain)
         return True
+
+    def drain_worker_messages(self, domain: str) -> list[SimpleNamespace]:
+        messages = self._messages
+        self._messages = []
+        return messages
+
+    def snapshot(self) -> dict[str, dict[str, object]]:
+        return {"ui": {"running": True}}
+
+    def stop(self, domain: str, *, grace_seconds: float = 1.0) -> None:
+        pass
 
     def send_command(
         self,
@@ -63,7 +75,7 @@ def test_coordinator_sends_runtime_snapshot_as_untracked_worker_command() -> Non
 
 
 def test_coordinator_registers_and_starts_worker() -> None:
-    supervisor = _Supervisor()
+    supervisor = _Supervisor(messages=[SimpleNamespace(kind="event", type="ui.ready", payload={})])
     app = SimpleNamespace(worker_supervisor=supervisor)
     coordinator = RustUiSidecarCoordinator(app, worker_domain="ui")
 
@@ -87,9 +99,7 @@ def test_coordinator_sends_tick_without_request_tracking() -> None:
 
     assert coordinator.send_tick(renderer="framebuffer")
 
-    assert supervisor.sent == [
-        ("ui", "ui.tick", {"renderer": "framebuffer"}, None)
-    ]
+    assert supervisor.sent == [("ui", "ui.tick", {"renderer": "framebuffer"}, None)]
 
 
 def test_coordinator_dispatches_ui_intents_to_python_services() -> None:

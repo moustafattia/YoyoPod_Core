@@ -92,6 +92,38 @@ for line in sys.stdin:
     assert cast(int, snapshot["voice"]["received_messages"]) >= 1
 
 
+def test_supervisor_stops_one_worker_domain(tmp_path: Path) -> None:
+    worker = _write_worker(
+        tmp_path,
+        """
+import sys
+for line in sys.stdin:
+    if '"type":"worker.stop"' in line or '"type": "worker.stop"' in line:
+        break
+""".strip(),
+    )
+    bus = Bus()
+    scheduler = MainThreadScheduler()
+    events: list[WorkerDomainStateChangedEvent] = []
+    bus.subscribe(WorkerDomainStateChangedEvent, events.append)
+    supervisor = WorkerSupervisor(scheduler=scheduler, bus=bus)
+    supervisor.register(
+        "ui",
+        WorkerProcessConfig(name="ui", argv=[sys.executable, "-u", str(worker)]),
+    )
+
+    assert supervisor.start("ui")
+    supervisor.stop("ui", grace_seconds=0.1)
+    bus.drain()
+
+    assert supervisor.snapshot()["ui"]["state"] == "stopped"
+    assert events[-1] == WorkerDomainStateChangedEvent(
+        domain="ui",
+        state="stopped",
+        reason="stop",
+    )
+
+
 def test_supervisor_marks_crashed_worker_degraded(tmp_path: Path) -> None:
     worker = _write_worker(tmp_path, "raise SystemExit(7)")
     bus = Bus()

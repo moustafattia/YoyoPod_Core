@@ -79,6 +79,19 @@ class WorkerSupervisor:
             failure_reason="start_failed",
         )
 
+    def stop(self, domain: str, *, grace_seconds: float = 1.0) -> None:
+        """Stop one registered worker domain with a bounded wait."""
+
+        slot = self._workers[domain]
+        if slot.runtime is not None:
+            slot.runtime.stop(grace_seconds=grace_seconds)
+        slot.request_types.clear()
+        slot.request_deadlines.clear()
+        slot.request_attempts.clear()
+        slot.stale_request_ids.clear()
+        slot.next_restart_at = 0.0
+        self._set_state(domain, slot, "stopped", "stop")
+
     def _start_runtime(
         self,
         domain: str,
@@ -239,7 +252,7 @@ class WorkerSupervisor:
         )
 
     def drain_worker_messages(self, domain: str) -> list[WorkerEnvelope]:
-        """Testing helper for messages that have not yet been consumed by poll."""
+        """Return messages that have not yet been consumed by poll."""
 
         runtime = self._workers[domain].runtime
         return [] if runtime is None else runtime.drain_messages()

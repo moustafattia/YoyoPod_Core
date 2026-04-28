@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 from dataclasses import dataclass
 from typing import Any
 
@@ -11,6 +12,9 @@ from yoyopod.core.events import ScreenChangedEvent, WorkerMessageReceivedEvent
 from yoyopod.core.workers import WorkerProcessConfig
 from yoyopod.ui.input.hal import InputAction
 from yoyopod.ui.rust_host.snapshot import RustUiRuntimeSnapshot
+
+_READY_EVENT_TYPE = "ui.ready"
+_STARTUP_ERROR_TYPE = "ui.error"
 
 
 class RustUiFacade:
@@ -27,6 +31,8 @@ class RustUiFacade:
         hardware: str = "mock",
         cwd: str | None = None,
         env: dict[str, str] | None = None,
+        ready_timeout_seconds: float = 5.0,
+        ready_poll_interval_seconds: float = 0.02,
     ) -> bool:
         supervisor = getattr(self.app, "worker_supervisor", None)
         register = getattr(supervisor, "register", None)
@@ -43,7 +49,75 @@ class RustUiFacade:
                 env=env,
             ),
         )
-        return bool(start(self.worker_domain))
+        if not bool(start(self.worker_domain)):
+            return False
+        if self._wait_for_ready(
+            supervisor,
+            timeout_seconds=ready_timeout_seconds,
+            poll_interval_seconds=ready_poll_interval_seconds,
+        ):
+            return True
+        self._stop_started_worker(supervisor)
+        return False
+
+    def _wait_for_ready(
+        self,
+        supervisor: Any,
+        *,
+        timeout_seconds: float,
+        poll_interval_seconds: float,
+    ) -> bool:
+        drain_worker_messages = getattr(supervisor, "drain_worker_messages", None)
+        if not callable(drain_worker_messages):
+            logger.error("Rust UI Host supervisor cannot expose startup messages")
+            return False
+
+        timeout_seconds = max(0.0, float(timeout_seconds))
+        poll_interval_seconds = max(0.0, float(poll_interval_seconds))
+        deadline = time.monotonic() + timeout_seconds
+        while True:
+            for message in drain_worker_messages(self.worker_domain):
+                kind = str(getattr(message, "kind", "") or "")
+                message_type = str(getattr(message, "type", "") or "")
+                if kind == "event" and message_type == _READY_EVENT_TYPE:
+                    return True
+                if kind == "error" or message_type == _STARTUP_ERROR_TYPE:
+                    logger.error(
+                        "Rust UI Host failed before ready: {} {}",
+                        message_type,
+                        getattr(message, "payload", {}),
+                    )
+                    return False
+
+            if self._worker_has_exited(supervisor):
+                logger.error("Rust UI Host exited before ready")
+                return False
+
+            now = time.monotonic()
+            if now >= deadline:
+                logger.error("Timed out waiting for Rust UI Host ready event")
+                return False
+            time.sleep(min(poll_interval_seconds, max(0.0, deadline - now)))
+
+    def _worker_has_exited(self, supervisor: Any) -> bool:
+        snapshot = getattr(supervisor, "snapshot", None)
+        if not callable(snapshot):
+            return False
+        workers = snapshot()
+        if not isinstance(workers, dict):
+            return False
+        worker_snapshot = workers.get(self.worker_domain)
+        if not isinstance(worker_snapshot, dict):
+            return False
+        running = worker_snapshot.get("running")
+        return running is False
+
+    def _stop_started_worker(self, supervisor: Any) -> None:
+        stop = getattr(supervisor, "stop", None)
+        if not callable(stop):
+            logger.warning("Rust UI Host startup failed, but supervisor cannot stop one worker")
+            return
+        stop(self.worker_domain, grace_seconds=0.2)
 
     def send_snapshot(self) -> bool:
         supervisor = getattr(self.app, "worker_supervisor", None)
