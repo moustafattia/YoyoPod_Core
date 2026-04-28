@@ -439,6 +439,17 @@ class RuntimeLoopService:
             return
         self.app._lvgl_input_bridge.enqueue_action(action)
 
+    def tick_rust_ui_host(self) -> None:
+        rust_ui_host = getattr(self.app, "rust_ui_host", None)
+        if rust_ui_host is None:
+            return
+        send_snapshot = getattr(rust_ui_host, "send_snapshot", None)
+        send_tick = getattr(rust_ui_host, "send_tick", None)
+        if callable(send_snapshot):
+            send_snapshot()
+        if callable(send_tick):
+            send_tick(renderer="lvgl")
+
     def pump_lvgl_backend(self, now: float | None = None) -> None:
         """Pump LVGL timers and queued input on the coordinator thread."""
         if self.app._lvgl_backend is None or not self.app._lvgl_backend.initialized:

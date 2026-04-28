@@ -149,6 +149,7 @@ class YoyoPodApp:
         self.audio_device_catalog: Optional[AudioDeviceCatalog] = None
         self.voice_runtime: Optional[VoiceRuntimeCoordinator] = None
         self.voice_worker_client: VoiceWorkerClient | None = None
+        self.rust_ui_host: object | None = None
 
         # Screen instances
         self.hub_screen: Optional[HubScreen] = None

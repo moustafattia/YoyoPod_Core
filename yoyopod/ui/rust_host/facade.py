@@ -107,6 +107,14 @@ class RustUiFacade:
             return "call", "start_voice_note_recording"
         if domain == "voice" and action == "capture_stop":
             return "call", "stop_voice_note_recording"
+        if domain == "voice" and action == "capture_toggle":
+            context = getattr(self.app, "context", None)
+            interaction = getattr(getattr(context, "voice", None), "interaction", None)
+            if bool(getattr(interaction, "capture_in_flight", False)) or bool(
+                getattr(interaction, "ptt_active", False)
+            ):
+                return "call", "stop_voice_note_recording"
+            return "call", "start_voice_note_recording"
         return domain, action
 
     def _play_pause_service(self) -> str:

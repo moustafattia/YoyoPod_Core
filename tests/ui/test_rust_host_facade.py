@@ -91,3 +91,38 @@ def test_facade_dispatches_intents_to_python_services() -> None:
     )
 
     assert services.calls == [("call", "answer", {"source": "rust-ui"})]
+
+
+def test_facade_maps_voice_capture_toggle_to_current_runtime_state() -> None:
+    services = _Services()
+    interaction = SimpleNamespace(capture_in_flight=False, ptt_active=False)
+    app = SimpleNamespace(
+        services=services,
+        context=SimpleNamespace(voice=SimpleNamespace(interaction=interaction)),
+    )
+    facade = RustUiFacade(app, worker_domain="ui")
+
+    facade.handle_worker_message(
+        WorkerMessageReceivedEvent(
+            domain="ui",
+            kind="event",
+            type="ui.intent",
+            request_id=None,
+            payload={"domain": "voice", "action": "capture_toggle", "payload": {}},
+        )
+    )
+    interaction.capture_in_flight = True
+    facade.handle_worker_message(
+        WorkerMessageReceivedEvent(
+            domain="ui",
+            kind="event",
+            type="ui.intent",
+            request_id=None,
+            payload={"domain": "voice", "action": "capture_toggle", "payload": {}},
+        )
+    )
+
+    assert services.calls == [
+        ("call", "start_voice_note_recording", {}),
+        ("call", "stop_voice_note_recording", {}),
+    ]
