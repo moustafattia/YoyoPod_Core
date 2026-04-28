@@ -7,9 +7,9 @@ from typing import Annotated, Literal, cast
 
 import typer
 
-from yoyopod.ui.rust_sidecar.hub import HubRenderer, RustHubSnapshot
-from yoyopod.ui.rust_sidecar.protocol import UiEnvelope
-from yoyopod.ui.rust_sidecar.supervisor import RustUiSidecarSupervisor as RustUiHostSupervisor
+from yoyopod.ui.rust_host.hub import HubRenderer, RustHubSnapshot
+from yoyopod.ui.rust_host.protocol import UiEnvelope
+from yoyopod.ui.rust_host.supervisor import RustUiHostSupervisor
 
 
 def _default_worker_path() -> Path:

@@ -4,7 +4,7 @@ from pathlib import Path
 
 from typer.testing import CliRunner
 
-from yoyopod.ui.rust_sidecar.protocol import UiEnvelope
+from yoyopod.ui.rust_host.protocol import UiEnvelope
 from yoyopod_cli.pi import app
 import yoyopod_cli.pi.rust_ui_host as rust_ui_host
 

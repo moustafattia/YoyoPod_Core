@@ -1,0 +1,93 @@
+from __future__ import annotations
+
+from types import SimpleNamespace
+from typing import Any
+
+from yoyopod.core.events import WorkerMessageReceivedEvent
+from yoyopod.ui.rust_host.facade import RustUiFacade
+
+
+class _Supervisor:
+    def __init__(self) -> None:
+        self.sent: list[tuple[str, str, dict[str, Any] | None, str | None]] = []
+        self.registered: list[tuple[str, object]] = []
+        self.started: list[str] = []
+
+    def register(self, domain: str, config: object) -> None:
+        self.registered.append((domain, config))
+
+    def start(self, domain: str) -> bool:
+        self.started.append(domain)
+        return True
+
+    def send_command(
+        self,
+        domain: str,
+        *,
+        type: str,
+        payload: dict[str, Any] | None = None,
+        request_id: str | None = None,
+    ) -> bool:
+        self.sent.append((domain, type, payload, request_id))
+        return True
+
+
+class _Services:
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, str, Any]] = []
+
+    def call(self, domain: str, service: str, data: Any = None) -> None:
+        self.calls.append((domain, service, data))
+
+
+def test_facade_starts_ui_host_worker() -> None:
+    supervisor = _Supervisor()
+    app = SimpleNamespace(worker_supervisor=supervisor)
+    facade = RustUiFacade(app, worker_domain="ui")
+
+    assert facade.start_worker("src/crates/ui-host/build/yoyopod-ui-host", hardware="whisplay")
+
+    assert supervisor.started == ["ui"]
+    domain, config = supervisor.registered[0]
+    assert domain == "ui"
+    assert getattr(config, "argv") == [
+        "src/crates/ui-host/build/yoyopod-ui-host",
+        "--hardware",
+        "whisplay",
+    ]
+
+
+def test_facade_sends_snapshot_and_tick_without_request_tracking() -> None:
+    supervisor = _Supervisor()
+    app = SimpleNamespace(
+        worker_supervisor=supervisor,
+        context=None,
+        app_state_runtime=None,
+        people_directory=None,
+    )
+    facade = RustUiFacade(app, worker_domain="ui")
+
+    assert facade.send_snapshot()
+    assert facade.send_tick(renderer="lvgl")
+
+    assert supervisor.sent[0][1] == "ui.runtime_snapshot"
+    assert supervisor.sent[0][3] is None
+    assert supervisor.sent[1] == ("ui", "ui.tick", {"renderer": "lvgl"}, None)
+
+
+def test_facade_dispatches_intents_to_python_services() -> None:
+    services = _Services()
+    app = SimpleNamespace(services=services)
+    facade = RustUiFacade(app, worker_domain="ui")
+
+    facade.handle_worker_message(
+        WorkerMessageReceivedEvent(
+            domain="ui",
+            kind="event",
+            type="ui.intent",
+            request_id=None,
+            payload={"domain": "call", "action": "answer", "payload": {"source": "rust-ui"}},
+        )
+    )
+
+    assert services.calls == [("call", "answer", {"source": "rust-ui"})]
