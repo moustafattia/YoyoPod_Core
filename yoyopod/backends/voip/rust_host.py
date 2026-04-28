@@ -12,6 +12,7 @@ from loguru import logger
 from yoyopod.backends.voip.protocol import VoIPIterateMetrics
 from yoyopod.core.workers import WorkerProcessConfig
 from yoyopod.integrations.call.models import (
+    BackendRecovered,
     BackendStopped,
     CallState,
     CallStateChanged,
@@ -279,11 +280,14 @@ class RustHostBackend:
     def _handle_worker_ready(self) -> None:
         if self._reconfigure_on_ready or not self._startup_commands_sent:
             logger.info("Rust VoIP Host ready; sending configure/register")
+            was_stopped = self._last_stop_reason is not None
             if not self._send_startup_commands():
                 self._mark_stopped("worker_ready_reconfigure_failed")
                 return
             self.running = True
             self._last_stop_reason = None
+            if was_stopped:
+                self._dispatch(BackendRecovered(reason="worker_ready"))
         self._ready_seen = True
         self._reconfigure_on_ready = False
 

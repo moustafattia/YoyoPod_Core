@@ -5,6 +5,7 @@ from typing import Any
 
 from yoyopod.backends.voip.rust_host import RustHostBackend
 from yoyopod.integrations.call.models import (
+    BackendRecovered,
     BackendStopped,
     CallState,
     CallStateChanged,
@@ -268,6 +269,7 @@ def test_ready_after_worker_restart_resends_configure_register() -> None:
     backend.handle_worker_state_change(_state("running", "started"))
     backend.handle_worker_message(_event("voip.ready", {"capabilities": ["calls"]}))
     assert [item[1] for item in supervisor.sent] == ["voip.configure", "voip.register"]
+    assert received == []
 
     backend.handle_worker_state_change(_state("degraded", "process_exited"))
     backend.handle_worker_state_change(_state("running", "started"))
@@ -282,6 +284,8 @@ def test_ready_after_worker_restart_resends_configure_register() -> None:
     assert backend.running is True
     assert isinstance(received[0], BackendStopped)
     assert received[0].reason == "process_exited"
+    assert isinstance(received[1], BackendRecovered)
+    assert received[1].reason == "worker_ready"
 
 
 def test_iterate_is_noop_and_unsupported_messaging_fails() -> None:
