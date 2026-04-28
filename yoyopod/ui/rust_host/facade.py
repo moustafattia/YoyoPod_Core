@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Any
 
 from loguru import logger
 
 from yoyopod.core.events import WorkerMessageReceivedEvent
 from yoyopod.core.workers import WorkerProcessConfig
+from yoyopod.ui.input.hal import InputAction
 from yoyopod.ui.rust_host.snapshot import RustUiRuntimeSnapshot
 
 
@@ -87,8 +89,27 @@ class RustUiFacade:
             return
         if event.type == "ui.intent":
             self._dispatch_intent(event.payload)
+        elif event.type == "ui.input":
+            self._handle_input_event(event.payload)
         elif event.type == "ui.screen_changed":
             logger.debug("Rust UI screen changed: {}", event.payload.get("screen"))
+
+    def _handle_input_event(self, payload: dict[str, Any]) -> None:
+        data = payload if isinstance(payload, dict) else {}
+        action = _coerce_input_action(str(data.get("action", "") or "").strip())
+
+        note_input_activity = getattr(self.app, "note_input_activity", None)
+        if callable(note_input_activity):
+            note_input_activity(action, data)
+
+        screen_power_service = getattr(self.app, "screen_power_service", None)
+        queue_user_activity_event = getattr(
+            screen_power_service,
+            "queue_user_activity_event",
+            None,
+        )
+        if callable(queue_user_activity_event):
+            queue_user_activity_event(action, data)
 
     def _dispatch_intent(self, payload: dict[str, Any]) -> None:
         domain = str(payload.get("domain", "")).strip()
@@ -252,3 +273,17 @@ def _payload_value(data: dict[str, Any], *keys: str) -> str:
 
 def _clamp_normalized(value: float) -> float:
     return max(0.0, min(1.0, float(value)))
+
+
+@dataclass(frozen=True, slots=True)
+class _UnknownInputAction:
+    value: str | None
+
+
+def _coerce_input_action(action_name: str) -> InputAction | _UnknownInputAction:
+    if not action_name:
+        return _UnknownInputAction(None)
+    try:
+        return InputAction(action_name)
+    except ValueError:
+        return _UnknownInputAction(action_name)

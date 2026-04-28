@@ -31,6 +31,7 @@ from yoyopod.integrations.music.events import (
     TrackChangedEvent,
 )
 from yoyopod.core.app_state import AppRuntimeState, AppStateRuntime
+from yoyopod.core.events import WorkerMessageReceivedEvent
 from yoyopod.integrations.call import (
     CallFSM,
     CallInterruptionPolicy,
@@ -43,6 +44,7 @@ from yoyopod.core import UserActivityEvent
 from yoyopod.integrations.power import PowerAlert
 from yoyopod.integrations.network.models import ModemPhase, ModemState, SignalInfo
 from yoyopod.ui.input import InputManager, InteractionProfile
+from yoyopod.ui.rust_host.facade import RustUiFacade
 from yoyopod.ui.screens.manager import VisibleTickRefreshResult
 
 
@@ -1970,6 +1972,44 @@ def test_user_activity_event_wakes_screen_and_refreshes_current_screen() -> None
 
     _publish_from_worker(app, UserActivityEvent(action_name="select"))
 
+    assert app.runtime_loop.process_pending_main_thread_actions() >= 1
+    assert app.display.set_backlight_calls[-1] == 0.75
+    assert app.context.screen.awake is True
+    assert app.menu_screen.render_calls == render_calls_before + 1
+
+
+def test_rust_ui_input_event_wakes_screen_power_service() -> None:
+    """Rust worker input events should use the same activity path as Python input."""
+
+    app, _, _ = _build_app(playback_state="stopped")
+    app.display = FakeDisplay()
+    app.app_settings = SimpleNamespace(
+        ui=SimpleNamespace(screen_timeout_seconds=300),
+        display=SimpleNamespace(brightness=75, backlight_timeout_seconds=30),
+    )
+
+    app._screen_timeout_seconds = app.screen_power_service.resolve_screen_timeout_seconds()
+    app._active_brightness = app.screen_power_service.resolve_active_brightness()
+    app.screen_power_service.configure_screen_power(initial_now=0.0)
+    app.screen_power_service.sleep_screen(31.0)
+
+    render_calls_before = app.menu_screen.render_calls
+    RustUiFacade(app, worker_domain="ui").handle_worker_message(
+        WorkerMessageReceivedEvent(
+            domain="ui",
+            kind="event",
+            type="ui.input",
+            request_id=None,
+            payload={
+                "action": "select",
+                "method": "short",
+                "timestamp_ms": 1234,
+                "duration_ms": 30,
+            },
+        )
+    )
+
+    assert app.runtime_metrics.last_input_activity_action_name == "select"
     assert app.runtime_loop.process_pending_main_thread_actions() >= 1
     assert app.display.set_backlight_calls[-1] == 0.75
     assert app.context.screen.awake is True
