@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import dataclasses
 import os
+import uuid
 from collections.abc import Callable
 from datetime import datetime, timezone
 from typing import Any
@@ -69,7 +70,6 @@ class RustHostBackend:
         self.event_callbacks: list[Callable[[VoIPEvent], None]] = []
         self._registered_with_supervisor = False
         self._request_counter = 0
-        self._message_counter = 0
         self._pending_commands: dict[str, str] = {}
         self._pending_message_ids: dict[str, str] = {}
         self._startup_commands_sent = False
@@ -420,8 +420,7 @@ class RustHostBackend:
         return f"{self.domain}-{command_name}-{self._request_counter}"
 
     def _next_message_id(self) -> str:
-        self._message_counter += 1
-        return f"rust-msg-{self._message_counter}"
+        return f"rust-msg-{uuid.uuid4()}"
 
     def _pop_pending_command(self, request_id: str | None) -> str | None:
         if request_id is None:

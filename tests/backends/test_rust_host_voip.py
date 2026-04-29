@@ -248,6 +248,24 @@ def test_send_text_message_returns_client_id_and_sends_worker_command() -> None:
     ]
 
 
+def test_text_message_ids_do_not_repeat_across_backend_instances() -> None:
+    first = RustHostBackend(_config(), worker_supervisor=_FakeSupervisor(), worker_path="/bin/voip")
+    second = RustHostBackend(
+        _config(), worker_supervisor=_FakeSupervisor(), worker_path="/bin/voip"
+    )
+    first.start()
+    second.start()
+
+    first_message_id = first.send_text_message("sip:bob@example.com", "hi")
+    second_message_id = second.send_text_message("sip:bob@example.com", "hi")
+
+    assert first_message_id is not None
+    assert second_message_id is not None
+    assert first_message_id.startswith("rust-msg-")
+    assert second_message_id.startswith("rust-msg-")
+    assert first_message_id != second_message_id
+
+
 def test_text_message_command_error_emits_message_failed() -> None:
     supervisor = _FakeSupervisor()
     backend = RustHostBackend(_config(), worker_supervisor=supervisor, worker_path="/bin/voip")
