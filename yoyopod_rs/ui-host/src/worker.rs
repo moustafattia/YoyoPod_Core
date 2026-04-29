@@ -266,76 +266,91 @@ where
     let screen_model = ui_runtime.active_screen_model();
     match renderer {
         RendererMode::Auto => {
-            FramebufferRenderer::render_screen_model(framebuffer, &screen_model);
-            *last_ui_renderer = RendererMode::Framebuffer.as_str().to_string();
+            if lvgl_renderer.is_none() {
+                if let Ok(renderer) = LvglRenderer::open(None) {
+                    *lvgl_renderer = Some(renderer);
+                } else {
+                    return render_runtime_with_framebuffer(
+                        output,
+                        display,
+                        framebuffer,
+                        ui_runtime,
+                        last_active_screen,
+                        &screen_model,
+                        last_ui_renderer,
+                    );
+                }
+            }
+
+            let Some(renderer) = lvgl_renderer.as_mut() else {
+                return render_runtime_with_framebuffer(
+                    output,
+                    display,
+                    framebuffer,
+                    ui_runtime,
+                    last_active_screen,
+                    &screen_model,
+                    last_ui_renderer,
+                );
+            };
+
+            return render_runtime_with_active_lvgl_or_fallback(
+                output,
+                errors,
+                display,
+                framebuffer,
+                ui_runtime,
+                last_active_screen,
+                &screen_model,
+                last_ui_renderer,
+                renderer,
+                false,
+            );
         }
         RendererMode::Framebuffer => {
-            FramebufferRenderer::render_screen_model(framebuffer, &screen_model);
-            *last_ui_renderer = RendererMode::Framebuffer.as_str().to_string();
+            return render_runtime_with_framebuffer(
+                output,
+                display,
+                framebuffer,
+                ui_runtime,
+                last_active_screen,
+                &screen_model,
+                last_ui_renderer,
+            );
         }
         RendererMode::Lvgl => {
             if lvgl_renderer.is_none() {
                 match LvglRenderer::open(None) {
                     Ok(renderer) => *lvgl_renderer = Some(renderer),
                     Err(err) => {
-                        writeln!(
-                            errors,
-                            "LVGL renderer unavailable for explicit lvgl mode: {err}"
-                        )?;
-                        emit(
+                        emit_explicit_lvgl_unavailable(output, errors, &err)?;
+                        return render_runtime_with_framebuffer(
                             output,
-                            Envelope::error("lvgl_unavailable", "LVGL renderer unavailable"),
-                        )?;
-                        FramebufferRenderer::render_screen_model(framebuffer, &screen_model);
-                        *last_ui_renderer = RendererMode::Framebuffer.as_str().to_string();
-                        display.flush_full_frame(framebuffer)?;
-                        if last_active_screen
-                            .map(|screen| screen != screen_model.screen())
-                            .unwrap_or(true)
-                        {
-                            emit(
-                                output,
-                                Envelope::event(
-                                    "ui.screen_changed",
-                                    json!({
-                                        "screen": screen_model.screen().as_str(),
-                                        "title": screen_model_title(&screen_model),
-                                    }),
-                                ),
-                            )?;
-                            *last_active_screen = Some(screen_model.screen());
-                        }
-                        ui_runtime.mark_clean();
-                        return Ok(true);
+                            display,
+                            framebuffer,
+                            ui_runtime,
+                            last_active_screen,
+                            &screen_model,
+                            last_ui_renderer,
+                        );
                     }
                 }
             }
             let Some(renderer) = lvgl_renderer.as_mut() else {
-                emit(
+                emit_explicit_lvgl_unavailable(
                     output,
-                    Envelope::error("lvgl_unavailable", "LVGL renderer unavailable"),
+                    errors,
+                    &"renderer failed to initialize",
                 )?;
-                FramebufferRenderer::render_screen_model(framebuffer, &screen_model);
-                *last_ui_renderer = RendererMode::Framebuffer.as_str().to_string();
-                display.flush_full_frame(framebuffer)?;
-                if last_active_screen
-                    .map(|screen| screen != screen_model.screen())
-                    .unwrap_or(true)
-                {
-                    emit(
-                        output,
-                        Envelope::event(
-                            "ui.screen_changed",
-                            json!({
-                                "screen": screen_model.screen().as_str(),
-                                "title": screen_model_title(&screen_model),
-                            }),
-                        ),
-                    )?;
-                    *last_active_screen = Some(screen_model.screen());
-                }
-                ui_runtime.mark_clean();
-                return Ok(true);
+                return render_runtime_with_framebuffer(
+                    output,
+                    display,
+                    framebuffer,
+                    ui_runtime,
+                    last_active_screen,
+                    &screen_model,
+                    last_ui_renderer,
+                );
             };
             return render_runtime_with_active_lvgl_or_fallback(
                 output,
@@ -347,26 +362,29 @@ where
                 &screen_model,
                 last_ui_renderer,
                 renderer,
+                true,
             );
         }
     }
+}
+
+fn render_runtime_with_framebuffer<W, D>(
+    output: &mut W,
+    display: &mut D,
+    framebuffer: &mut Framebuffer,
+    ui_runtime: &mut UiRuntime,
+    last_active_screen: &mut Option<UiScreen>,
+    screen_model: &ScreenModel,
+    last_ui_renderer: &mut String,
+) -> Result<bool>
+where
+    W: Write,
+    D: DisplayDevice,
+{
+    FramebufferRenderer::render_screen_model(framebuffer, screen_model);
+    *last_ui_renderer = RendererMode::Framebuffer.as_str().to_string();
     display.flush_full_frame(framebuffer)?;
-    if last_active_screen
-        .map(|screen| screen != screen_model.screen())
-        .unwrap_or(true)
-    {
-        emit(
-            output,
-            Envelope::event(
-                "ui.screen_changed",
-                json!({
-                    "screen": screen_model.screen().as_str(),
-                    "title": screen_model_title(&screen_model),
-                }),
-            ),
-        )?;
-        *last_active_screen = Some(screen_model.screen());
-    }
+    emit_screen_changed_if_needed(output, last_active_screen, screen_model)?;
     ui_runtime.mark_clean();
     Ok(true)
 }
@@ -381,6 +399,7 @@ fn render_runtime_with_active_lvgl_or_fallback<W, D, R>(
     screen_model: &ScreenModel,
     last_ui_renderer: &mut String,
     renderer: &mut R,
+    emit_lvgl_error: bool,
 ) -> Result<bool>
 where
     W: Write,
@@ -391,57 +410,64 @@ where
         Ok(()) => {
             *last_ui_renderer = RendererMode::Lvgl.as_str().to_string();
             display.flush_full_frame(framebuffer)?;
-            if last_active_screen
-                .map(|screen| screen != screen_model.screen())
-                .unwrap_or(true)
-            {
-                emit(
-                    output,
-                    Envelope::event(
-                        "ui.screen_changed",
-                        json!({
-                            "screen": screen_model.screen().as_str(),
-                            "title": screen_model_title(screen_model),
-                        }),
-                    ),
-                )?;
-                *last_active_screen = Some(screen_model.screen());
-            }
+            emit_screen_changed_if_needed(output, last_active_screen, screen_model)?;
             ui_runtime.mark_clean();
             Ok(true)
         }
         Err(err) => {
-            writeln!(
-                errors,
-                "LVGL renderer unavailable for explicit lvgl mode: {err}"
-            )?;
-            emit(
-                output,
-                Envelope::error("lvgl_unavailable", "LVGL renderer unavailable"),
-            )?;
-            FramebufferRenderer::render_screen_model(framebuffer, screen_model);
-            *last_ui_renderer = RendererMode::Framebuffer.as_str().to_string();
-            display.flush_full_frame(framebuffer)?;
-            if last_active_screen
-                .map(|screen| screen != screen_model.screen())
-                .unwrap_or(true)
-            {
-                emit(
-                    output,
-                    Envelope::event(
-                        "ui.screen_changed",
-                        json!({
-                            "screen": screen_model.screen().as_str(),
-                            "title": screen_model_title(screen_model),
-                        }),
-                    ),
-                )?;
-                *last_active_screen = Some(screen_model.screen());
+            if emit_lvgl_error {
+                emit_explicit_lvgl_unavailable(output, errors, &err)?;
             }
-            ui_runtime.mark_clean();
-            Ok(true)
+            render_runtime_with_framebuffer(
+                output,
+                display,
+                framebuffer,
+                ui_runtime,
+                last_active_screen,
+                screen_model,
+                last_ui_renderer,
+            )
         }
     }
+}
+
+fn emit_screen_changed_if_needed<W: Write>(
+    output: &mut W,
+    last_active_screen: &mut Option<UiScreen>,
+    screen_model: &ScreenModel,
+) -> Result<()> {
+    if last_active_screen
+        .map(|screen| screen != screen_model.screen())
+        .unwrap_or(true)
+    {
+        emit(
+            output,
+            Envelope::event(
+                "ui.screen_changed",
+                json!({
+                    "screen": screen_model.screen().as_str(),
+                    "title": screen_model_title(screen_model),
+                }),
+            ),
+        )?;
+        *last_active_screen = Some(screen_model.screen());
+    }
+    Ok(())
+}
+
+fn emit_explicit_lvgl_unavailable<W: Write>(
+    output: &mut W,
+    errors: &mut impl Write,
+    err: &dyn std::fmt::Display,
+) -> Result<()> {
+    writeln!(
+        errors,
+        "LVGL renderer unavailable for explicit lvgl mode: {err}"
+    )?;
+    emit(
+        output,
+        Envelope::error("lvgl_unavailable", "LVGL renderer unavailable"),
+    )
 }
 
 fn screen_model_title(model: &ScreenModel) -> &str {
@@ -542,6 +568,7 @@ mod tests {
             &screen_model,
             &mut last_ui_renderer,
             &mut renderer,
+            true,
         )?;
 
         let stdout = String::from_utf8(output)

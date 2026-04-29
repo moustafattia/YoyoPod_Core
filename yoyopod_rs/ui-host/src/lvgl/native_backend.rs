@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use std::ffi::CString;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::ptr::{self, NonNull};
 use std::time::Instant;
 
@@ -46,7 +46,6 @@ struct FlushTarget {
 }
 
 pub struct NativeLvglFacade {
-    _source_dir: PathBuf,
     display: Option<NonNull<sys::lv_display_t>>,
     blank_screen: Option<NonNull<sys::lv_obj_t>>,
     draw_buffer: Vec<u8>,
@@ -62,13 +61,12 @@ pub struct NativeLvglFacade {
 
 impl NativeLvglFacade {
     pub fn open(explicit_source: Option<&Path>) -> Result<Self> {
-        let source_dir = resolve_lvgl_source_dir(explicit_source)?;
+        validate_explicit_source_dir(explicit_source)?;
         unsafe {
             sys::lv_init();
         }
 
         Ok(Self {
-            _source_dir: source_dir,
             display: None,
             blank_screen: None,
             draw_buffer: Vec::new(),
@@ -610,24 +608,15 @@ impl Drop for NativeLvglFacade {
     }
 }
 
-fn resolve_lvgl_source_dir(explicit_source: Option<&Path>) -> Result<PathBuf> {
+fn validate_explicit_source_dir(explicit_source: Option<&Path>) -> Result<()> {
     if let Some(source) = explicit_source {
         if source.exists() {
-            return Ok(source.to_path_buf());
+            return Ok(());
         }
         bail!("LVGL source directory not found at {}", source.display());
     }
 
-    for env_name in ["YOYOPOD_LVGL_SOURCE_DIR", "LVGL_SOURCE_DIR"] {
-        if let Ok(value) = std::env::var(env_name) {
-            let path = PathBuf::from(value);
-            if path.exists() {
-                return Ok(path);
-            }
-        }
-    }
-
-    bail!("LVGL source directory is unavailable; set YOYOPOD_LVGL_SOURCE_DIR or LVGL_SOURCE_DIR")
+    Ok(())
 }
 
 fn icon_label(icon_key: &str) -> &'static str {
