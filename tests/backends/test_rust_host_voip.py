@@ -415,6 +415,46 @@ def test_worker_events_translate_to_voip_events() -> None:
     assert len(received) == 4
 
 
+def test_worker_snapshot_updates_registration_and_call_state_without_duplicates() -> None:
+    supervisor = _FakeSupervisor()
+    backend = RustHostBackend(_config(), worker_supervisor=supervisor, worker_path="/bin/voip")
+    received: list[object] = []
+    backend.on_event(received.append)
+
+    backend.handle_worker_message(
+        _event(
+            "voip.snapshot",
+            {
+                "configured": True,
+                "registered": True,
+                "registration_state": "ok",
+                "call_state": "streams_running",
+                "active_call_id": "call-1",
+                "pending_outbound_messages": 0,
+                "voice_note": {"state": "idle", "file_path": "", "duration_ms": 0},
+            },
+        )
+    )
+    backend.handle_worker_message(
+        _event(
+            "voip.snapshot",
+            {
+                "configured": True,
+                "registered": True,
+                "registration_state": "ok",
+                "call_state": "streams_running",
+                "active_call_id": "call-1",
+                "pending_outbound_messages": 0,
+                "voice_note": {"state": "idle", "file_path": "", "duration_ms": 0},
+            },
+        )
+    )
+
+    assert [type(event) for event in received] == [RegistrationStateChanged, CallStateChanged]
+    assert received[0].state == RegistrationState.OK
+    assert received[1].state == CallState.STREAMS_RUNNING
+
+
 def test_worker_message_events_translate_to_voip_events() -> None:
     supervisor = _FakeSupervisor()
     backend = RustHostBackend(_config(), worker_supervisor=supervisor, worker_path="/bin/voip")

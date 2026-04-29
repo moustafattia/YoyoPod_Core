@@ -127,6 +127,7 @@ fn handle_command(
                 envelope.request_id,
                 json!({"configured": true}),
             ))?;
+            write_session_snapshot(host)?;
         }
         "voip.health" => {
             let mut payload = host.health_payload();
@@ -149,6 +150,7 @@ fn handle_command(
                 envelope.request_id,
                 json!({"registered": true}),
             ))?;
+            write_session_snapshot(host)?;
         }
         "voip.unregister" => {
             if let Some(mut backend_ref) = backend.take() {
@@ -159,6 +161,7 @@ fn handle_command(
                 envelope.request_id,
                 json!({"registered": false}),
             ))?;
+            write_session_snapshot(host)?;
         }
         "voip.dial" => {
             let uri = envelope.payload["uri"].as_str().unwrap_or("").trim();
@@ -180,6 +183,7 @@ fn handle_command(
                     envelope.request_id,
                     host.health_payload(),
                 ))?;
+                write_session_snapshot(host)?;
             }
         }
         "voip.answer" => {
@@ -192,6 +196,7 @@ fn handle_command(
                 envelope.request_id,
                 json!({"accepted": true}),
             ))?;
+            write_session_snapshot(host)?;
         }
         "voip.reject" => {
             let backend_ref = backend
@@ -203,6 +208,7 @@ fn handle_command(
                 envelope.request_id,
                 json!({"rejected": true}),
             ))?;
+            write_session_snapshot(host)?;
         }
         "voip.hangup" => {
             let backend_ref = backend
@@ -214,6 +220,7 @@ fn handle_command(
                 envelope.request_id,
                 json!({"hung_up": true}),
             ))?;
+            write_session_snapshot(host)?;
         }
         "voip.set_mute" => {
             let muted = envelope.payload["muted"].as_bool().unwrap_or(false);
@@ -251,6 +258,7 @@ fn handle_command(
                     envelope.request_id,
                     json!({"message_id": message_id}),
                 ))?;
+                write_session_snapshot(host)?;
             }
         }
         "voip.start_voice_note_recording" => {
@@ -273,6 +281,7 @@ fn handle_command(
                     envelope.request_id,
                     json!({"recording": true}),
                 ))?;
+                write_session_snapshot(host)?;
             }
         }
         "voip.stop_voice_note_recording" => {
@@ -287,6 +296,7 @@ fn handle_command(
                 envelope.request_id,
                 json!({"duration_ms": duration_ms}),
             ))?;
+            write_session_snapshot(host)?;
         }
         "voip.cancel_voice_note_recording" => {
             let backend_ref = backend
@@ -299,6 +309,7 @@ fn handle_command(
                 envelope.request_id,
                 json!({"cancelled": true}),
             ))?;
+            write_session_snapshot(host)?;
         }
         "voip.send_voice_note" => {
             let uri = envelope.payload["uri"].as_str().unwrap_or("").trim();
@@ -338,6 +349,7 @@ fn handle_command(
                     envelope.request_id,
                     json!({"message_id": message_id}),
                 ))?;
+                write_session_snapshot(host)?;
             }
         }
         "voip.shutdown" | "worker.stop" => {
@@ -349,6 +361,7 @@ fn handle_command(
                 envelope.request_id,
                 json!({"shutdown": true}),
             ))?;
+            write_session_snapshot(host)?;
             return Ok(LoopAction::Shutdown);
         }
         _ => {
@@ -377,16 +390,38 @@ fn poll_backend(host: &mut VoipHost, backend: &mut Option<shim::ShimBackend>) ->
         emit_backend_events(
             host.poll_backend_events(backend_ref)
                 .map_err(|error| anyhow!(error))?,
+            host,
         )?;
     }
     Ok(())
 }
 
-fn emit_backend_events(events: Vec<host::BackendEvent>) -> Result<()> {
-    for event in events {
-        write_envelope(&backend_event_envelope(event))?;
+fn emit_backend_events(events: Vec<host::BackendEvent>, host: &VoipHost) -> Result<()> {
+    for envelope in backend_event_envelopes(events, host) {
+        write_envelope(&envelope)?;
     }
     Ok(())
+}
+
+fn backend_event_envelopes(
+    events: Vec<host::BackendEvent>,
+    host: &VoipHost,
+) -> Vec<WorkerEnvelope> {
+    if events.is_empty() {
+        return Vec::new();
+    }
+    let mut envelopes: Vec<WorkerEnvelope> =
+        events.into_iter().map(backend_event_envelope).collect();
+    envelopes.push(session_snapshot_envelope(host));
+    envelopes
+}
+
+fn write_session_snapshot(host: &VoipHost) -> Result<()> {
+    write_envelope(&session_snapshot_envelope(host))
+}
+
+fn session_snapshot_envelope(host: &VoipHost) -> WorkerEnvelope {
+    WorkerEnvelope::event("voip.snapshot", host.session_snapshot_payload())
 }
 
 fn backend_event_envelope(event: host::BackendEvent) -> WorkerEnvelope {
@@ -557,6 +592,33 @@ mod tests {
         assert_eq!(envelope.payload["message_id"], "msg-1");
         assert_eq!(envelope.payload["kind"], "text");
         assert_eq!(envelope.payload["text"], "hello");
+    }
+
+    #[test]
+    fn backend_event_batch_appends_canonical_snapshot() {
+        let mut host = VoipHost::default();
+        host.configure(
+            VoipConfig::from_payload(&json!({
+                "sip_server": "sip.example.com",
+                "sip_identity": "sip:alice@example.com"
+            }))
+            .expect("config"),
+        );
+        host.mark_registered(true);
+
+        let envelopes = backend_event_envelopes(
+            vec![host::BackendEvent::RegistrationChanged {
+                state: "ok".to_string(),
+                reason: "".to_string(),
+            }],
+            &host,
+        );
+
+        assert_eq!(envelopes.len(), 2);
+        assert_eq!(envelopes[0].message_type, "voip.registration_changed");
+        assert_eq!(envelopes[1].message_type, "voip.snapshot");
+        assert_eq!(envelopes[1].payload["registered"], true);
+        assert_eq!(envelopes[1].payload["registration_state"], "ok");
     }
 
     #[test]
