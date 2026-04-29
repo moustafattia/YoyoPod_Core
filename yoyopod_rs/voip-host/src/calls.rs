@@ -157,7 +157,7 @@ impl CallSession {
     pub fn apply_call_state(&mut self, call_id: &str, state: &str) {
         self.state = state.to_string();
         if is_terminal_call_state(state) {
-            if self.active_call_id.as_deref() == Some(call_id) || self.active_call_id.is_none() {
+            if self.matches_active_session(call_id) {
                 self.finish_session(state, None);
                 self.clear_identity();
             }
@@ -218,6 +218,15 @@ impl CallSession {
             session.duration_seconds = Some(session.started_at.elapsed().as_secs());
             self.last_finished_session = Some(session);
         }
+    }
+
+    fn matches_active_session(&self, call_id: &str) -> bool {
+        self.active_call_id.as_deref() == Some(call_id)
+            || self.active_call_id.is_none()
+            || self
+                .active_session
+                .as_ref()
+                .is_some_and(|session| session.peer_sip_address == call_id)
     }
 }
 

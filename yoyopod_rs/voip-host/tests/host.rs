@@ -177,6 +177,34 @@ fn call_session_snapshot_tracks_direction_terminal_outcome_and_duration() {
 }
 
 #[test]
+fn outgoing_terminal_call_state_finalizes_session_when_event_uses_peer_address() {
+    let mut host = VoipHost::default();
+    let mut backend = FakeBackend::default();
+    host.configure(config());
+    host.register(&mut backend).expect("register");
+
+    host.dial(&mut backend, "sip:bob@example.com")
+        .expect("dial");
+
+    poll_one(
+        &mut host,
+        BackendEvent::CallStateChanged {
+            call_id: "sip:bob@example.com".to_string(),
+            state: "released".to_string(),
+        },
+    );
+
+    let snapshot = host.session_snapshot_payload();
+    assert_eq!(snapshot["active_call_id"], Value::Null);
+    assert_eq!(snapshot["active_call_peer"], "");
+    assert_eq!(snapshot["call_session"]["active"], false);
+    assert_eq!(snapshot["call_session"]["session_id"], "call-outgoing");
+    assert_eq!(snapshot["call_session"]["peer_sip_address"], "sip:bob@example.com");
+    assert_eq!(snapshot["call_session"]["terminal_state"], "released");
+    assert_eq!(snapshot["call_session"]["history_outcome"], "cancelled");
+}
+
+#[test]
 fn incoming_call_session_snapshot_reports_missed_terminal_outcome() {
     let mut host = VoipHost::default();
     host.configure(config());
