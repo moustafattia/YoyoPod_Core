@@ -205,6 +205,7 @@ def _apply_rust_call_session_side_effects(
 ) -> None:
     session = snapshot.call_session
     state = snapshot.call_state
+    _prune_finalized_rust_call_sessions(integration, session)
 
     if session.active:
         if state in _OUTGOING_STATES:
@@ -226,6 +227,17 @@ def _apply_rust_call_session_side_effects(
 
 def _rust_call_session_is_terminal(session: VoIPCallSessionSnapshot) -> bool:
     return bool(session.session_id and session.history_outcome and session.terminal_state)
+
+
+def _prune_finalized_rust_call_sessions(
+    integration: Any,
+    session: VoIPCallSessionSnapshot,
+) -> None:
+    finalized_sessions = getattr(integration, "finalized_rust_call_sessions", None)
+    if not isinstance(finalized_sessions, set):
+        return
+    if session.active or not _rust_call_session_is_terminal(session):
+        finalized_sessions.clear()
 
 
 def _persist_rust_call_session_history(

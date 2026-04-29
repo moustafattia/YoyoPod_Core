@@ -456,6 +456,73 @@ def test_rust_owned_terminal_session_snapshot_persists_history_once(
     assert app.states.get_value("call.history_unread_count") == 0
 
 
+def test_rust_owned_terminal_session_snapshot_allows_reused_session_ids_across_calls(
+    tmp_path: Path,
+) -> None:
+    app = build_test_app()
+    setup_focus(app)
+    history_store = CallHistoryStore(tmp_path / "call_history.json")
+    manager = FakeVoipManager(runtime_snapshot_owned=True)
+    setup(app, manager=manager, call_history_store=history_store, ringer=FakeRinger())
+    drain_all(app)
+
+    active_snapshot = VoIPRuntimeSnapshot(
+        configured=True,
+        registered=True,
+        registration_state=RegistrationState.OK,
+        call_state=CallState.INCOMING,
+        active_call_peer="sip:bob@example.com",
+        lifecycle=VoIPLifecycleSnapshot(
+            state="registered",
+            reason="registered",
+            backend_available=True,
+        ),
+        call_session=VoIPCallSessionSnapshot(
+            active=True,
+            session_id="sip:bob@example.com",
+            direction="incoming",
+            peer_sip_address="sip:bob@example.com",
+        ),
+    )
+    terminal_snapshot = VoIPRuntimeSnapshot(
+        configured=True,
+        registered=True,
+        registration_state=RegistrationState.OK,
+        call_state=CallState.RELEASED,
+        lifecycle=VoIPLifecycleSnapshot(
+            state="registered",
+            reason="registered",
+            backend_available=True,
+        ),
+        call_session=VoIPCallSessionSnapshot(
+            active=False,
+            session_id="sip:bob@example.com",
+            direction="incoming",
+            peer_sip_address="sip:bob@example.com",
+            terminal_state=CallState.RELEASED.value,
+            history_outcome="missed",
+        ),
+    )
+
+    manager.emit_runtime_snapshot(active_snapshot)
+    drain_all(app)
+    manager.emit_runtime_snapshot(terminal_snapshot)
+    drain_all(app)
+
+    manager.emit_runtime_snapshot(active_snapshot)
+    drain_all(app)
+    manager.emit_runtime_snapshot(terminal_snapshot)
+    drain_all(app)
+
+    recent = history_store.list_recent(3)
+    assert len(recent) == 2
+    assert [entry.sip_address for entry in recent] == [
+        "sip:bob@example.com",
+        "sip:bob@example.com",
+    ]
+    assert [entry.outcome for entry in recent] == ["missed", "missed"]
+
+
 def test_incoming_calls_ring_and_history_can_be_marked_seen(tmp_path: Path) -> None:
     app = build_test_app()
     setup_focus(app)
