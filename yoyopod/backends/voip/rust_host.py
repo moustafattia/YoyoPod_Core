@@ -86,6 +86,8 @@ class RustHostBackend:
         self._stopping = False
         self._last_stop_reason: str | None = None
         self._recording_start_monotonic: float | None = None
+        self._snapshot_registration_state = RegistrationState.NONE
+        self._snapshot_call_state = CallState.IDLE
 
     def on_event(self, callback: Callable[[VoIPEvent], None]) -> None:
         self.event_callbacks.append(callback)
@@ -146,6 +148,8 @@ class RustHostBackend:
             self._ready_seen = False
             self._reconfigure_on_ready = False
             self._recording_start_monotonic = None
+            self._snapshot_registration_state = RegistrationState.NONE
+            self._snapshot_call_state = CallState.IDLE
             self.running = False
             self._stopping = False
 
@@ -250,18 +254,19 @@ class RustHostBackend:
         if event_type == "voip.ready":
             self._handle_worker_ready()
             return
+        if event_type == "voip.snapshot":
+            self._handle_session_snapshot(payload)
+            return
         if event_type == "voip.registration_changed":
-            self._dispatch(
-                RegistrationStateChanged(
-                    state=_registration_state(str(payload.get("state", "none")))
-                )
+            self._dispatch_registration_state(
+                _registration_state(str(payload.get("state", "none")))
             )
             return
         if event_type == "voip.incoming_call":
             self._dispatch(IncomingCallDetected(caller_address=str(payload.get("from_uri", ""))))
             return
         if event_type == "voip.call_state_changed":
-            self._dispatch(CallStateChanged(state=_call_state(str(payload.get("state", "idle")))))
+            self._dispatch_call_state(_call_state(str(payload.get("state", "idle"))))
             return
         if event_type == "voip.backend_stopped":
             self._mark_stopped(str(payload.get("reason", "")) or "backend_stopped")
@@ -440,11 +445,34 @@ class RustHostBackend:
         self._ready_seen = False
         self._reconfigure_on_ready = False
         self._recording_start_monotonic = None
+        self._snapshot_registration_state = RegistrationState.NONE
+        self._snapshot_call_state = CallState.IDLE
         self.running = False
         if notify_backend_stopped:
             self._mark_stopped(reason)
         else:
             self._last_stop_reason = reason
+
+    def _handle_session_snapshot(self, payload: dict[str, Any]) -> None:
+        registration_state = str(payload.get("registration_state", "") or "").strip()
+        if not registration_state:
+            registration_state = (
+                "ok" if _bool_payload(payload.get("registered", False)) else "none"
+            )
+        self._dispatch_registration_state(_registration_state(registration_state))
+        self._dispatch_call_state(_call_state(str(payload.get("call_state", "idle"))))
+
+    def _dispatch_registration_state(self, state: RegistrationState) -> None:
+        if state == self._snapshot_registration_state:
+            return
+        self._snapshot_registration_state = state
+        self._dispatch(RegistrationStateChanged(state=state))
+
+    def _dispatch_call_state(self, state: CallState) -> None:
+        if state == self._snapshot_call_state:
+            return
+        self._snapshot_call_state = state
+        self._dispatch(CallStateChanged(state=state))
 
     def _mark_stopped(self, reason: str) -> None:
         if not self.running and self._last_stop_reason == reason:

@@ -77,24 +77,82 @@ pub enum BackendEvent {
     },
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct VoiceNoteSessionState {
+    state: String,
+    file_path: String,
+    duration_ms: i32,
+    mime_type: String,
+    message_id: String,
+}
+
+impl Default for VoiceNoteSessionState {
+    fn default() -> Self {
+        Self {
+            state: "idle".to_string(),
+            file_path: String::new(),
+            duration_ms: 0,
+            mime_type: String::new(),
+            message_id: String::new(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct MessageSessionState {
+    message_id: String,
+    kind: String,
+    direction: String,
+    delivery_state: String,
+    local_file_path: String,
+    error: String,
+}
+
+#[derive(Debug)]
 pub struct VoipHost {
     config: Option<VoipConfig>,
     registered: bool,
+    registration_state: String,
+    call_state: String,
     active_call_id: Option<String>,
+    active_call_peer: String,
+    voice_note: VoiceNoteSessionState,
+    last_message: Option<MessageSessionState>,
     outbound_message_ids: HashMap<String, String>,
+}
+
+impl Default for VoipHost {
+    fn default() -> Self {
+        Self {
+            config: None,
+            registered: false,
+            registration_state: "none".to_string(),
+            call_state: "idle".to_string(),
+            active_call_id: None,
+            active_call_peer: String::new(),
+            voice_note: VoiceNoteSessionState::default(),
+            last_message: None,
+            outbound_message_ids: HashMap::new(),
+        }
+    }
 }
 
 impl VoipHost {
     pub fn configure(&mut self, config: VoipConfig) {
         self.config = Some(config);
         self.registered = false;
+        self.registration_state = "none".to_string();
+        self.call_state = "idle".to_string();
         self.active_call_id = None;
+        self.active_call_peer.clear();
+        self.voice_note = VoiceNoteSessionState::default();
+        self.last_message = None;
         self.outbound_message_ids.clear();
     }
 
     pub fn mark_registered(&mut self, registered: bool) {
         self.registered = registered;
+        self.registration_state = if registered { "ok" } else { "none" }.to_string();
     }
 
     pub fn set_active_call_id(&mut self, call_id: Option<String>) {
@@ -106,6 +164,40 @@ impl VoipHost {
             "configured": self.config.is_some(),
             "registered": self.registered,
             "active_call_id": self.active_call_id,
+        })
+    }
+
+    pub fn session_snapshot_payload(&self) -> serde_json::Value {
+        let last_message = self
+            .last_message
+            .as_ref()
+            .map(|message| {
+                json!({
+                    "message_id": message.message_id,
+                    "kind": message.kind,
+                    "direction": message.direction,
+                    "delivery_state": message.delivery_state,
+                    "local_file_path": message.local_file_path,
+                    "error": message.error,
+                })
+            })
+            .unwrap_or(serde_json::Value::Null);
+        json!({
+            "configured": self.config.is_some(),
+            "registered": self.registered,
+            "registration_state": self.registration_state,
+            "call_state": self.call_state,
+            "active_call_id": self.active_call_id,
+            "active_call_peer": self.active_call_peer,
+            "pending_outbound_messages": self.outbound_message_ids.len(),
+            "voice_note": {
+                "state": self.voice_note.state,
+                "file_path": self.voice_note.file_path,
+                "duration_ms": self.voice_note.duration_ms,
+                "mime_type": self.voice_note.mime_type,
+                "message_id": self.voice_note.message_id,
+            },
+            "last_message": last_message,
         })
     }
 
@@ -129,7 +221,11 @@ impl VoipHost {
     pub fn unregister<B: CallBackend>(&mut self, backend: &mut B) {
         backend.stop();
         self.registered = false;
+        self.registration_state = "none".to_string();
+        self.call_state = "idle".to_string();
         self.active_call_id = None;
+        self.active_call_peer.clear();
+        self.voice_note = VoiceNoteSessionState::default();
         self.outbound_message_ids.clear();
     }
 
@@ -140,6 +236,8 @@ impl VoipHost {
     ) -> Result<(), String> {
         let call_id = backend.make_call(sip_address)?;
         self.active_call_id = Some(call_id);
+        self.active_call_peer = sip_address.to_string();
+        self.call_state = "outgoing_init".to_string();
         Ok(())
     }
 
@@ -150,12 +248,16 @@ impl VoipHost {
     pub fn reject<B: CallBackend>(&mut self, backend: &mut B) -> Result<(), String> {
         backend.reject_call()?;
         self.active_call_id = None;
+        self.active_call_peer.clear();
+        self.call_state = "released".to_string();
         Ok(())
     }
 
     pub fn hangup<B: CallBackend>(&mut self, backend: &mut B) -> Result<(), String> {
         backend.hangup()?;
         self.active_call_id = None;
+        self.active_call_peer.clear();
+        self.call_state = "released".to_string();
         Ok(())
     }
 
@@ -188,18 +290,31 @@ impl VoipHost {
         backend: &mut B,
         file_path: &str,
     ) -> Result<(), String> {
-        backend.start_voice_recording(file_path)
+        backend.start_voice_recording(file_path)?;
+        self.voice_note = VoiceNoteSessionState {
+            state: "recording".to_string(),
+            file_path: file_path.to_string(),
+            duration_ms: 0,
+            mime_type: "audio/wav".to_string(),
+            message_id: String::new(),
+        };
+        Ok(())
     }
 
     pub fn stop_voice_recording<B: CallBackend>(&mut self, backend: &mut B) -> Result<i32, String> {
-        backend.stop_voice_recording()
+        let duration_ms = backend.stop_voice_recording()?;
+        self.voice_note.state = "recorded".to_string();
+        self.voice_note.duration_ms = duration_ms;
+        Ok(duration_ms)
     }
 
     pub fn cancel_voice_recording<B: CallBackend>(
         &mut self,
         backend: &mut B,
     ) -> Result<(), String> {
-        backend.cancel_voice_recording()
+        backend.cancel_voice_recording()?;
+        self.voice_note = VoiceNoteSessionState::default();
+        Ok(())
     }
 
     pub fn send_voice_note<B: CallBackend>(
@@ -217,6 +332,13 @@ impl VoipHost {
         }
         let backend_id = backend.send_voice_note(sip_address, file_path, duration_ms, mime_type)?;
         self.remember_outbound_message_id(&backend_id, client_id, "voip voice note")?;
+        self.voice_note = VoiceNoteSessionState {
+            state: "sending".to_string(),
+            file_path: file_path.to_string(),
+            duration_ms,
+            mime_type: mime_type.to_string(),
+            message_id: client_id.to_string(),
+        };
         Ok(client_id.to_string())
     }
 
@@ -238,21 +360,26 @@ impl VoipHost {
     fn apply_backend_event(&mut self, event: &BackendEvent) {
         match event {
             BackendEvent::RegistrationChanged { state, .. } => {
+                self.registration_state = state.clone();
                 if state == "ok" {
                     self.registered = true;
                 } else if matches!(state.as_str(), "failed" | "cleared" | "none") {
                     self.registered = false;
                 }
             }
-            BackendEvent::IncomingCall { call_id, .. } => {
+            BackendEvent::IncomingCall { call_id, from_uri } => {
                 self.active_call_id = Some(call_id.clone());
+                self.active_call_peer = from_uri.clone();
+                self.call_state = "incoming".to_string();
             }
             BackendEvent::CallStateChanged { call_id, state } => {
+                self.call_state = state.clone();
                 if matches!(state.as_str(), "idle" | "released" | "error" | "end") {
                     if self.active_call_id.as_deref() == Some(call_id.as_str())
                         || self.active_call_id.is_none()
                     {
                         self.active_call_id = None;
+                        self.active_call_peer.clear();
                     }
                 } else {
                     self.active_call_id = Some(call_id.clone());
@@ -260,13 +387,76 @@ impl VoipHost {
             }
             BackendEvent::BackendStopped { .. } => {
                 self.registered = false;
+                self.registration_state = "failed".to_string();
+                self.call_state = "idle".to_string();
                 self.active_call_id = None;
+                self.active_call_peer.clear();
                 self.outbound_message_ids.clear();
             }
-            BackendEvent::MessageReceived { .. }
-            | BackendEvent::MessageDeliveryChanged { .. }
-            | BackendEvent::MessageDownloadCompleted { .. }
-            | BackendEvent::MessageFailed { .. } => {}
+            BackendEvent::MessageReceived { message } => {
+                self.last_message = Some(MessageSessionState {
+                    message_id: message.message_id.clone(),
+                    kind: message.kind.clone(),
+                    direction: message.direction.clone(),
+                    delivery_state: message.delivery_state.clone(),
+                    local_file_path: message.local_file_path.clone(),
+                    error: String::new(),
+                });
+            }
+            BackendEvent::MessageDeliveryChanged {
+                message_id,
+                delivery_state,
+                local_file_path,
+                error,
+            } => {
+                self.last_message = Some(MessageSessionState {
+                    message_id: message_id.clone(),
+                    kind: String::new(),
+                    direction: String::new(),
+                    delivery_state: delivery_state.clone(),
+                    local_file_path: local_file_path.clone(),
+                    error: error.clone(),
+                });
+                if self.voice_note.message_id == *message_id {
+                    self.voice_note.state = match delivery_state.as_str() {
+                        "failed" => "failed",
+                        "sent" | "delivered" => "sent",
+                        _ => "sending",
+                    }
+                    .to_string();
+                }
+            }
+            BackendEvent::MessageDownloadCompleted {
+                message_id,
+                local_file_path,
+                mime_type,
+            } => {
+                self.last_message = Some(MessageSessionState {
+                    message_id: message_id.clone(),
+                    kind: String::new(),
+                    direction: String::new(),
+                    delivery_state: "delivered".to_string(),
+                    local_file_path: local_file_path.clone(),
+                    error: String::new(),
+                });
+                if self.voice_note.message_id == *message_id {
+                    self.voice_note.file_path = local_file_path.clone();
+                    self.voice_note.mime_type = mime_type.clone();
+                }
+            }
+            BackendEvent::MessageFailed { message_id, reason } => {
+                self.last_message = Some(MessageSessionState {
+                    message_id: message_id.clone(),
+                    kind: String::new(),
+                    direction: String::new(),
+                    delivery_state: "failed".to_string(),
+                    local_file_path: String::new(),
+                    error: reason.clone(),
+                });
+                if self.voice_note.message_id == *message_id {
+                    self.voice_note.state = "failed".to_string();
+                }
+            }
         }
     }
 
@@ -362,6 +552,171 @@ mod tests {
         assert_eq!(payload["configured"], true);
         assert_eq!(payload["registered"], true);
         assert_eq!(payload["active_call_id"], "call-1");
+    }
+
+    #[test]
+    fn session_snapshot_tracks_call_message_and_voice_note_state() {
+        #[derive(Default)]
+        struct SnapshotBackend {
+            calls: Vec<String>,
+        }
+
+        impl CallBackend for SnapshotBackend {
+            fn start(&mut self, _config: &VoipConfig) -> Result<(), String> {
+                self.calls.push("start".to_string());
+                Ok(())
+            }
+
+            fn stop(&mut self) {
+                self.calls.push("stop".to_string());
+            }
+
+            fn iterate(&mut self) -> Result<Vec<BackendEvent>, String> {
+                Ok(vec![])
+            }
+
+            fn make_call(&mut self, _sip_address: &str) -> Result<String, String> {
+                Ok("call-1".to_string())
+            }
+
+            fn answer_call(&mut self) -> Result<(), String> {
+                Ok(())
+            }
+
+            fn reject_call(&mut self) -> Result<(), String> {
+                Ok(())
+            }
+
+            fn hangup(&mut self) -> Result<(), String> {
+                Ok(())
+            }
+
+            fn set_muted(&mut self, _muted: bool) -> Result<(), String> {
+                Ok(())
+            }
+
+            fn send_text_message(
+                &mut self,
+                _sip_address: &str,
+                _text: &str,
+            ) -> Result<String, String> {
+                Ok("backend-msg-1".to_string())
+            }
+
+            fn start_voice_recording(&mut self, file_path: &str) -> Result<(), String> {
+                self.calls.push(format!("record:{file_path}"));
+                Ok(())
+            }
+
+            fn stop_voice_recording(&mut self) -> Result<i32, String> {
+                self.calls.push("stop_recording".to_string());
+                Ok(1250)
+            }
+
+            fn cancel_voice_recording(&mut self) -> Result<(), String> {
+                Ok(())
+            }
+
+            fn send_voice_note(
+                &mut self,
+                _sip_address: &str,
+                _file_path: &str,
+                _duration_ms: i32,
+                _mime_type: &str,
+            ) -> Result<String, String> {
+                Ok("backend-vn-1".to_string())
+            }
+        }
+
+        let mut host = VoipHost::default();
+        let mut backend = SnapshotBackend::default();
+        host.configure(config());
+        host.register(&mut backend).expect("register");
+
+        assert_eq!(
+            host.session_snapshot_payload()["registration_state"],
+            "none"
+        );
+        assert_eq!(host.session_snapshot_payload()["call_state"], "idle");
+        assert_eq!(
+            host.session_snapshot_payload()["voice_note"]["state"],
+            "idle"
+        );
+
+        host.apply_backend_event(&BackendEvent::RegistrationChanged {
+            state: "ok".to_string(),
+            reason: "".to_string(),
+        });
+        host.apply_backend_event(&BackendEvent::IncomingCall {
+            call_id: "call-1".to_string(),
+            from_uri: "sip:bob@example.com".to_string(),
+        });
+        host.apply_backend_event(&BackendEvent::CallStateChanged {
+            call_id: "call-1".to_string(),
+            state: "streams_running".to_string(),
+        });
+
+        let snapshot = host.session_snapshot_payload();
+        assert_eq!(snapshot["configured"], true);
+        assert_eq!(snapshot["registered"], true);
+        assert_eq!(snapshot["registration_state"], "ok");
+        assert_eq!(snapshot["active_call_id"], "call-1");
+        assert_eq!(snapshot["call_state"], "streams_running");
+
+        host.start_voice_recording(&mut backend, "/tmp/note.wav")
+            .expect("start voice note");
+        assert_eq!(
+            host.session_snapshot_payload()["voice_note"]["state"],
+            "recording"
+        );
+        assert_eq!(
+            host.session_snapshot_payload()["voice_note"]["file_path"],
+            "/tmp/note.wav"
+        );
+
+        host.stop_voice_recording(&mut backend)
+            .expect("stop voice note");
+        assert_eq!(
+            host.session_snapshot_payload()["voice_note"]["state"],
+            "recorded"
+        );
+        assert_eq!(
+            host.session_snapshot_payload()["voice_note"]["duration_ms"],
+            1250
+        );
+
+        host.send_voice_note(
+            &mut backend,
+            "sip:bob@example.com",
+            "/tmp/note.wav",
+            1250,
+            "audio/wav",
+            "client-vn-1",
+        )
+        .expect("send voice note");
+        assert_eq!(
+            host.session_snapshot_payload()["voice_note"]["state"],
+            "sending"
+        );
+        assert_eq!(
+            host.session_snapshot_payload()["voice_note"]["message_id"],
+            "client-vn-1"
+        );
+        assert_eq!(
+            host.session_snapshot_payload()["pending_outbound_messages"],
+            1
+        );
+
+        host.apply_backend_event(&BackendEvent::MessageDeliveryChanged {
+            message_id: "client-vn-1".to_string(),
+            delivery_state: "delivered".to_string(),
+            local_file_path: "/tmp/note.wav".to_string(),
+            error: "".to_string(),
+        });
+        let snapshot = host.session_snapshot_payload();
+        assert_eq!(snapshot["voice_note"]["state"], "sent");
+        assert_eq!(snapshot["last_message"]["message_id"], "client-vn-1");
+        assert_eq!(snapshot["last_message"]["delivery_state"], "delivered");
     }
 }
 
