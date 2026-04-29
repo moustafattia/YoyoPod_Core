@@ -22,27 +22,8 @@ fn worker_emits_ready_and_health_for_mock_hardware() {
 }
 
 #[test]
-fn worker_renders_static_hub_with_framebuffer_renderer() {
-    let input = br#"{"kind":"command","type":"ui.show_hub","payload":{"renderer":"framebuffer"}}
-{"kind":"command","type":"ui.health","payload":{}}
-{"kind":"command","type":"ui.shutdown","payload":{}}
-"#;
-    let mut output = Vec::new();
-    let mut errors = Vec::new();
-    let display = MockDisplay::new(240, 280);
-    let button = MockButton::new();
-
-    run_worker(input.as_slice(), &mut output, &mut errors, display, button)
-        .expect("worker exits cleanly");
-
-    let stdout = String::from_utf8(output).expect("utf8");
-    assert!(stdout.contains("\"frames\":1"));
-    assert!(stdout.contains("\"last_hub_renderer\":\"framebuffer\""));
-}
-
-#[test]
-fn worker_renders_runtime_snapshot_and_reports_active_screen() {
-    let input = br#"{"kind":"command","type":"ui.runtime_snapshot","payload":{"music":{"title":"Little Song","artist":"YoYo"}}}
+fn worker_renders_runtime_snapshot_and_reports_active_screen_from_screen_model() {
+    let input = br#"{"kind":"command","type":"ui.runtime_snapshot","payload":{"renderer":"framebuffer","call":{"state":"incoming","peer_name":"Mama","peer_address":"+1 555-0100"}}}
 {"kind":"command","type":"ui.health","payload":{}}
 {"kind":"command","type":"ui.shutdown","payload":{}}
 "#;
@@ -56,9 +37,11 @@ fn worker_renders_runtime_snapshot_and_reports_active_screen() {
 
     let stdout = String::from_utf8(output).expect("utf8");
     assert!(stdout.contains("\"type\":\"ui.screen_changed\""));
-    assert!(stdout.contains("\"screen\":\"hub\""));
+    assert!(stdout.contains("\"screen\":\"incoming_call\""));
     assert!(stdout.contains("\"frames\":1"));
-    assert!(stdout.contains("\"active_screen\":\"hub\""));
+    assert!(stdout.contains("\"active_screen\":\"incoming_call\""));
+    assert!(stdout.contains("\"last_ui_renderer\":\"framebuffer\""));
+    assert!(!stdout.contains("\"last_hub_renderer\""));
 }
 
 #[test]
@@ -83,8 +66,8 @@ fn worker_applies_semantic_input_inside_rust_state_machine() {
 
 #[test]
 fn worker_emits_runtime_intent_for_call_action() {
-    let input = br#"{"kind":"command","type":"ui.runtime_snapshot","payload":{"call":{"state":"incoming","peer_name":"Mama"}}}
-{"kind":"command","type":"ui.input_action","payload":{"action":"select"}}
+    let input = br#"{"kind":"command","type":"ui.runtime_snapshot","payload":{"renderer":"framebuffer","call":{"state":"incoming","peer_name":"Mama"}}}
+{"kind":"command","type":"ui.input_action","payload":{"renderer":"framebuffer","action":"select"}}
 {"kind":"command","type":"ui.shutdown","payload":{}}
 "#;
     let mut output = Vec::new();
@@ -99,4 +82,47 @@ fn worker_emits_runtime_intent_for_call_action() {
     assert!(stdout.contains("\"type\":\"ui.intent\""));
     assert!(stdout.contains("\"domain\":\"call\""));
     assert!(stdout.contains("\"action\":\"answer\""));
+}
+
+#[cfg(not(feature = "native-lvgl"))]
+#[test]
+fn worker_explicit_lvgl_mode_emits_error_and_falls_back_without_exiting() {
+    let input = br#"{"kind":"command","type":"ui.runtime_snapshot","payload":{"renderer":"lvgl","music":{"title":"Little Song","artist":"YoYo"}}}
+{"kind":"command","type":"ui.health","payload":{}}
+{"kind":"command","type":"ui.shutdown","payload":{}}
+"#;
+    let mut output = Vec::new();
+    let mut errors = Vec::new();
+    let display = MockDisplay::new(240, 280);
+    let button = MockButton::new();
+
+    run_worker(input.as_slice(), &mut output, &mut errors, display, button)
+        .expect("worker exits cleanly");
+
+    let stdout = String::from_utf8(output).expect("utf8");
+    assert!(stdout.contains("\"type\":\"ui.error\""));
+    assert!(stdout.contains("\"code\":\"lvgl_unavailable\""));
+    assert!(stdout.contains("\"type\":\"ui.health\""));
+    assert!(stdout.contains("\"last_ui_renderer\":\"framebuffer\""));
+}
+
+#[cfg(feature = "native-lvgl")]
+#[test]
+fn worker_explicit_lvgl_mode_uses_native_renderer_when_available() {
+    let input = br#"{"kind":"command","type":"ui.runtime_snapshot","payload":{"renderer":"lvgl","music":{"title":"Little Song","artist":"YoYo"}}}
+{"kind":"command","type":"ui.health","payload":{}}
+{"kind":"command","type":"ui.shutdown","payload":{}}
+"#;
+    let mut output = Vec::new();
+    let mut errors = Vec::new();
+    let display = MockDisplay::new(240, 280);
+    let button = MockButton::new();
+
+    run_worker(input.as_slice(), &mut output, &mut errors, display, button)
+        .expect("worker exits cleanly");
+
+    let stdout = String::from_utf8(output).expect("utf8");
+    assert!(!stdout.contains("\"type\":\"ui.error\""));
+    assert!(stdout.contains("\"type\":\"ui.health\""));
+    assert!(stdout.contains("\"last_ui_renderer\":\"lvgl\""));
 }
