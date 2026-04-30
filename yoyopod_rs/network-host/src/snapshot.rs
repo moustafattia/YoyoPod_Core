@@ -109,4 +109,13 @@ impl NetworkRuntimeSnapshot {
         snapshot.gps_enabled = config.gps_enabled;
         snapshot
     }
+
+    pub fn degraded_config_error(config_dir: &str, error: &str) -> Self {
+        let mut snapshot = Self::offline(config_dir);
+        snapshot.state = NetworkLifecycleState::Degraded;
+        snapshot.retryable = true;
+        snapshot.error_code = "config_load_failed".to_string();
+        snapshot.error_message = error.to_string();
+        snapshot
+    }
 }

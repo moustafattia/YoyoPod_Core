@@ -17,10 +17,11 @@ where
     R: Read,
     W: Write,
 {
-    let config = NetworkHostConfig::load(config_dir)?;
-    let snapshot = NetworkRuntimeSnapshot::from_config(config_dir, &config);
-
     write_envelope(output, &ready_event(config_dir))?;
+    let snapshot = match NetworkHostConfig::load(config_dir) {
+        Ok(config) => NetworkRuntimeSnapshot::from_config(config_dir, &config),
+        Err(error) => NetworkRuntimeSnapshot::degraded_config_error(config_dir, &error.to_string()),
+    };
     write_envelope(output, &snapshot_event(&snapshot))?;
 
     let reader = io::BufReader::new(input);

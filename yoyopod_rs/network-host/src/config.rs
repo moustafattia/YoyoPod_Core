@@ -7,6 +7,8 @@ use serde::Deserialize;
 use serde_yaml::{Mapping, Value};
 
 const NETWORK_CELLULAR_CONFIG: &str = "network/cellular.yaml";
+const DEVICE_TREE_MODEL_PATH: &str = "/proc/device-tree/model";
+const DEVICE_TREE_COMPATIBLE_PATH: &str = "/proc/device-tree/compatible";
 
 #[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
 #[serde(default)]
@@ -63,13 +65,43 @@ fn resolve_network_layers(config_dir: &Path) -> Vec<PathBuf> {
 }
 
 fn active_board() -> Option<String> {
-    let board = env::var("YOYOPOD_CONFIG_BOARD").ok()?;
-    let board = board.trim();
-    if board.is_empty() {
-        None
-    } else {
-        Some(board.to_string())
+    let env_board = env::var("YOYOPOD_CONFIG_BOARD").ok();
+    let model = read_device_tree_text(Path::new(DEVICE_TREE_MODEL_PATH));
+    let compatible = read_device_tree_text(Path::new(DEVICE_TREE_COMPATIBLE_PATH));
+    resolve_config_board_from_sources(env_board.as_deref(), &model, &compatible)
+}
+
+fn read_device_tree_text(path: &Path) -> String {
+    match fs::read(path) {
+        Ok(bytes) => String::from_utf8_lossy(&bytes).replace('\0', "\n"),
+        Err(_) => String::new(),
     }
+}
+
+fn resolve_config_board_from_sources(
+    env_board: Option<&str>,
+    model: &str,
+    compatible: &str,
+) -> Option<String> {
+    env_board
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_string)
+        .or_else(|| detect_config_board_from_text(model, compatible).map(str::to_string))
+}
+
+fn detect_config_board_from_text(model: &str, compatible: &str) -> Option<&'static str> {
+    let model = model.to_ascii_lowercase();
+    let compatible = compatible.to_ascii_lowercase();
+
+    if model.contains("cubie a7z") || compatible.contains("radxa,cubie-a7z") {
+        return Some("radxa-cubie-a7z");
+    }
+    if model.contains("raspberry pi zero 2") {
+        return Some("rpi-zero-2w");
+    }
+
+    None
 }
 
 fn load_yaml_layers(paths: &[PathBuf]) -> Result<Value> {
@@ -157,5 +189,46 @@ fn parse_bool(name: &str, value: &str) -> Result<bool> {
         "1" | "true" | "yes" | "on" => Ok(true),
         "0" | "false" | "no" | "off" => Ok(false),
         _ => anyhow::bail!("invalid boolean for {name}: {value}"),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{detect_config_board_from_text, resolve_config_board_from_sources};
+
+    #[test]
+    fn detects_rpi_zero_2w_from_model_text() {
+        assert_eq!(
+            detect_config_board_from_text("Raspberry Pi Zero 2 W Rev 1.0", ""),
+            Some("rpi-zero-2w")
+        );
+    }
+
+    #[test]
+    fn detects_radxa_board_from_compatible_text() {
+        assert_eq!(
+            detect_config_board_from_text("", "radxa,cubie-a7z\nother"),
+            Some("radxa-cubie-a7z")
+        );
+    }
+
+    #[test]
+    fn resolve_config_board_falls_back_to_detected_hardware() {
+        assert_eq!(
+            resolve_config_board_from_sources(None, "Raspberry Pi Zero 2 W Rev 1.0", ""),
+            Some("rpi-zero-2w".to_string())
+        );
+    }
+
+    #[test]
+    fn resolve_config_board_prefers_env_over_hardware_detection() {
+        assert_eq!(
+            resolve_config_board_from_sources(
+                Some("custom-board"),
+                "Raspberry Pi Zero 2 W Rev 1.0",
+                ""
+            ),
+            Some("custom-board".to_string())
+        );
     }
 }
