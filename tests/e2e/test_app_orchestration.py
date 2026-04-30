@@ -19,8 +19,6 @@ from yoyopod.core import AppContext
 from yoyopod.core.audio_volume import AudioVolumeController
 from yoyopod.integrations.call.events import (
     CallEndedEvent,
-    CallStateChangedEvent,
-    IncomingCallEvent,
     RegistrationChangedEvent,
     VoIPAvailabilityChangedEvent,
 )
@@ -775,16 +773,6 @@ class OrchestrationHarness:
 
     def publish(self, event: object) -> None:
         self.pending_semantic_events += 1
-        if isinstance(event, IncomingCallEvent):
-            self._queue_call_snapshot(
-                CallState.INCOMING,
-                peer=event.caller_address,
-                display_name=event.caller_name,
-            )
-            return
-        if isinstance(event, CallStateChangedEvent):
-            self._queue_call_snapshot(event.state)
-            return
         if isinstance(event, CallEndedEvent):
             worker = threading.Thread(
                 target=lambda: self.app.runtime_loop.queue_main_thread_callback(
@@ -849,6 +837,16 @@ class OrchestrationHarness:
             worker.join()
             return
         _publish_from_worker(self.app, event)
+
+    def publish_call_snapshot(
+        self,
+        state: CallState,
+        *,
+        peer: str = "sip:alice@example.com",
+        display_name: str = "Alice",
+    ) -> None:
+        self.pending_semantic_events += 1
+        self._queue_call_snapshot(state, peer=peer, display_name=display_name)
 
     def _queue_call_snapshot(
         self,
@@ -962,8 +960,8 @@ def test_incoming_call_pauses_playing_music_once() -> None:
     harness = OrchestrationHarness.build(playback_state="playing")
     harness.sync_runtime(music_state=MusicState.PLAYING, trigger="playback_playing")
 
-    harness.publish(CallStateChangedEvent(state=CallState.INCOMING))
-    harness.publish(IncomingCallEvent(caller_address="sip:alice@example.com", caller_name="Alice"))
+    harness.publish_call_snapshot(CallState.INCOMING)
+    harness.publish_call_snapshot(CallState.INCOMING)
 
     assert harness.music_backend.pause_calls == 0
     assert harness.drain_events() == 2
@@ -974,9 +972,7 @@ def test_incoming_call_pauses_playing_music_once() -> None:
     assert harness.screen_manager.current_screen is harness.screens.incoming_call
     assert harness.screens.incoming_call.caller_name == "Alice"
 
-    harness.publish(
-        IncomingCallEvent(caller_address="sip:alice@example.com", caller_name="Alice"),
-    )
+    harness.publish_call_snapshot(CallState.INCOMING)
 
     assert harness.drain_events() == 1
     assert harness.music_backend.pause_calls == 1
@@ -989,7 +985,7 @@ def test_incoming_call_keeps_music_playing_when_pause_command_fails() -> None:
     harness.music_backend.pause_result = False
     harness.sync_runtime(music_state=MusicState.PLAYING, trigger="playback_playing")
 
-    harness.publish(CallStateChangedEvent(state=CallState.INCOMING))
+    harness.publish_call_snapshot(CallState.INCOMING)
 
     assert harness.drain_events() == 1
     assert harness.music_backend.pause_calls == 1
@@ -1004,7 +1000,7 @@ def test_incoming_call_does_not_mark_interrupted_when_music_backend_is_unavailab
     harness.music_backend.stop()
     harness.sync_runtime(music_state=MusicState.PLAYING, trigger="playback_playing")
 
-    harness.publish(CallStateChangedEvent(state=CallState.INCOMING))
+    harness.publish_call_snapshot(CallState.INCOMING)
 
     assert harness.drain_events() == 1
     assert harness.music_backend.pause_calls == 0
@@ -1013,19 +1009,19 @@ def test_incoming_call_does_not_mark_interrupted_when_music_backend_is_unavailab
     assert harness.call_fsm.state == CallSessionState.INCOMING
 
 
-def test_incoming_call_event_is_projected_as_rust_snapshot() -> None:
-    """Legacy incoming-call events in tests should exercise the Rust snapshot path."""
+def test_incoming_call_snapshot_drives_runtime_state() -> None:
+    """Incoming-call snapshots should exercise the Rust snapshot path."""
     harness = OrchestrationHarness.build(playback_state="playing")
     harness.sync_runtime(music_state=MusicState.PLAYING, trigger="playback_playing")
 
-    harness.publish(IncomingCallEvent(caller_address="sip:alice@example.com", caller_name="Alice"))
+    harness.publish_call_snapshot(CallState.INCOMING)
 
     assert harness.drain_events() == 1
     assert harness.music_backend.pause_calls == 1
     assert harness.call_fsm.state == CallSessionState.INCOMING
     assert harness.screen_manager.current_screen is harness.screens.incoming_call
 
-    harness.publish(CallStateChangedEvent(state=CallState.INCOMING))
+    harness.publish_call_snapshot(CallState.INCOMING)
 
     assert harness.drain_events() == 1
     assert harness.music_backend.pause_calls == 1
@@ -1153,7 +1149,7 @@ def test_outgoing_call_pauses_playing_music_and_resumes_on_terminal_end() -> Non
     harness = OrchestrationHarness.build(playback_state="playing", auto_resume=True)
     harness.sync_runtime(music_state=MusicState.PLAYING, trigger="playback_playing")
 
-    harness.publish(CallStateChangedEvent(state=CallState.OUTGOING))
+    harness.publish_call_snapshot(CallState.OUTGOING)
 
     assert harness.drain_events() == 1
     assert harness.music_backend.pause_calls == 1
@@ -1162,7 +1158,7 @@ def test_outgoing_call_pauses_playing_music_and_resumes_on_terminal_end() -> Non
     assert harness.call_interruption_policy.music_interrupted_by_call
     assert harness.screen_manager.current_screen is harness.screens.outgoing_call
 
-    harness.publish(CallStateChangedEvent(state=CallState.END))
+    harness.publish_call_snapshot(CallState.END)
 
     assert harness.drain_events() == 1
     assert harness.music_backend.play_calls == 1
@@ -1178,15 +1174,13 @@ def test_terminal_error_state_ends_incoming_call_without_waiting_for_released() 
     harness = OrchestrationHarness.build(playback_state="playing", auto_resume=True)
     harness.sync_runtime(music_state=MusicState.PLAYING, trigger="playback_playing")
 
-    harness.publish(
-        IncomingCallEvent(caller_address="sip:alice@example.com", caller_name="Alice"),
-    )
+    harness.publish_call_snapshot(CallState.INCOMING)
     assert harness.drain_events() == 1
 
-    harness.publish(CallStateChangedEvent(state=CallState.INCOMING))
+    harness.publish_call_snapshot(CallState.INCOMING)
     assert harness.drain_events() == 1
 
-    harness.publish(CallStateChangedEvent(state=CallState.ERROR))
+    harness.publish_call_snapshot(CallState.ERROR)
 
     assert harness.drain_events() == 1
     assert harness.call_fsm.state == CallSessionState.IDLE
@@ -1200,11 +1194,11 @@ def test_terminal_end_state_clears_outgoing_call_without_waiting_for_released() 
 
     harness = OrchestrationHarness.build(playback_state="stopped")
 
-    harness.publish(CallStateChangedEvent(state=CallState.OUTGOING))
+    harness.publish_call_snapshot(CallState.OUTGOING)
     assert harness.drain_events() == 1
     assert harness.screen_manager.current_screen is harness.screens.outgoing_call
 
-    harness.publish(CallStateChangedEvent(state=CallState.END))
+    harness.publish_call_snapshot(CallState.END)
 
     assert harness.drain_events() == 1
     assert harness.call_fsm.state == CallSessionState.IDLE
@@ -1334,7 +1328,7 @@ def test_terminal_call_states_end_call_and_restore_music(terminal_state: CallSta
     )
     harness.push_screens("in_call")
 
-    harness.publish(CallStateChangedEvent(state=terminal_state))
+    harness.publish_call_snapshot(terminal_state)
 
     assert harness.drain_events() == 1
     assert harness.call_fsm.state == CallSessionState.IDLE

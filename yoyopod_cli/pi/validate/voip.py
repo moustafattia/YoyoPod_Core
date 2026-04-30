@@ -139,14 +139,9 @@ class _VoIPManagerLike(Protocol):
         callback: Callable[[Any], None],
     ) -> None: ...
 
-    def on_call_state_change(
+    def on_runtime_snapshot_change(
         self,
         callback: Callable[[Any], None],
-    ) -> None: ...
-
-    def on_incoming_call(
-        self,
-        callback: Callable[[str, str], None],
     ) -> None: ...
 
     def make_call(self, sip_address: str, contact_name: str | None = None) -> bool: ...
@@ -218,7 +213,7 @@ class _VoIPDrillRecorder:
 
     def attach(self, manager: _VoIPManagerLike) -> None:
         manager.on_registration_change(self._on_registration_change)
-        manager.on_call_state_change(self._on_call_state_change)
+        manager.on_runtime_snapshot_change(self._on_runtime_snapshot_change)
 
     def _emit(self, kind: str, **payload: object) -> None:
         event = {
@@ -346,9 +341,13 @@ class _VoIPDrillRecorder:
         self.registration_states.append(state.value)
         self._emit("registration", state=state.value)
 
-    def _on_call_state_change(self, state: Any) -> None:
-        self.call_states.append(state.value)
-        self._emit("call_state", state=state.value)
+    def _on_runtime_snapshot_change(self, snapshot: Any) -> None:
+        state = getattr(snapshot, "call_state", None)
+        value = getattr(state, "value", str(state or ""))
+        if not value:
+            return
+        self.call_states.append(value)
+        self._emit("call_state", state=value)
 
 
 def _build_voip_manager_for_drill(config_dir: str) -> _VoIPManagerLike:

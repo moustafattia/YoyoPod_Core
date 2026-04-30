@@ -55,8 +55,7 @@ class FakeVoIPManager:
         self.registration_state = RegistrationState.NONE
         self.call_state = CallState.IDLE
         self._registration_callbacks: list[object] = []
-        self._call_state_callbacks: list[object] = []
-        self._incoming_call_callbacks: list[object] = []
+        self._runtime_snapshot_callbacks: list[object] = []
         self._scheduled: list[tuple[float, object]] = []
         self.call_connected_at: float | None = None
         self.start_result = True
@@ -71,11 +70,8 @@ class FakeVoIPManager:
     def on_registration_change(self, callback) -> None:
         self._registration_callbacks.append(callback)
 
-    def on_call_state_change(self, callback) -> None:
-        self._call_state_callbacks.append(callback)
-
-    def on_incoming_call(self, callback) -> None:
-        self._incoming_call_callbacks.append(callback)
+    def on_runtime_snapshot_change(self, callback) -> None:
+        self._runtime_snapshot_callbacks.append(callback)
 
     def start(self) -> bool:
         self.running = True
@@ -134,6 +130,7 @@ class FakeVoIPManager:
         self.registered = state == RegistrationState.OK
         for callback in self._registration_callbacks:
             callback(state)
+        self._emit_runtime_snapshot()
 
     def _set_call_state(self, state: CallState) -> None:
         self.call_state = state
@@ -144,8 +141,18 @@ class FakeVoIPManager:
             self.call_connected_at = self.clock.now
         if state in {CallState.END, CallState.RELEASED, CallState.IDLE, CallState.ERROR}:
             self.call_connected_at = None
-        for callback in self._call_state_callbacks:
-            callback(state)
+        self._emit_runtime_snapshot()
+
+    def _emit_runtime_snapshot(self) -> None:
+        snapshot = SimpleNamespace(
+            registration_state=self.registration_state,
+            call_state=self.call_state,
+            active_call_id="call-1" if self.call_state != CallState.IDLE else "",
+            active_call_peer="sip:alice@example.com" if self.call_state != CallState.IDLE else "",
+            call_session=SimpleNamespace(peer_sip_address="sip:alice@example.com"),
+        )
+        for callback in self._runtime_snapshot_callbacks:
+            callback(snapshot)
 
 
 def _patch_clock(monkeypatch: pytest.MonkeyPatch, clock: FakeClock) -> None:

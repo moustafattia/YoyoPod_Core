@@ -181,12 +181,10 @@ def test_voip_manager_ignores_legacy_call_events_until_rust_snapshot() -> None:
     manager = VoIPManager(build_config(), people_directory=people_directory, backend=backend)
 
     registration_states: list[RegistrationState] = []
-    call_states: list[CallState] = []
-    incoming_calls: list[tuple[str, str]] = []
+    snapshots: list[VoIPRuntimeSnapshot] = []
 
     manager.on_registration_change(registration_states.append)
-    manager.on_call_state_change(call_states.append)
-    manager.on_incoming_call(lambda address, name: incoming_calls.append((address, name)))
+    manager.on_runtime_snapshot_change(snapshots.append)
 
     assert manager.start()
 
@@ -196,8 +194,7 @@ def test_voip_manager_ignores_legacy_call_events_until_rust_snapshot() -> None:
 
     assert manager.registered is False
     assert registration_states == []
-    assert call_states == []
-    assert incoming_calls == []
+    assert snapshots == []
     assert manager.get_caller_info()["display_name"] == "Unknown"
 
     backend.emit(
@@ -212,8 +209,7 @@ def test_voip_manager_ignores_legacy_call_events_until_rust_snapshot() -> None:
 
     assert manager.registered
     assert registration_states == [RegistrationState.OK]
-    assert call_states == [CallState.INCOMING]
-    assert incoming_calls == []
+    assert [snapshot.call_state for snapshot in snapshots] == [CallState.INCOMING]
     assert manager.get_caller_info()["display_name"] == "Parent"
 
 
@@ -224,9 +220,9 @@ def test_voip_manager_mirrors_rust_runtime_snapshot_without_duplicate_callbacks(
     people_directory = FakePeopleDirectory({"sip:bob@example.com": "Bob"})
     manager = VoIPManager(build_config(), people_directory=people_directory, backend=backend)
     registration_states: list[RegistrationState] = []
-    call_states: list[CallState] = []
+    snapshots: list[VoIPRuntimeSnapshot] = []
     manager.on_registration_change(registration_states.append)
-    manager.on_call_state_change(call_states.append)
+    manager.on_runtime_snapshot_change(snapshots.append)
 
     assert manager.start()
     snapshot = VoIPRuntimeSnapshot(
@@ -255,7 +251,10 @@ def test_voip_manager_mirrors_rust_runtime_snapshot_without_duplicate_callbacks(
     assert manager.caller_address == "sip:bob@example.com"
     assert manager.get_caller_info()["display_name"] == "Bob"
     assert registration_states == [RegistrationState.OK]
-    assert call_states == [CallState.STREAMS_RUNNING]
+    assert [snapshot.call_state for snapshot in snapshots] == [
+        CallState.STREAMS_RUNNING,
+        CallState.STREAMS_RUNNING,
+    ]
 
 
 def test_voip_manager_delegates_outgoing_commands_to_backend() -> None:
@@ -263,14 +262,11 @@ def test_voip_manager_delegates_outgoing_commands_to_backend() -> None:
 
     backend = SnapshotOwnedMockVoIPBackend()
     manager = VoIPManager(build_config(), backend=backend)
-    call_states: list[CallState] = []
 
     backend.emit(VoIPRuntimeSnapshotChanged(snapshot=_registered_runtime_snapshot()))
-    manager.on_call_state_change(call_states.append)
 
     assert manager.make_call("sip:bob@example.com", contact_name="Bob")
     assert backend.commands == ["call sip:bob@example.com"]
-    assert call_states == []
     assert manager.call_state == CallState.IDLE
     assert manager.get_caller_info()["display_name"] == "Unknown"
 
@@ -362,15 +358,13 @@ def test_voip_manager_waits_for_rust_snapshot_before_mute_state() -> None:
     assert manager.is_muted is False
 
 
-def test_voip_manager_publishes_runtime_snapshot_callbacks_without_call_state_change() -> None:
-    """Rust snapshots should surface facts that do not emit call-state callbacks."""
+def test_voip_manager_publishes_runtime_snapshot_callbacks() -> None:
+    """Rust snapshots should surface live facts through the snapshot callback."""
 
     backend = SnapshotOwnedMockVoIPBackend()
     manager = VoIPManager(build_config(), backend=backend)
     snapshots: list[VoIPRuntimeSnapshot] = []
-    call_states: list[CallState] = []
     manager.on_runtime_snapshot_change(snapshots.append)
-    manager.on_call_state_change(call_states.append)
 
     assert manager.start()
     muted_snapshot = VoIPRuntimeSnapshot(
@@ -388,7 +382,6 @@ def test_voip_manager_publishes_runtime_snapshot_callbacks_without_call_state_ch
     backend.emit(VoIPRuntimeSnapshotChanged(snapshot=muted_snapshot))
 
     assert snapshots == [muted_snapshot]
-    assert call_states == []
     assert manager.is_muted is True
 
 

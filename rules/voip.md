@@ -4,30 +4,30 @@ Applies to: `yoyopod/integrations/call/**`, `yoyopod/integrations/contacts/**`, 
 
 ## Overview
 
-The production VoIP path is Liblinphone-only:
+The production VoIP path is Rust-owned Liblinphone:
 
-- native Liblinphone shim under `yoyopod/backends/voip/shim_native/`
-- CPython `cffi` binding against the shim header only
-- `VoIPManager` as the app-facing facade for registration, calls, text messages, and voice notes
+- Rust VoIP host under `yoyopod_rs/voip-host/`
+- Rust Liblinphone shim under `yoyopod_rs/liblinphone-shim/`
+- Python `RustHostBackend` only supervises the worker process and forwards commands
+- `VoIPManager` only exposes command helpers and Rust runtime snapshots to the app
 
 Do not reintroduce `linphonec` subprocess control or `.linphonerc`-driven runtime behavior.
 
 ## Integration Rules
 
-- Liblinphone is driven from the app loop through `VoIPBackend.iterate()`.
-- Native Liblinphone callbacks must never call Python directly from arbitrary threads.
-- Typed backend events are the contract into the app layer:
-  - registration
-  - call state
-  - incoming call
-  - message received
-  - message delivery change
-  - message download complete
-  - message failure
+- Liblinphone iteration is owned by the Rust VoIP host, not the Python app loop.
+- Python must not expose live call-state or incoming-call callback ownership.
+- Rust runtime snapshots are the contract into the Python app layer for:
+  - registration state
+  - call/session state
+  - message summaries
+  - voice-note state
+  - lifecycle/recovery facts
+- Native Liblinphone callbacks stay inside the Rust shim and are drained through Rust event queues.
 - Voice-note recording is local-first:
   - record to WAV on-device
   - send through Liblinphone chat/file-transfer APIs
-  - persist metadata through `VoIPMessageStore`
+  - persist metadata through the Rust VoIP host message store
 
 ## Configuration
 

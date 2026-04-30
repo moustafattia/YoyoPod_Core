@@ -181,8 +181,6 @@ class _FakeApp:
 
 class _FakeVoipManager:
     def __init__(self) -> None:
-        self.incoming_call_callback = None
-        self.call_state_callback = None
         self.registration_callback = None
         self.availability_callback = None
         self.runtime_snapshot_callback = None
@@ -190,12 +188,6 @@ class _FakeVoipManager:
         self.message_received_callback = None
         self.message_delivery_callback = None
         self.message_failure_callback = None
-
-    def on_incoming_call(self, callback) -> None:
-        self.incoming_call_callback = callback
-
-    def on_call_state_change(self, callback) -> None:
-        self.call_state_callback = callback
 
     def on_registration_change(self, callback) -> None:
         self.registration_callback = callback
@@ -1011,8 +1003,8 @@ def test_setup_voip_callbacks_bind_snapshot_only_call_runtime() -> None:
     )
     RuntimeBootService(app).setup_voip_callbacks()
 
-    assert voip_manager.incoming_call_callback is None
-    assert voip_manager.call_state_callback is None
+    assert not hasattr(voip_manager, "incoming_call_callback")
+    assert not hasattr(voip_manager, "call_state_callback")
     assert voip_manager.registration_callback.__name__ == "handle_registration_change"
     assert voip_manager.availability_callback.__name__ == "handle_availability_change"
     assert voip_manager.runtime_snapshot_callback.__name__ == "handle_runtime_snapshot_change"

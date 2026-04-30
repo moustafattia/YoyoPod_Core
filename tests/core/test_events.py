@@ -39,8 +39,6 @@ def test_domain_events_are_not_reexported_from_core_surface() -> None:
 
     domain_event_names = (
         "CallEndedEvent",
-        "CallStateChangedEvent",
-        "IncomingCallEvent",
         "MusicAvailabilityChangedEvent",
         "NetworkGpsFixEvent",
         "NetworkPppUpEvent",

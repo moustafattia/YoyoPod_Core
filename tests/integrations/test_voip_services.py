@@ -61,6 +61,38 @@ def test_legacy_python_voip_services_are_not_public_call_exports(name: str) -> N
 
 
 @pytest.mark.parametrize(
+    "name",
+    [
+        "CallStateChangedEvent",
+        "IncomingCallEvent",
+    ],
+)
+def test_legacy_python_call_events_are_not_public_call_events(name: str) -> None:
+    """Live call state should be projected only from Rust runtime snapshots."""
+
+    events_module = importlib.import_module("yoyopod.integrations.call.events")
+
+    assert name not in getattr(events_module, "__all__", ())
+    with pytest.raises(AttributeError):
+        getattr(events_module, name)
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "on_call_state_change",
+        "on_incoming_call",
+    ],
+)
+def test_voip_manager_does_not_expose_legacy_call_callbacks(name: str) -> None:
+    """The Python supervisor should not expose live-call callback ownership."""
+
+    manager_module = importlib.import_module("yoyopod.integrations.call.manager")
+
+    assert not hasattr(manager_module.VoIPManager, name)
+
+
+@pytest.mark.parametrize(
     "module_name",
     [
         "yoyopod.integrations.call.messaging",

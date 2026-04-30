@@ -77,8 +77,6 @@ class VoIPManager:
         self._rust_active_voice_note: VoiceNoteDraft | None = None
 
         self.registration_callbacks: list[Callable[[RegistrationState], None]] = []
-        self.call_state_callbacks: list[Callable[[CallState], None]] = []
-        self.incoming_call_callbacks: list[Callable[[str, str], None]] = []
         self.availability_callbacks: list[Callable[[bool, str, RegistrationState], None]] = []
         self.runtime_snapshot_callbacks: list[Callable[[VoIPRuntimeSnapshot], None]] = []
         self.message_received_callbacks: list[Callable[[VoIPMessageRecord], None]] = []
@@ -331,12 +329,6 @@ class VoIPManager:
 
     def on_registration_change(self, callback: Callable[[RegistrationState], None]) -> None:
         self.registration_callbacks.append(callback)
-
-    def on_call_state_change(self, callback: Callable[[CallState], None]) -> None:
-        self.call_state_callbacks.append(callback)
-
-    def on_incoming_call(self, callback: Callable[[str, str], None]) -> None:
-        self.incoming_call_callbacks.append(callback)
 
     def on_availability_change(
         self,
@@ -704,15 +696,6 @@ class VoIPManager:
             except Exception as exc:
                 logger.error("Error in message failure callback: {}", exc)
 
-    def _handle_incoming_call_event(self, caller_address: str) -> None:
-        self.caller_address = caller_address
-        self.caller_name = self._lookup_contact_name(caller_address)
-        for callback in self.incoming_call_callbacks:
-            try:
-                callback(caller_address, self.caller_name or self._extract_username(caller_address))
-            except Exception as exc:
-                logger.error("Error in incoming call callback: {}", exc)
-
     def _update_registration_state(self, state: RegistrationState) -> None:
         if state == self.registration_state:
             return
@@ -757,12 +740,6 @@ class VoIPManager:
             self._start_call_timer()
         elif state in (CallState.RELEASED, CallState.END, CallState.ERROR):
             self._clear_call_session()
-
-        for callback in self.call_state_callbacks:
-            try:
-                callback(state)
-            except Exception as exc:
-                logger.error("Error in call state callback: {}", exc)
 
     def _extract_username(self, sip_address: str | None) -> str:
         if not sip_address:
