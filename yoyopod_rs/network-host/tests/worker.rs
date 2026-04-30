@@ -66,7 +66,7 @@ fn worker_keeps_runtime_snapshot_across_query_gps_and_health_commands() {
         envelopes[7].kind,
         yoyopod_network_host::protocol::EnvelopeKind::Result
     );
-    assert_eq!(envelopes[7].message_type, "network.query_gps");
+    assert_eq!(envelopes[7].message_type, "network.snapshot");
     assert_eq!(envelopes[7].request_id.as_deref(), Some("gps-1"));
     assert_eq!(
         envelopes[7].payload["snapshot"]["gps"]["last_query_result"],
@@ -92,13 +92,19 @@ fn worker_keeps_runtime_snapshot_across_query_gps_and_health_commands() {
         envelopes[10].kind,
         yoyopod_network_host::protocol::EnvelopeKind::Result
     );
-    assert_eq!(envelopes[10].message_type, "worker.stop");
+    assert_eq!(envelopes[10].message_type, "network.stopped");
     assert_eq!(envelopes[10].payload["shutdown"], true);
     assert_eq!(envelopes[11].message_type, "network.snapshot");
     assert_eq!(envelopes[11].payload["state"], "ppp_stopping");
     assert_eq!(envelopes[12].message_type, "network.snapshot");
     assert_eq!(envelopes[12].payload["state"], "off");
     assert_eq!(envelopes[13].message_type, "network.stopped");
+    assert!(envelopes.iter().all(|envelope| {
+        !matches!(
+            envelope.message_type.as_str(),
+            "network.query_gps" | "network.reset_modem" | "worker.stop" | "network.shutdown"
+        )
+    }));
 }
 
 #[test]
@@ -221,11 +227,17 @@ fn worker_reset_modem_returns_recovered_snapshot_and_shutdown_stops_runtime() {
     assert_eq!(
         envelopes
             .iter()
-            .find(|envelope| envelope.message_type == "network.reset_modem")
+            .find(|envelope| {
+                envelope.kind == yoyopod_network_host::protocol::EnvelopeKind::Result
+                    && envelope.request_id.as_deref() == Some("reset-1")
+            })
             .expect("reset result")
             .payload["snapshot"]["state"],
         "online"
     );
+    assert!(envelopes
+        .iter()
+        .all(|envelope| envelope.message_type != "network.reset_modem"));
     assert_eq!(modem.state().reset_calls, 1);
 }
 
@@ -251,6 +263,8 @@ fn worker_preserves_degraded_snapshot_when_config_load_fails() {
     assert_eq!(envelopes[1].message_type, "network.snapshot");
     assert_eq!(envelopes[1].payload["state"], "degraded");
     assert_eq!(envelopes[1].payload["error_code"], "config_load_failed");
+    assert_eq!(envelopes[1].payload["retryable"], false);
+    assert!(envelopes[1].payload["next_retry_at_ms"].is_null());
 }
 
 #[test]

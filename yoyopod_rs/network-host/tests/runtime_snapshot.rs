@@ -65,3 +65,14 @@ fn offline_snapshot_uses_canonical_baseline_shape() {
     assert_eq!(payload["ppp"]["up"], json!(false));
     assert_eq!(payload["gps"]["last_query_result"], json!("idle"));
 }
+
+#[test]
+fn degraded_config_snapshot_does_not_claim_automatic_retry() {
+    let snapshot = NetworkRuntimeSnapshot::degraded_config_error("config", "bad yaml");
+    let payload = serde_json::to_value(&snapshot).expect("serialize");
+
+    assert_eq!(snapshot.state, NetworkLifecycleState::Degraded);
+    assert_eq!(payload["error_code"], json!("config_load_failed"));
+    assert_eq!(payload["retryable"], json!(false));
+    assert_eq!(payload["next_retry_at_ms"], json!(null));
+}

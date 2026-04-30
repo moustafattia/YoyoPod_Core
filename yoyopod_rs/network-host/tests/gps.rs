@@ -2,7 +2,8 @@ use std::collections::{HashMap, VecDeque};
 use std::time::Duration;
 
 use yoyopod_network_host::at::{
-    parse_carrier, parse_registration, parse_signal_quality, AtCommandSet, CarrierInfo, SignalInfo,
+    parse_carrier, parse_registration, parse_signal_quality, AtCommandSet, CarrierInfo,
+    SimStatus, SignalInfo,
 };
 use yoyopod_network_host::gps::{parse_cgpsinfo, GpsFix, GpsReader};
 use yoyopod_network_host::transport::{LineTransport, TransportError};
@@ -201,6 +202,57 @@ fn gps_reader_enable_and_query_delegate_to_at_commands() {
         vec![
             ("AT+CGPS=1".to_string(), Some(Duration::from_secs(2))),
             ("AT+CGPSINFO".to_string(), Some(Duration::from_secs(2))),
+        ]
+    );
+}
+
+#[test]
+fn at_command_set_reports_sim_pin_state_and_unlocks_sim_with_configured_pin() {
+    let transport = FakeTransport::default()
+        .with_response("AT+CPIN?", "+CPIN: SIM PIN\nOK")
+        .with_response("AT+CPIN=1234", "OK")
+        .with_response("AT+CPIN?", "+CPIN: READY\nOK");
+    let mut at = AtCommandSet::new(transport);
+
+    assert_eq!(
+        at.get_sim_status().expect("cpin status should parse"),
+        SimStatus::PinRequired
+    );
+    assert!(at
+        .unlock_sim("1234")
+        .expect("pin unlock command should return success"));
+    assert_eq!(
+        at.get_sim_status().expect("cpin ready should parse"),
+        SimStatus::Ready
+    );
+
+    let transport = at.into_inner();
+    assert_eq!(
+        transport.sent,
+        vec![
+            ("AT+CPIN?".to_string(), Some(Duration::from_secs(2))),
+            ("AT+CPIN=\"1234\"".to_string(), Some(Duration::from_secs(2))),
+            ("AT+CPIN?".to_string(), Some(Duration::from_secs(2))),
+        ]
+    );
+}
+
+#[test]
+fn at_command_set_supports_full_functionality_and_reset_commands() {
+    let transport = FakeTransport::default()
+        .with_response("AT+CFUN=1", "OK")
+        .with_response("AT+CFUN=6", "OK");
+    let mut at = AtCommandSet::new(transport);
+
+    at.radio_full().expect("cfun full should succeed");
+    at.radio_reset().expect("cfun reset should succeed");
+
+    let transport = at.into_inner();
+    assert_eq!(
+        transport.sent,
+        vec![
+            ("AT+CFUN=1".to_string(), Some(Duration::from_secs(2))),
+            ("AT+CFUN=6".to_string(), Some(Duration::from_secs(2))),
         ]
     );
 }

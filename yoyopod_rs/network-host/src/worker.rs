@@ -3,12 +3,12 @@ use std::sync::mpsc::{self, RecvTimeoutError};
 use std::time::Duration;
 
 use anyhow::Result;
-use serde_json::json;
 
 use crate::config::NetworkHostConfig;
 use crate::modem::{ModemController, Sim7600ModemController};
 use crate::protocol::{
-    ready_event, snapshot_event, snapshot_result, stopped_event, EnvelopeKind, WorkerEnvelope,
+    health_result, ready_event, snapshot_event, snapshot_result, stopped_event, stopped_result,
+    EnvelopeKind, WorkerEnvelope,
 };
 use crate::runtime::{NetworkRuntime, RuntimeCommandError};
 
@@ -163,10 +163,7 @@ where
         "network.health" => {
             match runtime.health_command() {
                 Ok(snapshot) => {
-                    write_envelope(
-                        output,
-                        &snapshot_result("network.health", envelope.request_id, snapshot),
-                    )?;
+                    write_envelope(output, &health_result(envelope.request_id, snapshot))?;
                 }
                 Err(error) => emit_command_error(output, envelope.request_id, error)?,
             }
@@ -175,10 +172,7 @@ where
         "network.query_gps" => {
             match runtime.query_gps_command() {
                 Ok(snapshot) => {
-                    write_envelope(
-                        output,
-                        &snapshot_result("network.query_gps", envelope.request_id, snapshot),
-                    )?;
+                    write_envelope(output, &snapshot_result(envelope.request_id, snapshot))?;
                 }
                 Err(error) => emit_command_error(output, envelope.request_id, error)?,
             }
@@ -187,10 +181,7 @@ where
         "network.reset_modem" => {
             match runtime.reset_modem_command() {
                 Ok(snapshot) => {
-                    write_envelope(
-                        output,
-                        &snapshot_result("network.reset_modem", envelope.request_id, snapshot),
-                    )?;
+                    write_envelope(output, &snapshot_result(envelope.request_id, snapshot))?;
                 }
                 Err(error) => emit_command_error(output, envelope.request_id, error)?,
             }
@@ -198,14 +189,7 @@ where
         }
         "network.shutdown" | "worker.stop" => {
             runtime.shutdown();
-            write_envelope(
-                output,
-                &WorkerEnvelope::result(
-                    envelope.message_type,
-                    envelope.request_id,
-                    json!({"shutdown": true}),
-                ),
-            )?;
+            write_envelope(output, &stopped_result(envelope.request_id, "shutdown"))?;
             emit_pending_snapshots(output, runtime)?;
             write_envelope(output, &stopped_event("shutdown"))?;
             return Ok(LoopControl::Shutdown);

@@ -31,6 +31,15 @@ pub struct CarrierInfo {
     pub network_type: String,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SimStatus {
+    Ready,
+    PinRequired,
+    PukRequired,
+    NotInserted,
+    Unknown(String),
+}
+
 pub fn parse_signal_quality(response: &str) -> SignalInfo {
     let csq = find_prefixed_line(response, "+CSQ:")
         .and_then(|line| line.split(',').next())
@@ -71,6 +80,17 @@ pub fn parse_registration(response: &str) -> bool {
         .is_some_and(|status| matches!(status, "1" | "5"))
 }
 
+pub fn parse_sim_status(response: &str) -> SimStatus {
+    match find_prefixed_line(response, "+CPIN:") {
+        Some("READY") => SimStatus::Ready,
+        Some("SIM PIN") => SimStatus::PinRequired,
+        Some("SIM PUK") => SimStatus::PukRequired,
+        Some("NOT INSERTED") => SimStatus::NotInserted,
+        Some(status) => SimStatus::Unknown(status.to_string()),
+        None => SimStatus::Unknown(response.trim().to_string()),
+    }
+}
+
 pub struct AtCommandSet<T> {
     transport: T,
 }
@@ -103,7 +123,17 @@ where
     }
 
     pub fn check_sim(&mut self) -> Result<bool, TransportError> {
-        Ok(self.send("AT+CPIN?")?.contains("READY"))
+        Ok(matches!(self.get_sim_status()?, SimStatus::Ready))
+    }
+
+    pub fn get_sim_status(&mut self) -> Result<SimStatus, TransportError> {
+        Ok(parse_sim_status(&self.send("AT+CPIN?")?))
+    }
+
+    pub fn unlock_sim(&mut self, pin: &str) -> Result<bool, TransportError> {
+        Ok(self
+            .send(&format!("AT+CPIN=\"{}\"", pin.trim()))?
+            .contains("OK"))
     }
 
     pub fn get_signal_quality(&mut self) -> Result<SignalInfo, TransportError> {
@@ -141,8 +171,18 @@ where
         Ok(())
     }
 
+    pub fn radio_full(&mut self) -> Result<(), TransportError> {
+        self.send("AT+CFUN=1")?;
+        Ok(())
+    }
+
     pub fn radio_off(&mut self) -> Result<(), TransportError> {
         self.send("AT+CFUN=0")?;
+        Ok(())
+    }
+
+    pub fn radio_reset(&mut self) -> Result<(), TransportError> {
+        self.send("AT+CFUN=6")?;
         Ok(())
     }
 

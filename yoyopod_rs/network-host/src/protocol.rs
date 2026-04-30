@@ -149,16 +149,33 @@ pub fn stopped_event(reason: &str) -> WorkerEnvelope {
     WorkerEnvelope::event("network.stopped", json!({ "reason": reason }))
 }
 
-pub fn snapshot_result(
-    message_type: impl Into<String>,
-    request_id: Option<String>,
-    snapshot: &NetworkRuntimeSnapshot,
-) -> WorkerEnvelope {
+pub fn snapshot_result(request_id: Option<String>, snapshot: &NetworkRuntimeSnapshot) -> WorkerEnvelope {
     WorkerEnvelope::result(
-        message_type,
+        "network.snapshot",
         request_id,
         json!({
             "snapshot": snapshot,
+        }),
+    )
+}
+
+pub fn health_result(request_id: Option<String>, snapshot: &NetworkRuntimeSnapshot) -> WorkerEnvelope {
+    WorkerEnvelope::result(
+        "network.health",
+        request_id,
+        json!({
+            "snapshot": snapshot,
+        }),
+    )
+}
+
+pub fn stopped_result(request_id: Option<String>, reason: &str) -> WorkerEnvelope {
+    WorkerEnvelope::result(
+        "network.stopped",
+        request_id,
+        json!({
+            "shutdown": true,
+            "reason": reason,
         }),
     )
 }

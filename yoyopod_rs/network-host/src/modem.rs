@@ -2,7 +2,7 @@ use std::io;
 use std::process::{Child, Command, Stdio};
 use std::time::Duration;
 
-use crate::at::AtCommandSet;
+use crate::at::{AtCommandSet, SimStatus};
 use crate::config::NetworkHostConfig;
 use crate::gps::GpsFix;
 use crate::ppp::{
@@ -10,7 +10,7 @@ use crate::ppp::{
     PppCommandError, PppLaunchConfig, PppLifecycle, PppLinkProbe, PppProcessHandle,
     ShutdownOutcome, ThreadSleeper,
 };
-use crate::transport::{SerialLineTransport, TransportError};
+use crate::transport::{LineTransport, SerialLineTransport, TransportError};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ModemError {
@@ -177,35 +177,9 @@ impl ModemController for Sim7600ModemController {
     }
 
     fn initialize(&mut self, gps_enabled: bool) -> Result<ModemRegistration, ModemError> {
+        let pin = self.config.pin.clone();
         let mut at = self.at();
-        at.echo_off().map_err(map_transport_error)?;
-        if !at.check_sim().map_err(map_transport_error)? {
-            return Err(ModemError::fatal("sim_not_ready", "SIM not ready"));
-        }
-
-        let signal = at.get_signal_quality().map_err(map_transport_error)?;
-        let carrier = at.get_carrier().map_err(map_transport_error)?;
-        if !at.get_registration().map_err(map_transport_error)? {
-            return Err(ModemError::retryable(
-                "network_not_registered",
-                "Not registered on network",
-            ));
-        }
-
-        if gps_enabled {
-            at.enable_gps()
-                .map_err(map_transport_error)?
-                .then_some(())
-                .ok_or_else(|| ModemError::retryable("gps_enable_failed", "GPS enable failed"))?;
-        }
-
-        Ok(ModemRegistration {
-            sim_ready: true,
-            registered: true,
-            carrier: carrier.carrier,
-            network_type: carrier.network_type,
-            signal_csq: Some(signal.csq),
-        })
+        initialize_session(&mut at, pin.as_deref(), gps_enabled)
     }
 
     fn start_ppp(&mut self, apn: Option<&str>, timeout_secs: u64) -> Result<PppLink, ModemError> {
@@ -314,8 +288,7 @@ impl ModemController for Sim7600ModemController {
         let _ = self.stop_ppp();
         if self.transport.is_open() {
             let mut at = self.at();
-            let _ = at.radio_off();
-            let _ = at.hangup();
+            reset_session(&mut at)?;
         }
         self.transport.close();
         self.active_ppp = None;
@@ -371,11 +344,117 @@ fn map_io_error(error: io::Error) -> ModemError {
     ModemError::retryable("io_error", error.to_string())
 }
 
+fn initialize_session<T>(
+    at: &mut AtCommandSet<T>,
+    pin: Option<&str>,
+    gps_enabled: bool,
+) -> Result<ModemRegistration, ModemError>
+where
+    T: LineTransport,
+{
+    at.echo_off().map_err(map_transport_error)?;
+    at.radio_full().map_err(map_transport_error)?;
+
+    let sim_ready = ensure_sim_ready(at, pin.and_then(normalized_pin))?;
+    let signal = at.get_signal_quality().map_err(map_transport_error)?;
+    let carrier = at.get_carrier().map_err(map_transport_error)?;
+    if !at.get_registration().map_err(map_transport_error)? {
+        return Err(ModemError::retryable(
+            "network_not_registered",
+            "Not registered on network",
+        ));
+    }
+
+    if gps_enabled {
+        at.enable_gps()
+            .map_err(map_transport_error)?
+            .then_some(())
+            .ok_or_else(|| ModemError::retryable("gps_enable_failed", "GPS enable failed"))?;
+    }
+
+    Ok(ModemRegistration {
+        sim_ready,
+        registered: true,
+        carrier: carrier.carrier,
+        network_type: carrier.network_type,
+        signal_csq: Some(signal.csq),
+    })
+}
+
+fn ensure_sim_ready<T>(at: &mut AtCommandSet<T>, pin: Option<&str>) -> Result<bool, ModemError>
+where
+    T: LineTransport,
+{
+    match at.get_sim_status().map_err(map_transport_error)? {
+        SimStatus::Ready => Ok(true),
+        SimStatus::PinRequired => {
+            let pin = pin.ok_or_else(|| {
+                ModemError::fatal("sim_pin_required", "SIM PIN is required but not configured")
+            })?;
+            if !at.unlock_sim(pin).map_err(map_transport_error)? {
+                return Err(ModemError::fatal(
+                    "sim_pin_rejected",
+                    "SIM PIN was rejected",
+                ));
+            }
+
+            match at.get_sim_status().map_err(map_transport_error)? {
+                SimStatus::Ready => Ok(true),
+                SimStatus::PinRequired => Err(ModemError::fatal(
+                    "sim_pin_rejected",
+                    "SIM PIN was rejected",
+                )),
+                SimStatus::PukRequired => Err(ModemError::fatal(
+                    "sim_puk_required",
+                    "SIM requires PUK unlock",
+                )),
+                SimStatus::NotInserted => Err(ModemError::fatal(
+                    "sim_not_inserted",
+                    "SIM card is not inserted",
+                )),
+                SimStatus::Unknown(status) => Err(ModemError::fatal(
+                    "sim_not_ready",
+                    format!("SIM not ready: {status}"),
+                )),
+            }
+        }
+        SimStatus::PukRequired => Err(ModemError::fatal(
+            "sim_puk_required",
+            "SIM requires PUK unlock",
+        )),
+        SimStatus::NotInserted => Err(ModemError::fatal(
+            "sim_not_inserted",
+            "SIM card is not inserted",
+        )),
+        SimStatus::Unknown(status) => Err(ModemError::fatal(
+            "sim_not_ready",
+            format!("SIM not ready: {status}"),
+        )),
+    }
+}
+
+fn reset_session<T>(at: &mut AtCommandSet<T>) -> Result<(), ModemError>
+where
+    T: LineTransport,
+{
+    let _ = at.hangup();
+    at.radio_reset().map_err(map_transport_error)
+}
+
 fn map_ppp_command_error(error: PppCommandError) -> ModemError {
     match error {
         PppCommandError::MissingSudo => {
             ModemError::fatal("ppp_permission_error", error.to_string())
         }
+    }
+}
+
+fn normalized_pin(pin: &str) -> Option<&str> {
+    let pin = pin.trim();
+    if pin.is_empty() {
+        None
+    } else {
+        Some(pin)
     }
 }
 
@@ -390,4 +469,116 @@ fn is_running_as_root() -> bool {
 #[cfg(not(unix))]
 fn is_running_as_root() -> bool {
     false
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::{HashMap, VecDeque};
+    use std::time::Duration;
+
+    use crate::at::AtCommandSet;
+    use crate::transport::{LineTransport, TransportError};
+
+    use super::{initialize_session, reset_session, ModemError};
+
+    #[derive(Default)]
+    struct FakeTransport {
+        responses: HashMap<String, VecDeque<String>>,
+        sent: Vec<(String, Option<Duration>)>,
+    }
+
+    impl FakeTransport {
+        fn with_response(mut self, command: &str, response: &str) -> Self {
+            self.responses
+                .entry(command.to_string())
+                .or_default()
+                .push_back(response.to_string());
+            self
+        }
+    }
+
+    impl LineTransport for FakeTransport {
+        fn send_command(
+            &mut self,
+            command: &str,
+            timeout: Option<Duration>,
+        ) -> Result<String, TransportError> {
+            self.sent.push((command.to_string(), timeout));
+            Ok(self
+                .responses
+                .get_mut(command)
+                .and_then(VecDeque::pop_front)
+                .unwrap_or_else(|| "OK".to_string()))
+        }
+    }
+
+    #[test]
+    fn initialize_session_unlocks_sim_pin_before_registration_checks() {
+        let transport = FakeTransport::default()
+            .with_response("ATE0", "OK")
+            .with_response("AT+CFUN=1", "OK")
+            .with_response("AT+CPIN?", "+CPIN: SIM PIN\nOK")
+            .with_response("AT+CPIN=1234", "OK")
+            .with_response("AT+CPIN?", "+CPIN: READY\nOK")
+            .with_response("AT+CSQ", "+CSQ: 20,0\nOK")
+            .with_response("AT+COPS?", "+COPS: 0,0,\"T-Mobile\",7\nOK")
+            .with_response("AT+CEREG?", "+CEREG: 0,1\nOK");
+        let mut at = AtCommandSet::new(transport);
+
+        let registration = initialize_session(&mut at, Some("1234"), false)
+            .expect("pin-protected sim should initialize");
+
+        assert!(registration.sim_ready);
+        assert!(registration.registered);
+        assert_eq!(registration.carrier, "T-Mobile");
+        let transport = at.into_inner();
+        assert_eq!(
+            transport.sent,
+            vec![
+                ("ATE0".to_string(), Some(Duration::from_secs(2))),
+                ("AT+CFUN=1".to_string(), Some(Duration::from_secs(2))),
+                ("AT+CPIN?".to_string(), Some(Duration::from_secs(2))),
+                ("AT+CPIN=\"1234\"".to_string(), Some(Duration::from_secs(2))),
+                ("AT+CPIN?".to_string(), Some(Duration::from_secs(2))),
+                ("AT+CSQ".to_string(), Some(Duration::from_secs(2))),
+                ("AT+COPS?".to_string(), Some(Duration::from_secs(2))),
+                ("AT+CEREG?".to_string(), Some(Duration::from_secs(2))),
+            ]
+        );
+    }
+
+    #[test]
+    fn initialize_session_fails_when_pin_is_required_but_missing() {
+        let transport = FakeTransport::default()
+            .with_response("ATE0", "OK")
+            .with_response("AT+CFUN=1", "OK")
+            .with_response("AT+CPIN?", "+CPIN: SIM PIN\nOK");
+        let mut at = AtCommandSet::new(transport);
+
+        let error = initialize_session(&mut at, None, false).expect_err("pinless init should fail");
+
+        assert_eq!(
+            error,
+            ModemError::fatal("sim_pin_required", "SIM PIN is required but not configured")
+        );
+    }
+
+    #[test]
+    fn reset_session_uses_hardware_reset_command() {
+        let transport = FakeTransport::default()
+            .with_response("ATH", "OK")
+            .with_response("AT+CFUN=6", "OK");
+        let mut at = AtCommandSet::new(transport);
+
+        reset_session(&mut at).expect("hardware reset should succeed");
+
+        let transport = at.into_inner();
+        assert_eq!(
+            transport.sent,
+            vec![
+                ("ATH".to_string(), Some(Duration::from_secs(2))),
+                ("AT+CFUN=6".to_string(), Some(Duration::from_secs(2))),
+            ]
+        );
+    }
 }
