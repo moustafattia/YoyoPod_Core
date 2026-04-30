@@ -1,9 +1,18 @@
+use std::fmt;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use serde::{Deserialize, Serialize};
+use serde::ser::SerializeStruct;
+use serde::{Deserialize, Serialize, Serializer};
 use serde_json::{json, Value};
 use thiserror::Error;
+
+const LINPHONE_HOSTED_SIP_SERVER: &str = "sip.linphone.org";
+const LINPHONE_HOSTED_CONFERENCE_FACTORY_URI: &str = "sip:conference-factory@sip.linphone.org";
+const LINPHONE_HOSTED_FILE_TRANSFER_SERVER_URL: &str = "https://files.linphone.org/lft.php";
+const LINPHONE_HOSTED_LIME_SERVER_URL: &str =
+    "https://lime.linphone.org/lime-server/lime-server.php";
+const RUST_UI_HOST_DEFAULT_WORKER: &str = "yoyopod_rs/ui-host/build/yoyopod-ui-host";
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct RuntimeConfig {
@@ -34,7 +43,7 @@ pub struct MediaRuntimeConfig {
     pub auto_resume_after_call: bool,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, PartialEq, Deserialize)]
 pub struct VoipRuntimeConfig {
     pub sip_server: String,
     pub sip_username: String,
@@ -104,7 +113,7 @@ impl RuntimeConfig {
                 hardware: string_at_env(
                     &hardware,
                     &["display", "hardware"],
-                    "whisplay",
+                    "auto",
                     "YOYOPOD_DISPLAY",
                 ),
                 brightness: (int_at(&hardware, &["display", "brightness"], 80) as f64 / 100.0)
@@ -225,13 +234,13 @@ impl RuntimeConfig {
                 file_transfer_server_url: string_at_env(
                     &messaging,
                     &["messaging", "file_transfer_server_url"],
-                    "https://files.linphone.org/lft.php",
+                    "",
                     "YOYOPOD_FILE_TRANSFER_SERVER_URL",
                 ),
                 lime_server_url: string_at_env(
                     &messaging,
                     &["messaging", "lime_server_url"],
-                    "https://lime.linphone.org/lime-server/lime-server.php",
+                    "",
                     "YOYOPOD_LIME_SERVER_URL",
                 ),
                 iterate_interval_ms: uint_at_env(
@@ -286,10 +295,7 @@ impl RuntimeConfig {
                 output_volume: default_volume,
             },
             worker_paths: WorkerPaths {
-                ui: env_or_default(
-                    "YOYOPOD_RUST_UI_HOST_WORKER",
-                    "yoyopod_rs/ui-host/build/yoyopod-ui-host",
-                ),
+                ui: ui_worker_path(),
                 media: env_or_default(
                     "YOYOPOD_RUST_MEDIA_HOST_WORKER",
                     "yoyopod_rs/media-host/build/yoyopod-media-host",
@@ -326,7 +332,129 @@ impl MediaRuntimeConfig {
 
 impl VoipRuntimeConfig {
     pub fn to_worker_payload(&self) -> Value {
-        json!(self)
+        json!({
+            "sip_server": &self.sip_server,
+            "sip_username": &self.sip_username,
+            "sip_password": &self.sip_password,
+            "sip_password_ha1": &self.sip_password_ha1,
+            "sip_identity": &self.sip_identity,
+            "factory_config_path": &self.factory_config_path,
+            "transport": &self.transport,
+            "stun_server": &self.stun_server,
+            "conference_factory_uri": self.effective_conference_factory_uri(),
+            "file_transfer_server_url": self.effective_file_transfer_server_url(),
+            "lime_server_url": self.effective_lime_server_url(),
+            "iterate_interval_ms": self.iterate_interval_ms,
+            "message_store_dir": &self.message_store_dir,
+            "voice_note_store_dir": &self.voice_note_store_dir,
+            "auto_download_incoming_voice_recordings": self.auto_download_incoming_voice_recordings,
+            "playback_dev_id": &self.playback_dev_id,
+            "ringer_dev_id": &self.ringer_dev_id,
+            "capture_dev_id": &self.capture_dev_id,
+            "media_dev_id": &self.media_dev_id,
+            "mic_gain": self.mic_gain,
+            "output_volume": self.output_volume,
+        })
+    }
+
+    fn is_linphone_hosted(&self) -> bool {
+        self.sip_server
+            .trim()
+            .eq_ignore_ascii_case(LINPHONE_HOSTED_SIP_SERVER)
+    }
+
+    fn effective_conference_factory_uri(&self) -> String {
+        self.effective_linphone_endpoint(
+            &self.conference_factory_uri,
+            LINPHONE_HOSTED_CONFERENCE_FACTORY_URI,
+        )
+    }
+
+    fn effective_file_transfer_server_url(&self) -> String {
+        self.effective_linphone_endpoint(
+            &self.file_transfer_server_url,
+            LINPHONE_HOSTED_FILE_TRANSFER_SERVER_URL,
+        )
+    }
+
+    fn effective_lime_server_url(&self) -> String {
+        self.effective_linphone_endpoint(&self.lime_server_url, LINPHONE_HOSTED_LIME_SERVER_URL)
+    }
+
+    fn effective_linphone_endpoint(&self, configured: &str, hosted_default: &str) -> String {
+        let configured = configured.trim();
+        if !configured.is_empty() {
+            return configured.to_string();
+        }
+        if self.is_linphone_hosted() {
+            return hosted_default.to_string();
+        }
+        String::new()
+    }
+}
+
+impl fmt::Debug for VoipRuntimeConfig {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("VoipRuntimeConfig")
+            .field("sip_server", &self.sip_server)
+            .field("sip_username", &self.sip_username)
+            .field("sip_password", &redacted_secret(&self.sip_password))
+            .field("sip_password_ha1", &redacted_secret(&self.sip_password_ha1))
+            .field("sip_identity", &self.sip_identity)
+            .field("factory_config_path", &self.factory_config_path)
+            .field("transport", &self.transport)
+            .field("stun_server", &self.stun_server)
+            .field("conference_factory_uri", &self.conference_factory_uri)
+            .field("file_transfer_server_url", &self.file_transfer_server_url)
+            .field("lime_server_url", &self.lime_server_url)
+            .field("iterate_interval_ms", &self.iterate_interval_ms)
+            .field("message_store_dir", &self.message_store_dir)
+            .field("voice_note_store_dir", &self.voice_note_store_dir)
+            .field(
+                "auto_download_incoming_voice_recordings",
+                &self.auto_download_incoming_voice_recordings,
+            )
+            .field("playback_dev_id", &self.playback_dev_id)
+            .field("ringer_dev_id", &self.ringer_dev_id)
+            .field("capture_dev_id", &self.capture_dev_id)
+            .field("media_dev_id", &self.media_dev_id)
+            .field("mic_gain", &self.mic_gain)
+            .field("output_volume", &self.output_volume)
+            .finish()
+    }
+}
+
+impl Serialize for VoipRuntimeConfig {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let mut state = serializer.serialize_struct("VoipRuntimeConfig", 21)?;
+        state.serialize_field("sip_server", &self.sip_server)?;
+        state.serialize_field("sip_username", &self.sip_username)?;
+        state.serialize_field("sip_password", redacted_secret(&self.sip_password))?;
+        state.serialize_field("sip_password_ha1", redacted_secret(&self.sip_password_ha1))?;
+        state.serialize_field("sip_identity", &self.sip_identity)?;
+        state.serialize_field("factory_config_path", &self.factory_config_path)?;
+        state.serialize_field("transport", &self.transport)?;
+        state.serialize_field("stun_server", &self.stun_server)?;
+        state.serialize_field("conference_factory_uri", &self.conference_factory_uri)?;
+        state.serialize_field("file_transfer_server_url", &self.file_transfer_server_url)?;
+        state.serialize_field("lime_server_url", &self.lime_server_url)?;
+        state.serialize_field("iterate_interval_ms", &self.iterate_interval_ms)?;
+        state.serialize_field("message_store_dir", &self.message_store_dir)?;
+        state.serialize_field("voice_note_store_dir", &self.voice_note_store_dir)?;
+        state.serialize_field(
+            "auto_download_incoming_voice_recordings",
+            &self.auto_download_incoming_voice_recordings,
+        )?;
+        state.serialize_field("playback_dev_id", &self.playback_dev_id)?;
+        state.serialize_field("ringer_dev_id", &self.ringer_dev_id)?;
+        state.serialize_field("capture_dev_id", &self.capture_dev_id)?;
+        state.serialize_field("media_dev_id", &self.media_dev_id)?;
+        state.serialize_field("mic_gain", &self.mic_gain)?;
+        state.serialize_field("output_volume", &self.output_volume)?;
+        state.end()
     }
 }
 
@@ -428,6 +556,21 @@ fn env_string(name: &str) -> Option<String> {
         .filter(|value| !value.is_empty())
 }
 
+fn ui_worker_path() -> String {
+    match env_string("YOYOPOD_RUST_UI_HOST_WORKER") {
+        Some(value) if value != RUST_UI_HOST_DEFAULT_WORKER => value,
+        _ => env_or_default("YOYOPOD_RUST_UI_WORKER", RUST_UI_HOST_DEFAULT_WORKER),
+    }
+}
+
 fn env_or_default(name: &str, default: &str) -> String {
     env_string(name).unwrap_or_else(|| default.to_string())
+}
+
+fn redacted_secret(value: &str) -> &'static str {
+    if value.trim().is_empty() {
+        ""
+    } else {
+        "<redacted>"
+    }
 }
