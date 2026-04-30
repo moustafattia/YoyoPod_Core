@@ -43,10 +43,15 @@ def test_rust_ui_ci_builds_arm64_binary_artifact() -> None:
     assert "name: yoyopod-ui-host-${{ env.RUST_ARTIFACT_SHA }}" in workflow
     assert "name: yoyopod-media-host-${{ env.RUST_ARTIFACT_SHA }}" in workflow
     assert "name: yoyopod-voip-host-${{ env.RUST_ARTIFACT_SHA }}" in workflow
-    assert "name: yoyopod-liblinphone-shim-${{ env.RUST_ARTIFACT_SHA }}" in workflow
     assert "yoyopod_rs/ui-host/build/yoyopod-ui-host" in workflow
     assert "yoyopod_rs/media-host/build/yoyopod-media-host" in workflow
     assert "yoyopod_rs/voip-host/build/yoyopod-voip-host" in workflow
+    assert (
+        "cargo build --release -p yoyopod-voip-host --features native-liblinphone --locked"
+        in workflow
+    )
+    assert "yoyopod-liblinphone-shim" not in workflow
+    assert "liblinphone-shim/build" not in workflow
     assert "actions/download-artifact@v4" in workflow
     assert "path: yoyopod_rs/media-host/build" in workflow
 

@@ -1,10 +1,11 @@
 mod support;
 
 use serde_json::json;
+use std::io::Cursor;
 use support::{config, FakeBackend};
 use yoyopod_voip_host::host::{BackendEvent, MessageRecord, VoipHost};
 use yoyopod_voip_host::protocol::{EnvelopeKind, WorkerEnvelope, SUPPORTED_SCHEMA_VERSION};
-use yoyopod_voip_host::worker::{backend_event_envelope, backend_event_envelopes, handle_command};
+use yoyopod_voip_host::worker::{backend_event_envelope, backend_event_envelopes, run_worker};
 
 #[test]
 fn backend_events_map_to_worker_envelopes() {
@@ -16,6 +17,61 @@ fn backend_events_map_to_worker_envelopes() {
     assert_eq!(envelope.message_type, "voip.incoming_call");
     assert_eq!(envelope.payload["call_id"], "call-1");
     assert_eq!(envelope.payload["from_uri"], "sip:bob@example.com");
+}
+
+#[test]
+fn run_worker_uses_injected_io_and_backend() {
+    let commands = [
+        command(
+            "voip.configure",
+            "configure-1",
+            json!({
+                "sip_server": "sip.example.com",
+                "sip_identity": "sip:alice@example.com"
+            }),
+        ),
+        command("voip.register", "register-1", json!({})),
+        command("worker.stop", "stop-1", json!({})),
+    ];
+    let mut input = Vec::new();
+    for envelope in commands {
+        input.extend(envelope.encode().expect("encode command"));
+    }
+    let mut output = Vec::new();
+    let mut errors = Vec::new();
+    let mut host = VoipHost::default();
+    let mut backend = FakeBackend::default();
+
+    run_worker(
+        Cursor::new(input),
+        &mut output,
+        &mut errors,
+        &mut host,
+        &mut backend,
+    )
+    .expect("worker should run");
+
+    let output = String::from_utf8(output).expect("utf8 output");
+    let envelopes: Vec<WorkerEnvelope> = output
+        .lines()
+        .map(|line| WorkerEnvelope::decode(line.as_bytes()).expect("decode output"))
+        .collect();
+
+    assert_eq!(backend.calls, vec!["start", "stop"]);
+    assert!(errors.is_empty());
+    assert_eq!(envelopes[0].message_type, "voip.ready");
+    assert!(envelopes
+        .iter()
+        .any(|envelope| envelope.message_type == "voip.configure"
+            && envelope.kind == EnvelopeKind::Result));
+    assert!(envelopes
+        .iter()
+        .any(|envelope| envelope.message_type == "voip.register"
+            && envelope.kind == EnvelopeKind::Result));
+    assert!(envelopes
+        .iter()
+        .any(|envelope| envelope.message_type == "worker.stop"
+            && envelope.kind == EnvelopeKind::Result));
 }
 
 #[test]
@@ -92,27 +148,18 @@ fn backend_event_batch_appends_lifecycle_before_snapshot() {
 #[test]
 fn worker_stop_uses_shutdown_path() {
     let mut host = VoipHost::default();
-    let mut backend = None;
-    let action = handle_command(
-        WorkerEnvelope {
-            schema_version: SUPPORTED_SCHEMA_VERSION,
-            kind: EnvelopeKind::Command,
-            message_type: "worker.stop".to_string(),
-            request_id: Some("stop-1".to_string()),
-            timestamp_ms: 0,
-            deadline_ms: 0,
-            payload: json!({}),
-        },
+    let mut backend = FakeBackend::default();
+
+    let envelopes = run_worker_commands(
         &mut host,
         &mut backend,
-        None,
-    )
-    .expect("worker.stop should be handled");
+        &[command("worker.stop", "stop-1", json!({}))],
+    );
 
-    assert!(matches!(
-        action,
-        yoyopod_voip_host::worker::LoopAction::Shutdown
-    ));
+    assert!(envelopes
+        .iter()
+        .any(|envelope| envelope.message_type == "worker.stop"
+            && envelope.kind == EnvelopeKind::Result));
 }
 
 #[test]
@@ -140,28 +187,18 @@ fn mark_voice_notes_seen_command_updates_snapshot_summary() {
     };
     host.poll_backend_events(&mut backend)
         .expect("incoming message");
-    let mut backend = None;
+    let mut backend = FakeBackend::default();
 
-    let action = handle_command(
-        WorkerEnvelope {
-            schema_version: SUPPORTED_SCHEMA_VERSION,
-            kind: EnvelopeKind::Command,
-            message_type: "voip.mark_voice_notes_seen".to_string(),
-            request_id: Some("mark-seen-1".to_string()),
-            timestamp_ms: 0,
-            deadline_ms: 0,
-            payload: json!({"uri": "sip:mom@example.com"}),
-        },
+    run_worker_commands(
         &mut host,
         &mut backend,
-        None,
-    )
-    .expect("mark seen should be handled");
+        &[command(
+            "voip.mark_voice_notes_seen",
+            "mark-seen-1",
+            json!({"uri": "sip:mom@example.com"}),
+        )],
+    );
 
-    assert!(matches!(
-        action,
-        yoyopod_voip_host::worker::LoopAction::Continue
-    ));
     assert_eq!(host.session_snapshot_payload()["unread_voice_notes"], 0);
 }
 
@@ -184,27 +221,52 @@ fn mark_call_history_seen_command_updates_snapshot_summary() {
     };
     host.poll_backend_events(&mut backend)
         .expect("incoming call");
-    let mut backend = None;
+    let mut backend = FakeBackend::default();
 
-    let action = handle_command(
-        WorkerEnvelope {
-            schema_version: SUPPORTED_SCHEMA_VERSION,
-            kind: EnvelopeKind::Command,
-            message_type: "voip.mark_call_history_seen".to_string(),
-            request_id: Some("mark-history-1".to_string()),
-            timestamp_ms: 0,
-            deadline_ms: 0,
-            payload: json!({"uri": ""}),
-        },
+    run_worker_commands(
         &mut host,
         &mut backend,
-        None,
-    )
-    .expect("mark history seen should be handled");
+        &[command(
+            "voip.mark_call_history_seen",
+            "mark-history-1",
+            json!({"uri": ""}),
+        )],
+    );
 
-    assert!(matches!(
-        action,
-        yoyopod_voip_host::worker::LoopAction::Continue
-    ));
     assert_eq!(host.session_snapshot_payload()["unseen_call_history"], 0);
+}
+
+fn run_worker_commands(
+    host: &mut VoipHost,
+    backend: &mut FakeBackend,
+    commands: &[WorkerEnvelope],
+) -> Vec<WorkerEnvelope> {
+    let mut input = Vec::new();
+    for envelope in commands {
+        input.extend(envelope.encode().expect("encode command"));
+    }
+    let mut output = Vec::new();
+    let mut errors = Vec::new();
+
+    run_worker(Cursor::new(input), &mut output, &mut errors, host, backend)
+        .expect("worker should run commands");
+
+    assert!(errors.is_empty());
+    String::from_utf8(output)
+        .expect("utf8 output")
+        .lines()
+        .map(|line| WorkerEnvelope::decode(line.as_bytes()).expect("decode output"))
+        .collect()
+}
+
+fn command(message_type: &str, request_id: &str, payload: serde_json::Value) -> WorkerEnvelope {
+    WorkerEnvelope {
+        schema_version: SUPPORTED_SCHEMA_VERSION,
+        kind: EnvelopeKind::Command,
+        message_type: message_type.to_string(),
+        request_id: Some(request_id.to_string()),
+        timestamp_ms: 0,
+        deadline_ms: 0,
+        payload,
+    }
 }
