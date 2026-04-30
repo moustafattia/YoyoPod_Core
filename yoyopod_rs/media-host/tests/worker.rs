@@ -31,6 +31,32 @@ fn run_emits_ready_event_before_processing_input() {
 }
 
 #[test]
+fn command_failures_preserve_request_id() {
+    let input = std::io::Cursor::new(
+        br#"{"schema_version":1,"kind":"command","type":"media.load_playlist","request_id":"playlist-1","payload":{}}
+"#
+        .to_vec(),
+    );
+    let mut output = Vec::new();
+    let mut errors = Vec::new();
+
+    run_io(input, &mut output, &mut errors).expect("worker run");
+
+    let stdout = String::from_utf8(output).expect("utf8");
+    let lines: Vec<&str> = stdout.lines().collect();
+    assert!(lines.len() >= 2, "expected ready event and command error");
+
+    let command_error = WorkerEnvelope::decode(lines[1].as_bytes()).expect("decode error envelope");
+    assert_eq!(command_error.kind, EnvelopeKind::Error);
+    assert_eq!(command_error.request_id.as_deref(), Some("playlist-1"));
+    assert_eq!(command_error.payload["code"], "command_failed");
+    assert_eq!(
+        command_error.payload["message"],
+        "media.load_playlist requires path"
+    );
+}
+
+#[test]
 fn health_command_reports_ready_and_unconfigured_state() {
     let mut host = MediaHost::default();
     let outcome = handle_command(

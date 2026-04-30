@@ -321,6 +321,29 @@ def test_wrong_domain_worker_messages_are_ignored() -> None:
     assert backend.get_current_track() is None
 
 
+def test_correlated_runtime_command_error_does_not_stop_backend() -> None:
+    supervisor = _FakeSupervisor()
+    backend = RustHostBackend(_config(), worker_supervisor=supervisor, worker_path="/bin/media")
+
+    assert backend.start() is True
+    assert backend.load_playlist_file("/music/missing.m3u") is True
+
+    request_id = supervisor.request_ids[-1]
+    assert request_id is not None
+
+    backend.handle_worker_message(
+        _reply(
+            "error",
+            "media.error",
+            {"code": "command_failed", "message": "playlist missing"},
+            request_id=request_id,
+        )
+    )
+
+    assert backend.running is True
+    assert supervisor.stopped == []
+
+
 def test_prepare_remote_playback_asset_waits_for_worker_result() -> None:
     supervisor = _FakeSupervisor()
     backend = RustHostBackend(
