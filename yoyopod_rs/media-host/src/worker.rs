@@ -56,7 +56,7 @@ where
         output,
         &WorkerEnvelope::event(
             "media.ready",
-            json!({"capabilities":["configure", "health", "playback"]}),
+            json!({"capabilities":["configure", "health", "playback", "library"]}),
         ),
     )?;
 
@@ -310,6 +310,53 @@ pub fn handle_command(envelope: WorkerEnvelope, host: &mut MediaHost) -> Result<
             host.load_playlist_file(path)?;
             Ok(CommandOutcome::continue_with(vec![WorkerEnvelope::result(
                 "media.load_playlist",
+                request_id,
+                json!({"accepted": true}),
+            )]))
+        }
+        "media.list_playlists" => {
+            let fetch_track_counts = envelope
+                .payload
+                .get("fetch_track_counts")
+                .and_then(|value| value.as_bool())
+                .unwrap_or(false);
+            let playlists = host.list_playlists(fetch_track_counts)?;
+            Ok(CommandOutcome::continue_with(vec![WorkerEnvelope::result(
+                "media.list_playlists",
+                request_id,
+                json!({"playlists": playlists, "count": playlists.len()}),
+            )]))
+        }
+        "media.list_recent_tracks" => {
+            let limit = envelope
+                .payload
+                .get("limit")
+                .and_then(|value| value.as_u64())
+                .map(|value| value as usize);
+            let recent_tracks = host.list_recent_tracks(limit)?;
+            Ok(CommandOutcome::continue_with(vec![WorkerEnvelope::result(
+                "media.list_recent_tracks",
+                request_id,
+                json!({"recent_tracks": recent_tracks, "count": recent_tracks.len()}),
+            )]))
+        }
+        "media.shuffle_all" => {
+            host.shuffle_all()?;
+            Ok(CommandOutcome::continue_with(vec![WorkerEnvelope::result(
+                "media.shuffle_all",
+                request_id,
+                json!({"accepted": true}),
+            )]))
+        }
+        "media.play_recent_track" => {
+            let track_uri = envelope
+                .payload
+                .get("track_uri")
+                .and_then(|value| value.as_str())
+                .ok_or_else(|| anyhow!("media.play_recent_track requires track_uri"))?;
+            host.play_recent_track(track_uri)?;
+            Ok(CommandOutcome::continue_with(vec![WorkerEnvelope::result(
+                "media.play_recent_track",
                 request_id,
                 json!({"accepted": true}),
             )]))

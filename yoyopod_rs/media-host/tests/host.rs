@@ -1,5 +1,8 @@
 use std::collections::VecDeque;
+use std::fs;
+use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use yoyopod_media_host::config::MediaConfig;
 use yoyopod_media_host::events::MediaRuntimeEvent;
@@ -159,16 +162,30 @@ impl MediaRuntimeFactory for FakeRuntimeFactory {
 }
 
 fn config() -> MediaConfig {
+    let fixture_root = temp_dir("media-host");
+    fs::create_dir_all(&fixture_root).expect("fixture root");
+    fs::create_dir_all(fixture_root.join("Music")).expect("music dir");
     MediaConfig {
-        music_dir: "/srv/music".to_string(),
+        music_dir: fixture_root.join("Music").display().to_string(),
         mpv_socket: "/tmp/yoyopod-mpv.sock".to_string(),
         mpv_binary: "mpv".to_string(),
         alsa_device: "default".to_string(),
         default_volume: 100,
-        recent_tracks_file: "data/media/recent_tracks.json".to_string(),
-        remote_cache_dir: "data/media/remote_cache".to_string(),
+        recent_tracks_file: fixture_root
+            .join("recent_tracks.json")
+            .display()
+            .to_string(),
+        remote_cache_dir: fixture_root.join("remote_cache").display().to_string(),
         remote_cache_max_bytes: 1024,
     }
+}
+
+fn temp_dir(test_name: &str) -> PathBuf {
+    let unique = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("system time")
+        .as_nanos();
+    std::env::temp_dir().join(format!("yoyopod-media-host-{test_name}-{unique}"))
 }
 
 #[test]
@@ -251,4 +268,57 @@ fn transport_commands_delegate_to_runtime() {
             "device:alsa/default".to_string(),
         ]
     );
+}
+
+#[test]
+fn shuffle_all_delegates_local_tracks_to_runtime() {
+    let config = config();
+    let music_dir = PathBuf::from(&config.music_dir);
+    fs::write(music_dir.join("alpha.mp3"), b"a").expect("alpha");
+    fs::write(music_dir.join("beta.flac"), b"b").expect("beta");
+
+    let factory = FakeRuntimeFactory::default();
+    let mut host = MediaHost::with_factory(Box::new(factory.clone()));
+    host.configure(config);
+
+    host.shuffle_all().expect("shuffle");
+
+    let shared = factory.shared.lock().expect("shared");
+    assert_eq!(shared.started, 1);
+    assert_eq!(shared.commands, vec!["load_tracks:2".to_string()]);
+}
+
+#[test]
+fn runtime_track_change_records_recent_local_track() {
+    let config = config();
+    let music_dir = PathBuf::from(&config.music_dir);
+    let track_uri = music_dir.join("alpha.mp3");
+    fs::write(&track_uri, b"a").expect("alpha");
+
+    let factory = FakeRuntimeFactory::default();
+    let mut host = MediaHost::with_factory(Box::new(factory.clone()));
+    host.configure(config);
+    host.start_backend().expect("start");
+
+    {
+        let mut shared = factory.shared.lock().expect("shared");
+        let current_track = Track {
+            uri: track_uri.display().to_string(),
+            name: "Alpha".to_string(),
+            artists: vec!["Artist".to_string()],
+            album: "Sampler".to_string(),
+            length_ms: 12_500,
+            track_no: Some(3),
+        };
+        shared.current_track = Some(current_track.clone());
+        shared
+            .events
+            .push_back(MediaRuntimeEvent::TrackChanged(Some(current_track)));
+    }
+
+    host.drain_runtime_events().expect("events");
+    let recents = host.list_recent_tracks(None).expect("recent tracks");
+
+    assert_eq!(recents.len(), 1);
+    assert_eq!(recents[0].title, "Alpha");
 }

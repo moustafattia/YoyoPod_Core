@@ -1,7 +1,19 @@
+use std::fs;
+use std::path::PathBuf;
+use std::time::{SystemTime, UNIX_EPOCH};
+
 use serde_json::json;
 use yoyopod_media_host::host::MediaHost;
 use yoyopod_media_host::protocol::{EnvelopeKind, WorkerEnvelope, SUPPORTED_SCHEMA_VERSION};
 use yoyopod_media_host::worker::{handle_command, run_io, LoopAction};
+
+fn temp_dir(test_name: &str) -> PathBuf {
+    let unique = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("system time")
+        .as_nanos();
+    std::env::temp_dir().join(format!("yoyopod-media-worker-{test_name}-{unique}"))
+}
 
 #[test]
 fn run_emits_ready_event_before_processing_input() {
@@ -147,4 +159,62 @@ fn worker_stop_uses_shutdown_path() {
     assert_eq!(outcome.envelopes.len(), 1);
     assert_eq!(outcome.envelopes[0].kind, EnvelopeKind::Result);
     assert_eq!(outcome.envelopes[0].payload["shutdown"], true);
+}
+
+#[test]
+fn list_playlists_command_reads_local_library_from_configured_music_dir() {
+    let music_dir = temp_dir("playlists");
+    fs::create_dir_all(&music_dir).expect("music dir");
+    fs::write(music_dir.join("set-a.m3u"), "#EXTM3U\ntrack-a.mp3\n").expect("playlist");
+    let recent_tracks_file = music_dir.join("recent_tracks.json");
+    let remote_cache_dir = music_dir.join("remote_cache");
+
+    let mut host = MediaHost::default();
+    handle_command(
+        WorkerEnvelope {
+            schema_version: SUPPORTED_SCHEMA_VERSION,
+            kind: EnvelopeKind::Command,
+            message_type: "media.configure".to_string(),
+            request_id: Some("configure-1".to_string()),
+            timestamp_ms: 0,
+            deadline_ms: 0,
+            payload: json!({
+                "music_dir": music_dir.display().to_string(),
+                "mpv_socket": "/tmp/yoyopod-mpv.sock",
+                "mpv_binary": "mpv",
+                "alsa_device": "default",
+                "default_volume": 100,
+                "recent_tracks_file": recent_tracks_file.display().to_string(),
+                "remote_cache_dir": remote_cache_dir.display().to_string(),
+                "remote_cache_max_bytes": 1048576
+            }),
+        },
+        &mut host,
+    )
+    .expect("configure");
+
+    let outcome = handle_command(
+        WorkerEnvelope {
+            schema_version: SUPPORTED_SCHEMA_VERSION,
+            kind: EnvelopeKind::Command,
+            message_type: "media.list_playlists".to_string(),
+            request_id: Some("playlists-1".to_string()),
+            timestamp_ms: 0,
+            deadline_ms: 0,
+            payload: json!({"fetch_track_counts": true}),
+        },
+        &mut host,
+    )
+    .expect("list playlists");
+
+    assert_eq!(outcome.envelopes.len(), 1);
+    assert_eq!(outcome.envelopes[0].payload["count"], 1);
+    assert_eq!(
+        outcome.envelopes[0].payload["playlists"][0]["name"],
+        "set-a"
+    );
+    assert_eq!(
+        outcome.envelopes[0].payload["playlists"][0]["track_count"],
+        1
+    );
 }

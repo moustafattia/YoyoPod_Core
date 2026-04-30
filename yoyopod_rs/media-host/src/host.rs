@@ -5,9 +5,11 @@ use serde_json::{json, Map, Value};
 
 use crate::config::MediaConfig;
 use crate::events::{MediaRuntimeEvent, MpvEvent};
+use crate::library::{LocalLibraryItem, LocalMusicLibrary, PlaylistEntry};
 use crate::models::duration_ms;
 use crate::mpv_ipc::MpvIpcClient;
 use crate::mpv_process::MpvProcess;
+use crate::recents::{RecentTrackEntry, RecentTrackStore};
 
 pub use crate::models::{PlaybackState, Track};
 
@@ -56,6 +58,8 @@ pub struct MediaHost {
     commands_processed: u64,
     factory: Box<dyn MediaRuntimeFactory>,
     runtime: Option<Box<dyn MediaRuntime>>,
+    library: Option<LocalMusicLibrary>,
+    recent_store: RecentTrackStore,
     connected: bool,
     backend_state: String,
     current_track: Option<Track>,
@@ -76,6 +80,8 @@ impl MediaHost {
             commands_processed: 0,
             factory,
             runtime: None,
+            library: None,
+            recent_store: RecentTrackStore::default(),
             connected: false,
             backend_state: "not_started".to_string(),
             current_track: None,
@@ -89,6 +95,8 @@ impl MediaHost {
     }
 
     pub fn configure(&mut self, config: MediaConfig) {
+        self.library = Some(LocalMusicLibrary::new(&config.music_dir));
+        self.recent_store = RecentTrackStore::open(&config.recent_tracks_file, 50);
         self.config = Some(config);
         self.backend_state = "configured".to_string();
     }
@@ -193,8 +201,65 @@ impl MediaHost {
     }
 
     pub fn load_playlist_file(&mut self, path: &str) -> Result<()> {
+        if let Some(library) = self.library.as_ref() {
+            if !library.is_local_playlist_uri(path) {
+                return Err(anyhow!(
+                    "playlist uri is not local to the configured music directory"
+                ));
+            }
+        }
         self.ensure_runtime_started()?;
         self.runtime_mut()?.load_playlist_file(path)
+    }
+
+    pub fn shuffle_all(&mut self) -> Result<()> {
+        let library = self
+            .library
+            .as_ref()
+            .ok_or_else(|| anyhow!("media host is not configured"))?;
+        let track_uris = library.shuffle_track_uris()?;
+        if track_uris.is_empty() {
+            return Err(anyhow!("shuffle requested but no local tracks were found"));
+        }
+        self.load_tracks(&track_uris)
+    }
+
+    pub fn play_recent_track(&mut self, track_uri: &str) -> Result<()> {
+        let library = self
+            .library
+            .as_ref()
+            .ok_or_else(|| anyhow!("media host is not configured"))?;
+        if !library.is_local_track_uri(track_uri) {
+            return Err(anyhow!(
+                "track uri is not local to the configured music directory"
+            ));
+        }
+        self.load_tracks(&[track_uri.to_string()])
+    }
+
+    pub fn list_playlists(&self, fetch_track_counts: bool) -> Result<Vec<PlaylistEntry>> {
+        match self.library.as_ref() {
+            Some(library) => library.list_playlists(fetch_track_counts),
+            None => Ok(Vec::new()),
+        }
+    }
+
+    pub fn playlist_count(&self) -> Result<usize> {
+        match self.library.as_ref() {
+            Some(library) => library.playlist_count(),
+            None => Ok(0),
+        }
+    }
+
+    pub fn list_recent_tracks(&self, limit: Option<usize>) -> Result<Vec<RecentTrackEntry>> {
+        Ok(self.recent_store.list_recent(limit))
+    }
+
+    pub fn menu_items(&self) -> Vec<LocalLibraryItem> {
+        self.library
+            .as_ref()
+            .map(LocalMusicLibrary::menu_items)
+            .unwrap_or_default()
     }
 
     pub fn health_payload(&self) -> Value {
@@ -219,6 +284,10 @@ impl MediaHost {
             "recent_tracks_file": self.config.as_ref().map(|config| config.recent_tracks_file.as_str()).unwrap_or(""),
             "remote_cache_dir": self.config.as_ref().map(|config| config.remote_cache_dir.as_str()).unwrap_or(""),
             "remote_cache_max_bytes": self.config.as_ref().map(|config| config.remote_cache_max_bytes).unwrap_or(0),
+            "playlist_count": self.playlist_count().unwrap_or(0),
+            "library_menu": self.menu_items(),
+            "playlists": self.list_playlists(false).unwrap_or_default(),
+            "recent_tracks": self.list_recent_tracks(None).unwrap_or_default(),
             "current_track": self.current_track.as_ref().map(track_json),
             "playback_state": self.playback_state.as_str(),
             "time_position_ms": self.time_position_ms,
@@ -247,6 +316,9 @@ impl MediaHost {
         match event {
             MediaRuntimeEvent::TrackChanged(track) => {
                 self.current_track = track.clone();
+                if let Some(track) = track {
+                    self.record_recent_track_if_local(track);
+                }
             }
             MediaRuntimeEvent::PlaybackStateChanged(state) => {
                 self.playback_state = *state;
@@ -263,6 +335,16 @@ impl MediaHost {
                 };
             }
         }
+    }
+
+    fn record_recent_track_if_local(&mut self, track: &Track) {
+        let Some(library) = self.library.as_ref() else {
+            return;
+        };
+        if !library.is_local_track_uri(&track.uri) {
+            return;
+        }
+        let _ = self.recent_store.record_track(track);
     }
 }
 
