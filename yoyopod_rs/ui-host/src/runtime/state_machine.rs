@@ -292,9 +292,8 @@ impl UiRuntime {
                 _ => self.push_screen(UiScreen::Power),
             },
             UiScreen::Listen => match self.focus_index {
-                0 => self.push_screen(UiScreen::NowPlaying),
-                1 => self.push_screen(UiScreen::Playlists),
-                2 => self.push_screen(UiScreen::RecentTracks),
+                0 => self.push_screen(UiScreen::Playlists),
+                1 => self.push_screen(UiScreen::RecentTracks),
                 _ => {
                     self.intents.push(UiIntent::new("music", "shuffle_all"));
                     self.push_screen(UiScreen::NowPlaying);

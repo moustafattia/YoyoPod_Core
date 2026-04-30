@@ -98,7 +98,6 @@ fn listen_and_talk_routes_cover_full_one_button_tree() {
     runtime.handle_input(InputAction::Select);
     assert_eq!(runtime.active_screen(), UiScreen::Listen);
     runtime.handle_input(InputAction::Advance);
-    runtime.handle_input(InputAction::Advance);
     runtime.handle_input(InputAction::Select);
     assert_eq!(runtime.active_screen(), UiScreen::RecentTracks);
 
@@ -111,6 +110,28 @@ fn listen_and_talk_routes_cover_full_one_button_tree() {
     runtime.handle_input(InputAction::Advance);
     runtime.handle_input(InputAction::Select);
     assert_eq!(runtime.active_screen(), UiScreen::VoiceNote);
+}
+
+#[test]
+fn listen_select_order_matches_python_lvgl_menu() {
+    let mut runtime = UiRuntime::default();
+    runtime.apply_snapshot(RuntimeSnapshot::default());
+
+    runtime.handle_input(InputAction::Select);
+    assert_eq!(runtime.active_screen(), UiScreen::Listen);
+
+    let view = runtime.active_view();
+    let item_titles: Vec<&str> = view.items.iter().map(|item| item.title.as_str()).collect();
+    assert_eq!(item_titles, vec!["Playlists", "Recent", "Shuffle All"]);
+
+    runtime.handle_input(InputAction::Select);
+    assert_eq!(runtime.active_screen(), UiScreen::Playlists);
+
+    runtime.handle_input(InputAction::Back);
+    assert_eq!(runtime.active_screen(), UiScreen::Listen);
+    runtime.handle_input(InputAction::Advance);
+    runtime.handle_input(InputAction::Select);
+    assert_eq!(runtime.active_screen(), UiScreen::RecentTracks);
 }
 
 #[test]
@@ -203,7 +224,6 @@ fn recent_track_select_emits_play_recent_track_intent() {
     runtime.apply_snapshot(snapshot);
 
     runtime.handle_input(InputAction::Select);
-    runtime.handle_input(InputAction::Advance);
     runtime.handle_input(InputAction::Advance);
     runtime.handle_input(InputAction::Select);
     runtime.handle_input(InputAction::Select);
@@ -386,7 +406,7 @@ fn typed_models_stay_in_sync_with_view_builders() {
 
     let cases = vec![
         (UiScreen::Hub, RuntimeSnapshot::default(), 2usize),
-        (UiScreen::Listen, list_snapshot.clone(), 3usize),
+        (UiScreen::Listen, list_snapshot.clone(), 2usize),
         (UiScreen::Playlists, list_snapshot.clone(), 1usize),
         (UiScreen::RecentTracks, list_snapshot.clone(), 1usize),
         (UiScreen::NowPlaying, list_snapshot.clone(), 0usize),

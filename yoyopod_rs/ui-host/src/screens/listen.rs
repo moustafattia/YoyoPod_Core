@@ -21,14 +21,8 @@ pub fn view(snapshot: &RuntimeSnapshot, focus_index: usize) -> UiView {
     }
 }
 
-pub fn items(snapshot: &RuntimeSnapshot) -> Vec<ListItemSnapshot> {
+pub fn items(_snapshot: &RuntimeSnapshot) -> Vec<ListItemSnapshot> {
     vec![
-        ListItemSnapshot::new(
-            "now_playing",
-            "Now Playing",
-            snapshot.music.title.clone(),
-            "track",
-        ),
         ListItemSnapshot::new("playlists", "Playlists", "Saved mixes", "playlist"),
         ListItemSnapshot::new("recent_tracks", "Recent", "Recently played", "recent"),
         ListItemSnapshot::new("shuffle", "Shuffle All", "Start music", "shuffle"),
