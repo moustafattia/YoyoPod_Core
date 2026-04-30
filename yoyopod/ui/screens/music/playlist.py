@@ -181,6 +181,16 @@ class PlaylistScreen(Screen):
             raise RuntimeError("PlaylistScreen requires an initialized LVGL backend")
         lvgl_view.sync()
 
+    def wants_visible_tick_refresh(self) -> bool:
+        """Opt into visible-tick refreshes while an offline playlist fetch can recover."""
+
+        return not self.loading and not self.playlists and self.error_message == "Music offline"
+
+    def should_render_for_visible_tick(self) -> bool:
+        """Render only when Rust-owned library state becomes available."""
+
+        return self._should_retry_offline_fetch()
+
     def select_next(self) -> None:
         """Move to the next playlist."""
         if self.playlists and self.selected_index < len(self.playlists) - 1:

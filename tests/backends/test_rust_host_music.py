@@ -246,6 +246,7 @@ def test_snapshot_updates_cached_state_and_fires_callbacks() -> None:
     )
 
     assert backend.is_connected is True
+    assert backend.library_state_ready is True
     assert backend.get_playback_state() == "playing"
     assert backend.get_time_position() == 4200
     assert backend.get_volume() == 70

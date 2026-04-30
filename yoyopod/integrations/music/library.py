@@ -39,8 +39,15 @@ class LocalMusicService:
 
     @property
     def is_available(self) -> bool:
-        """Return True when the music backend is connected."""
-        return bool(self.music_backend and self.music_backend.is_connected)
+        """Return True when local-library browsing can use the active backend."""
+        if self.music_backend is None:
+            return False
+        if self._backend_owns_library_state():
+            return bool(
+                getattr(self.music_backend, "library_state_ready", False)
+                or self.music_backend.is_connected
+            )
+        return bool(self.music_backend.is_connected)
 
     def is_local_track_uri(self, uri: str) -> bool:
         """Return True when the URI is a path under the music directory."""

@@ -42,7 +42,14 @@ class StubScreenManager:
 class _SnapshotOwnedBackend:
     owns_library_state = True
 
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        *,
+        connected: bool = True,
+        library_state_ready: bool = True,
+    ) -> None:
+        self._connected = connected
+        self.library_state_ready = library_state_ready
         self.playlists = [Playlist(uri="/music/rust.m3u", name="Rust", track_count=4)]
         self.recent_tracks = [
             RecentTrackEntry(
@@ -59,7 +66,7 @@ class _SnapshotOwnedBackend:
 
     @property
     def is_connected(self) -> bool:
-        return True
+        return self._connected
 
     def list_playlists(self, fetch_track_counts: bool = False) -> list[Playlist]:
         assert fetch_track_counts is True
@@ -204,6 +211,24 @@ def test_local_music_service_delegates_library_queries_to_snapshot_owned_backend
     assert service.playlist_count() == 1
     assert service.list_recent_tracks() == backend.recent_tracks
     assert service.menu_items() == backend.menu
+
+
+def test_local_music_service_is_available_when_snapshot_owned_backend_library_state_is_ready(
+    tmp_path: Path,
+) -> None:
+    backend = _SnapshotOwnedBackend(connected=False, library_state_ready=True)
+    service = LocalMusicService(backend, music_dir=tmp_path / "Music")
+
+    assert service.is_available is True
+
+
+def test_local_music_service_is_unavailable_until_snapshot_owned_library_state_arrives(
+    tmp_path: Path,
+) -> None:
+    backend = _SnapshotOwnedBackend(connected=False, library_state_ready=False)
+    service = LocalMusicService(backend, music_dir=tmp_path / "Music")
+
+    assert service.is_available is False
 
 
 def test_local_music_service_uses_backend_owned_recent_and_shuffle_actions(tmp_path: Path) -> None:
