@@ -95,7 +95,26 @@ def test_rust_bazel_feature_folder_layout_is_checked_in() -> None:
     assert (REPO_ROOT / "yoyopod_rs" / "ui-host" / "tests" / "README.md").exists()
     assert (REPO_ROOT / "yoyopod_rs" / "voip-host" / "BUILD.bazel").exists()
     assert (REPO_ROOT / "yoyopod_rs" / "voip-host" / "tests" / "README.md").exists()
+    assert (REPO_ROOT / "yoyopod_rs" / "runtime" / "BUILD.bazel").exists()
     assert not (REPO_ROOT / "yoyopod_rs" / "crates").exists()
+
+
+def test_runtime_bazel_integration_tests_register_all_runtime_tests() -> None:
+    build_file = (REPO_ROOT / "yoyopod_rs" / "runtime" / "BUILD.bazel").read_text(
+        encoding="utf-8"
+    )
+
+    for test_name in (
+        "cli",
+        "config",
+        "event",
+        "protocol",
+        "runtime_loop",
+        "smoke",
+        "state",
+        "worker",
+    ):
+        assert f'"{test_name}"' in build_file
 
 
 def test_rust_ui_worker_lockfile_is_committable_for_locked_ci_builds() -> None:

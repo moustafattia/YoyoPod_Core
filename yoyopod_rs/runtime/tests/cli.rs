@@ -181,13 +181,6 @@ logging:
     assert!(!captured.contains(r#""state":"starting""#));
 }
 
-#[test]
-fn cli_test_is_registered_in_bazel_runtime_tests() {
-    let build_file = include_str!("../BUILD.bazel");
-
-    assert!(build_file.contains("\"cli\""));
-}
-
 fn temp_dir(test_name: &str) -> PathBuf {
     let unique = SystemTime::now()
         .duration_since(UNIX_EPOCH)

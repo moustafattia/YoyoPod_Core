@@ -218,16 +218,6 @@ fn rejects_empty_or_duplicate_worker_start() {
     supervisor.stop_all(Duration::from_millis(100));
 }
 
-#[test]
-fn worker_test_is_registered_in_bazel_runtime_tests() {
-    let build_file = std::fs::read_to_string(
-        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("BUILD.bazel"),
-    )
-    .expect("read runtime BUILD.bazel");
-
-    assert!(build_file.contains("\"worker\""));
-}
-
 fn wait_for_message(
     supervisor: &mut WorkerSupervisor,
     domain: WorkerDomain,

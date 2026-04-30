@@ -191,13 +191,6 @@ fn incoming_voip_snapshot_pauses_media_before_applying_call_state() {
     assert!(pause_index < snapshot_index);
 }
 
-#[test]
-fn runtime_loop_is_registered_in_bazel_runtime_tests() {
-    let build_file = include_str!("../BUILD.bazel");
-
-    assert!(build_file.contains("\"runtime_loop\""));
-}
-
 #[derive(Default)]
 struct FakeLoopIo {
     messages: VecDeque<(WorkerDomain, WorkerEnvelope)>,
