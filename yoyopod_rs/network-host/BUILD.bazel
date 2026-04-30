@@ -22,6 +22,7 @@ yoyopod_rust_host_binary(
 
 NETWORK_HOST_TESTS = [
     "protocol",
+    "worker",
 ]
 
 yoyopod_rust_host_integration_tests(
