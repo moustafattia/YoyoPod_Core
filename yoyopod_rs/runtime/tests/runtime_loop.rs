@@ -1,0 +1,194 @@
+use std::collections::VecDeque;
+
+use serde_json::{json, Value};
+use yoyopod_runtime::protocol::{EnvelopeKind, WorkerEnvelope};
+use yoyopod_runtime::runtime_loop::{LoopIo, RuntimeLoop};
+use yoyopod_runtime::state::{RuntimeState, WorkerDomain};
+use yoyopod_runtime::worker::WorkerProtocolError;
+
+#[test]
+fn media_snapshot_updates_state_and_sends_ui_snapshot() {
+    let mut runtime_loop = RuntimeLoop::new(RuntimeState::default());
+    let mut io = FakeLoopIo::with_messages([(
+        WorkerDomain::Media,
+        event_envelope(
+            "media.snapshot",
+            json!({
+                "connected": true,
+                "playback_state": "playing",
+                "current_track": {
+                    "title": "A Song",
+                    "artist": "An Artist"
+                }
+            }),
+        ),
+    )]);
+
+    let processed = runtime_loop.run_once(&mut io);
+
+    assert_eq!(processed, 1);
+    assert_eq!(runtime_loop.state().media.playback_state, "playing");
+    let snapshot = sent_to(&io, WorkerDomain::Ui, "ui.runtime_snapshot");
+    assert_eq!(snapshot.kind, EnvelopeKind::Command);
+    assert_eq!(snapshot.payload["music"]["playing"], true);
+    assert_eq!(snapshot.payload["music"]["title"], "A Song");
+}
+
+#[test]
+fn ui_tick_is_sent_every_iteration() {
+    let mut runtime_loop = RuntimeLoop::new(RuntimeState::default());
+    let mut io = FakeLoopIo::default();
+
+    assert_eq!(runtime_loop.run_once(&mut io), 0);
+    assert_eq!(runtime_loop.run_once(&mut io), 0);
+
+    let ticks: Vec<_> = io
+        .sent
+        .iter()
+        .filter(|(domain, envelope)| {
+            *domain == WorkerDomain::Ui && envelope.message_type == "ui.tick"
+        })
+        .collect();
+    assert_eq!(ticks.len(), 2);
+    assert!(ticks
+        .iter()
+        .all(|(_, envelope)| envelope.kind == EnvelopeKind::Command));
+    assert!(ticks
+        .iter()
+        .all(|(_, envelope)| envelope.payload == json!({"renderer": "auto"})));
+    assert_eq!(runtime_loop.state().loop_iterations, 2);
+}
+
+#[test]
+fn ui_play_pause_intent_while_media_is_playing_sends_media_pause() {
+    let mut state = RuntimeState::default();
+    state.apply_media_snapshot(&json!({"playback_state": "playing"}));
+    let mut runtime_loop = RuntimeLoop::new(state);
+    let mut io = FakeLoopIo::with_messages([(
+        WorkerDomain::Ui,
+        ui_intent("music", "play_pause", json!({})),
+    )]);
+
+    let processed = runtime_loop.run_once(&mut io);
+
+    assert_eq!(processed, 1);
+    let pause = sent_to(&io, WorkerDomain::Media, "media.pause");
+    assert_eq!(pause.kind, EnvelopeKind::Command);
+    assert_eq!(pause.payload, json!({}));
+}
+
+#[test]
+fn runtime_shutdown_ui_intent_sets_shutdown_requested() {
+    let mut runtime_loop = RuntimeLoop::new(RuntimeState::default());
+    let mut io = FakeLoopIo::with_messages([(
+        WorkerDomain::Ui,
+        ui_intent("runtime", "shutdown", json!({})),
+    )]);
+
+    let processed = runtime_loop.run_once(&mut io);
+
+    assert_eq!(processed, 1);
+    assert!(runtime_loop.shutdown_requested());
+}
+
+#[test]
+fn worker_protocol_error_increments_health_and_records_reason() {
+    let mut runtime_loop = RuntimeLoop::new(RuntimeState::default());
+    let mut io = FakeLoopIo::with_protocol_errors([(
+        WorkerDomain::Voice,
+        WorkerProtocolError {
+            raw_line: "not-json".to_string(),
+            message: "expected value at line 1 column 1".to_string(),
+        },
+    )]);
+
+    let processed = runtime_loop.run_once(&mut io);
+
+    assert_eq!(processed, 0);
+    assert_eq!(runtime_loop.state().voice_worker.protocol_errors, 1);
+    assert!(runtime_loop
+        .state()
+        .voice_worker
+        .last_reason
+        .contains("expected value"));
+}
+
+#[test]
+fn runtime_loop_is_registered_in_bazel_runtime_tests() {
+    let build_file = include_str!("../BUILD.bazel");
+
+    assert!(build_file.contains("\"runtime_loop\""));
+}
+
+#[derive(Default)]
+struct FakeLoopIo {
+    messages: VecDeque<(WorkerDomain, WorkerEnvelope)>,
+    protocol_errors: VecDeque<(WorkerDomain, WorkerProtocolError)>,
+    sent: Vec<(WorkerDomain, WorkerEnvelope)>,
+}
+
+impl FakeLoopIo {
+    fn with_messages(messages: impl IntoIterator<Item = (WorkerDomain, WorkerEnvelope)>) -> Self {
+        Self {
+            messages: messages.into_iter().collect(),
+            ..Self::default()
+        }
+    }
+
+    fn with_protocol_errors(
+        protocol_errors: impl IntoIterator<Item = (WorkerDomain, WorkerProtocolError)>,
+    ) -> Self {
+        Self {
+            protocol_errors: protocol_errors.into_iter().collect(),
+            ..Self::default()
+        }
+    }
+}
+
+impl LoopIo for FakeLoopIo {
+    fn drain_worker_messages(&mut self) -> Vec<(WorkerDomain, WorkerEnvelope)> {
+        self.messages.drain(..).collect()
+    }
+
+    fn drain_worker_protocol_errors(&mut self) -> Vec<(WorkerDomain, WorkerProtocolError)> {
+        self.protocol_errors.drain(..).collect()
+    }
+
+    fn send_worker_envelope(&mut self, domain: WorkerDomain, envelope: WorkerEnvelope) -> bool {
+        self.sent.push((domain, envelope));
+        true
+    }
+}
+
+fn sent_to<'a>(io: &'a FakeLoopIo, domain: WorkerDomain, message_type: &str) -> &'a WorkerEnvelope {
+    io.sent
+        .iter()
+        .find(|(sent_domain, envelope)| {
+            *sent_domain == domain && envelope.message_type == message_type
+        })
+        .map(|(_, envelope)| envelope)
+        .unwrap_or_else(|| panic!("missing sent envelope {message_type} to {domain:?}"))
+}
+
+fn event_envelope(message_type: &str, payload: Value) -> WorkerEnvelope {
+    WorkerEnvelope {
+        schema_version: 1,
+        kind: EnvelopeKind::Event,
+        message_type: message_type.to_string(),
+        request_id: None,
+        timestamp_ms: 0,
+        deadline_ms: 0,
+        payload,
+    }
+}
+
+fn ui_intent(domain: &str, action: &str, payload: Value) -> WorkerEnvelope {
+    event_envelope(
+        "ui.intent",
+        json!({
+            "domain": domain,
+            "action": action,
+            "payload": payload,
+        }),
+    )
+}

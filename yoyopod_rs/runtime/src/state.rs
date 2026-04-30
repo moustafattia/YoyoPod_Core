@@ -229,22 +229,37 @@ impl Default for RuntimeState {
 }
 
 impl RuntimeState {
+    pub fn record_worker_protocol_error(
+        &mut self,
+        domain: WorkerDomain,
+        reason: impl Into<String>,
+    ) {
+        let health = self.worker_health_mut(domain);
+        health.protocol_errors += 1;
+        health.state = WorkerState::Degraded;
+        health.last_reason = reason.into();
+    }
+
     pub fn mark_worker(
         &mut self,
         domain: WorkerDomain,
         state: WorkerState,
         reason: impl Into<String>,
     ) {
-        let health = match domain {
+        let health = self.worker_health_mut(domain);
+        health.state = state;
+        health.last_reason = reason.into();
+    }
+
+    fn worker_health_mut(&mut self, domain: WorkerDomain) -> &mut WorkerHealth {
+        match domain {
             WorkerDomain::Ui => &mut self.ui,
             WorkerDomain::Media => &mut self.media_worker,
             WorkerDomain::Voip => &mut self.voip_worker,
             WorkerDomain::Network => &mut self.network_worker,
             WorkerDomain::Power => &mut self.power_worker,
             WorkerDomain::Voice => &mut self.voice_worker,
-        };
-        health.state = state;
-        health.last_reason = reason.into();
+        }
     }
 
     pub fn apply_media_snapshot(&mut self, snapshot: &Value) {

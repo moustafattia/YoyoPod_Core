@@ -24,6 +24,7 @@ RUNTIME_TESTS = [
     "config",
     "event",
     "protocol",
+    "runtime_loop",
     "smoke",
     "state",
     "worker",
