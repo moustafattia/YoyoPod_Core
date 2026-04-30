@@ -196,29 +196,30 @@ Handlers live in two places today:
 
 ### Incoming call flow
 
-1. `VoIPManager` invokes the callback registered by `RuntimeBootService.setup_voip_callbacks()`.
-2. That callback schedules `CallRuntime.handle_incoming_call()` onto the main thread.
-3. `CallRuntime` publishes `IncomingCallEvent` onto `Bus` as needed for other subscribers.
-4. `RuntimeLoopService` drains the event on the main thread.
-5. `CallRuntime.handle_incoming_call()`:
+1. Rust `yoyopod-voip-host` receives Liblinphone call events through the Rust liblinphone shim.
+2. The Rust host updates its owned runtime snapshot and emits it to Python.
+3. `RustHostBackend` forwards `VoIPRuntimeSnapshotChanged` to `VoIPManager`.
+4. `VoIPManager` publishes `VoIPRuntimeSnapshotChangedEvent` onto `Bus` from the main thread.
+5. `RuntimeLoopService` drains the event on the main thread.
+6. `CallRuntime.handle_runtime_snapshot_change()`:
    - guards against duplicate handling
-   - records an in-progress call session
+   - mirrors the Rust-owned active call session
    - pauses music if playback is active
    - transitions `CallFSM`
    - re-derives app state through `AppStateRuntime.sync_app_state()`
    - pushes `IncomingCallScreen`
    - starts the ring tone
 
-Ownership: call behavior belongs to `CallRuntime`; derived app state belongs to `AppStateRuntime`; actual screen stack mutations happen through `ScreenManager`.
+Ownership: live call/session truth belongs to Rust; Python `CallRuntime` only projects the Rust snapshot into derived app state and UI side effects. Actual screen stack mutations happen through `ScreenManager`.
 
 ### Call state change flow
 
-1. `VoIPManager` reports `CallState`.
-2. `CallRuntime` publishes the call-domain events owned by `yoyopod/integrations/call/events.py`: `CallStateChangedEvent`, and `CallEndedEvent` for `RELEASED`.
-3. The main-thread drain calls `CallRuntime.handle_call_state_change()` or `handle_call_ended()`.
-4. Those methods update the call FSM, derived app state, call screens, call history, and optional music resume.
+1. Rust `yoyopod-voip-host` owns call-state transitions and emits a runtime snapshot.
+2. `VoIPManager` republishes that snapshot as `VoIPRuntimeSnapshotChangedEvent`.
+3. The main-thread drain calls `CallRuntime.handle_runtime_snapshot_change()`.
+4. That method updates the call FSM, derived app state, call screens, call-history preview, and optional music resume from the Rust-owned snapshot.
 
-Notable ownership detail: `CallRuntime` directly decides music pause/resume around calls through `CallInterruptionPolicy`, so call orchestration currently owns one of the main cross-domain behaviors.
+Notable ownership detail: Rust owns the VoIP domain state, while Python still applies UI/music side effects around calls through `CallRuntime` and `CallInterruptionPolicy`.
 
 ### Playback change flow
 

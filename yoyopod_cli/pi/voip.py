@@ -37,14 +37,9 @@ class _VoIPManagerLike(Protocol):
         callback: Callable[[Any], None],
     ) -> None: ...
 
-    def on_call_state_change(
+    def on_runtime_snapshot_change(
         self,
         callback: Callable[[Any], None],
-    ) -> None: ...
-
-    def on_incoming_call(
-        self,
-        callback: Callable[[str, str], None],
     ) -> None: ...
 
     def make_call(self, sip_address: str, contact_name: str | None = None) -> bool: ...
@@ -140,16 +135,31 @@ def debug(
     voip_manager = _build_voip_manager(config_dir)
     voip_config = voip_manager.config
     incoming_calls: list[tuple[str, str]] = []
+    seen_call_ids: set[str] = set()
 
-    def on_incoming_call(caller_address: str, caller_name: str) -> None:
+    def on_runtime_snapshot(snapshot: Any) -> None:
+        from yoyopod.integrations.call.models import CallState
+
+        if getattr(snapshot, "call_state", None) is not CallState.INCOMING:
+            return
+        call_id = str(getattr(snapshot, "active_call_id", "") or "")
+        if call_id and call_id in seen_call_ids:
+            return
+        if call_id:
+            seen_call_ids.add(call_id)
+        caller_address = str(getattr(snapshot, "active_call_peer", "") or "")
+        if not caller_address:
+            session = getattr(snapshot, "call_session", None)
+            caller_address = str(getattr(session, "peer_sip_address", "") or "")
+        caller_name = caller_address or "Unknown"
         logger.success("=" * 60)
-        logger.success("INCOMING CALL CALLBACK FIRED")
+        logger.success("INCOMING CALL SNAPSHOT RECEIVED")
         logger.success(f"  Address: {caller_address}")
         logger.success(f"  Name: {caller_name}")
         logger.success("=" * 60)
         incoming_calls.append((caller_address, caller_name))
 
-    voip_manager.on_incoming_call(on_incoming_call)
+    voip_manager.on_runtime_snapshot_change(on_runtime_snapshot)
 
     try:
         if not voip_manager.start():

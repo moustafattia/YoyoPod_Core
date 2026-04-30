@@ -18,8 +18,9 @@ yoyopod.py / yoyopod/main.py  (entry points)
     |- MpvBackend (backends/music/mpv.py)
     |  |- MpvProcess (backends/music/process.py)
     |  `- MpvIpcClient (backends/music/ipc.py) -- mpv JSON IPC
-    |- VoIPManager (integrations/call/manager.py)
-    |  `- LiblinphoneBackend (backends/voip/liblinphone.py)
+    |- VoIPManager (integrations/call/manager.py) -- thin Python command/snapshot facade
+    |  `- RustHostBackend (backends/voip/rust_host.py)
+    |     `- yoyopod_rs/voip-host -> yoyopod_rs/liblinphone-shim -> Liblinphone
     |- Display HAL (ui/display/) -- LVGL-backed Whisplay, Pimoroni, and simulation adapters
     |- Input HAL (ui/input/) -- four-button Pimoroni, one-button Whisplay, and simulation input
     `- ScreenManager (ui/screens/manager.py) -- stack-based navigation
@@ -46,7 +47,7 @@ yoyopod.py / yoyopod/main.py  (entry points)
 - Ring tone generated via `speaker-test`
 - Local music playback runs through an app-managed mpv process instead of an external music daemon
 - mpv pushes playback and property-change events over JSON IPC rather than using polling
-- Liblinphone backend events are drained on the main thread for UI and state updates
+- Rust VoIP runtime snapshots are projected onto the Python app on the main thread
 - `Bus` serializes typed app events on the main thread
 
 ## Module Boundary Rules

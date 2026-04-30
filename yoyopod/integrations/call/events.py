@@ -4,22 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from yoyopod.integrations.call.models import CallState, RegistrationState, VoIPRuntimeSnapshot
-
-
-@dataclass(frozen=True, slots=True)
-class IncomingCallEvent:
-    """Published when the VoIP stack reports an incoming call."""
-
-    caller_address: str
-    caller_name: str
-
-
-@dataclass(frozen=True, slots=True)
-class CallStateChangedEvent:
-    """Published when the VoIP call state changes."""
-
-    state: CallState
+from yoyopod.integrations.call.models import RegistrationState, VoIPRuntimeSnapshot
 
 
 @dataclass(frozen=True, slots=True)
@@ -72,8 +57,6 @@ class VoiceNoteSummaryChangedEvent:
 __all__ = [
     "CallEndedEvent",
     "CallHistoryUpdatedEvent",
-    "CallStateChangedEvent",
-    "IncomingCallEvent",
     "RegistrationChangedEvent",
     "VoiceNoteSummaryChangedEvent",
     "VoIPAvailabilityChangedEvent",
