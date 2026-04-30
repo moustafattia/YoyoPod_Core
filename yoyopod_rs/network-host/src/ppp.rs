@@ -1,5 +1,8 @@
+use std::io;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::thread;
+use std::time::Duration;
 
 use thiserror::Error;
 
@@ -23,10 +26,198 @@ pub struct PppCommandPlan {
     pub manage_default_route: bool,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LinkWaitOutcome {
+    LinkUp,
+    ProcessExited,
+    TimedOut,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ShutdownOutcome {
+    NoProcess,
+    Graceful,
+    Killed,
+}
+
 #[derive(Debug, Error, PartialEq, Eq)]
 pub enum PppCommandError {
     #[error("pppd requires root privileges, but sudo was not found")]
     MissingSudo,
+}
+
+pub trait PppProcessHandle {
+    fn pid(&self) -> u32;
+    fn is_running(&mut self) -> bool;
+    fn terminate(&mut self) -> io::Result<()>;
+    fn kill(&mut self) -> io::Result<()>;
+}
+
+pub trait PppLinkProbe {
+    fn ppp0_exists(&mut self) -> bool;
+}
+
+pub trait Sleeper {
+    fn sleep(&mut self, duration: Duration);
+}
+
+#[derive(Debug, Default, Clone, Copy)]
+pub struct ThreadSleeper;
+
+impl Sleeper for ThreadSleeper {
+    fn sleep(&mut self, duration: Duration) {
+        thread::sleep(duration);
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct PathPppLinkProbe {
+    path: PathBuf,
+}
+
+impl Default for PathPppLinkProbe {
+    fn default() -> Self {
+        Self {
+            path: PathBuf::from("/sys/class/net/ppp0"),
+        }
+    }
+}
+
+impl PathPppLinkProbe {
+    pub fn new(path: impl Into<PathBuf>) -> Self {
+        Self { path: path.into() }
+    }
+}
+
+impl PppLinkProbe for PathPppLinkProbe {
+    fn ppp0_exists(&mut self) -> bool {
+        self.path.exists()
+    }
+}
+
+#[derive(Debug)]
+pub struct PppLifecycle<P, L, S> {
+    process: Option<P>,
+    link_probe: L,
+    sleeper: S,
+}
+
+impl<P, L, S> PppLifecycle<P, L, S> {
+    pub fn new(link_probe: L, sleeper: S) -> Self {
+        Self {
+            process: None,
+            link_probe,
+            sleeper,
+        }
+    }
+
+    pub fn with_process(process: P, link_probe: L, sleeper: S) -> Self {
+        Self {
+            process: Some(process),
+            link_probe,
+            sleeper,
+        }
+    }
+
+    pub fn replace_process(&mut self, process: P) -> Option<P> {
+        self.process.replace(process)
+    }
+
+    pub fn take_process(&mut self) -> Option<P> {
+        self.process.take()
+    }
+}
+
+impl<P, L, S> PppLifecycle<P, L, S>
+where
+    P: PppProcessHandle,
+{
+    pub fn current_pid(&self) -> Option<u32> {
+        self.process.as_ref().map(PppProcessHandle::pid)
+    }
+
+    pub fn is_alive(&mut self) -> bool {
+        self.process
+            .as_mut()
+            .is_some_and(PppProcessHandle::is_running)
+    }
+}
+
+impl<P, L, S> PppLifecycle<P, L, S>
+where
+    P: PppProcessHandle,
+    L: PppLinkProbe,
+    S: Sleeper,
+{
+    pub fn wait_for_link(&mut self, timeout: Duration, poll_interval: Duration) -> LinkWaitOutcome {
+        if self.process.is_none() {
+            return LinkWaitOutcome::ProcessExited;
+        }
+
+        let mut elapsed = Duration::ZERO;
+        loop {
+            if !self.is_alive() {
+                return LinkWaitOutcome::ProcessExited;
+            }
+            if self.link_probe.ppp0_exists() {
+                return LinkWaitOutcome::LinkUp;
+            }
+            if elapsed >= timeout {
+                return LinkWaitOutcome::TimedOut;
+            }
+            self.sleeper.sleep(poll_interval);
+            elapsed = elapsed.saturating_add(poll_interval);
+        }
+    }
+
+    pub fn shutdown(
+        &mut self,
+        grace_period: Duration,
+        poll_interval: Duration,
+    ) -> io::Result<ShutdownOutcome> {
+        let Some(process) = self.process.as_mut() else {
+            return Ok(ShutdownOutcome::NoProcess);
+        };
+        process.terminate()?;
+        if !process.is_running() {
+            self.process = None;
+            return Ok(ShutdownOutcome::Graceful);
+        }
+
+        let mut elapsed = Duration::ZERO;
+        while elapsed < grace_period {
+            self.sleeper.sleep(poll_interval);
+            elapsed = elapsed.saturating_add(poll_interval);
+            if self
+                .process
+                .as_mut()
+                .is_some_and(|process| !process.is_running())
+            {
+                self.process = None;
+                return Ok(ShutdownOutcome::Graceful);
+            }
+        }
+
+        if let Some(process) = self.process.as_mut() {
+            process.kill()?;
+        }
+        self.process = None;
+        Ok(ShutdownOutcome::Killed)
+    }
+
+    pub fn respawn<F>(
+        &mut self,
+        grace_period: Duration,
+        poll_interval: Duration,
+        spawn: F,
+    ) -> io::Result<()>
+    where
+        F: FnOnce() -> io::Result<P>,
+    {
+        let _ = self.shutdown(grace_period, poll_interval)?;
+        self.process = Some(spawn()?);
+        Ok(())
+    }
 }
 
 pub fn resolve_pppd_binary() -> Option<PathBuf> {

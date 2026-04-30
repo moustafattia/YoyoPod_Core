@@ -27,6 +27,9 @@ pub fn parse_cgpsinfo(response: &str) -> Option<GpsFix> {
     if lat_raw.is_empty() || lat_hemi.is_empty() || lng_raw.is_empty() || lng_hemi.is_empty() {
         return None;
     }
+    if !matches!(lat_hemi, "N" | "S") || !matches!(lng_hemi, "E" | "W") {
+        return None;
+    }
 
     let mut lat = ddmm_to_decimal(lat_raw.parse().ok()?);
     if lat_hemi == "S" {

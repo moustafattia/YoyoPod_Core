@@ -1,7 +1,42 @@
+use std::collections::{HashMap, VecDeque};
+use std::time::Duration;
+
 use yoyopod_network_host::at::{
-    parse_carrier, parse_registration, parse_signal_quality, CarrierInfo, SignalInfo,
+    parse_carrier, parse_registration, parse_signal_quality, AtCommandSet, CarrierInfo, SignalInfo,
 };
-use yoyopod_network_host::gps::{parse_cgpsinfo, GpsFix};
+use yoyopod_network_host::gps::{parse_cgpsinfo, GpsFix, GpsReader};
+use yoyopod_network_host::transport::{LineTransport, TransportError};
+
+#[derive(Default)]
+struct FakeTransport {
+    responses: HashMap<String, VecDeque<String>>,
+    sent: Vec<(String, Option<Duration>)>,
+}
+
+impl FakeTransport {
+    fn with_response(mut self, command: &str, response: &str) -> Self {
+        self.responses
+            .entry(command.to_string())
+            .or_default()
+            .push_back(response.to_string());
+        self
+    }
+}
+
+impl LineTransport for FakeTransport {
+    fn send_command(
+        &mut self,
+        command: &str,
+        timeout: Option<Duration>,
+    ) -> Result<String, TransportError> {
+        self.sent.push((command.to_string(), timeout));
+        Ok(self
+            .responses
+            .get_mut(command)
+            .and_then(VecDeque::pop_front)
+            .unwrap_or_else(|| "OK".to_string()))
+    }
+}
 
 #[test]
 fn parse_cgpsinfo_returns_decimal_fix_and_telemetry() {
@@ -25,6 +60,18 @@ fn parse_cgpsinfo_returns_decimal_fix_and_telemetry() {
 #[test]
 fn parse_cgpsinfo_returns_none_for_no_fix_payload() {
     assert_eq!(parse_cgpsinfo("+CGPSINFO: ,,,,,,,,\nOK"), None);
+}
+
+#[test]
+fn parse_cgpsinfo_rejects_malformed_hemisphere_markers() {
+    assert_eq!(
+        parse_cgpsinfo("+CGPSINFO: 4852.4300,Q,00221.1300,E,130426,120000.0,35.0,0.5,\nOK"),
+        None
+    );
+    assert_eq!(
+        parse_cgpsinfo("+CGPSINFO: 4852.4300,N,00221.1300,Q,130426,120000.0,35.0,0.5,\nOK"),
+        None
+    );
 }
 
 #[test]
@@ -94,4 +141,66 @@ fn parse_registration_treats_home_and_roaming_as_registered() {
     assert!(parse_registration("+CEREG: 0,1\nOK"));
     assert!(parse_registration("+CEREG: 0,5\nOK"));
     assert!(!parse_registration("+CEREG: 0,0\nOK"));
+}
+
+#[test]
+fn at_command_set_get_signal_quality_sends_expected_command_and_timeout() {
+    let transport = FakeTransport::default().with_response("AT+CSQ", "+CSQ: 18,0\nOK");
+    let mut at = AtCommandSet::new(transport);
+
+    let info = at
+        .get_signal_quality()
+        .expect("signal response should parse");
+
+    assert_eq!(info, SignalInfo { csq: 18 });
+    let transport = at.into_inner();
+    assert_eq!(
+        transport.sent,
+        vec![("AT+CSQ".to_string(), Some(Duration::from_secs(2)))]
+    );
+}
+
+#[test]
+fn at_command_set_configure_pdp_formats_python_compatible_command() {
+    let transport = FakeTransport::default();
+    let mut at = AtCommandSet::new(transport);
+
+    at.configure_pdp("internet")
+        .expect("pdp command should send");
+
+    let transport = at.into_inner();
+    assert_eq!(
+        transport.sent,
+        vec![(
+            "AT+CGDCONT=1,\"IP\",\"internet\"".to_string(),
+            Some(Duration::from_secs(2))
+        )]
+    );
+}
+
+#[test]
+fn gps_reader_enable_and_query_delegate_to_at_commands() {
+    let transport = FakeTransport::default()
+        .with_response("AT+CGPS=1", "OK")
+        .with_response(
+            "AT+CGPSINFO",
+            "+CGPSINFO: 4852.4300,N,00221.1300,E,130426,120000.0,35.0,0.5,\nOK",
+        );
+    let mut reader = GpsReader::new(transport);
+
+    assert!(reader.enable().expect("enable should succeed"));
+    let fix = reader
+        .query()
+        .expect("query should succeed")
+        .expect("fix expected");
+
+    assert!((fix.lat - 48.873_833).abs() < 0.000_1);
+    let transport = reader.into_inner();
+    assert_eq!(
+        transport.sent,
+        vec![
+            ("AT+CGPS=1".to_string(), Some(Duration::from_secs(2))),
+            ("AT+CGPSINFO".to_string(), Some(Duration::from_secs(2))),
+        ]
+    );
 }
