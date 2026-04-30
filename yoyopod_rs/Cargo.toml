@@ -5,4 +5,5 @@ members = [
     "ui-host",
     "voip-host",
     "network-host",
+    "runtime",
 ]
