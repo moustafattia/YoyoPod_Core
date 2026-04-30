@@ -113,7 +113,9 @@ def setup(
         worker_path=default_worker_path(),
         scheduler=app.scheduler,
     )
-    actual_recent_store = recent_store or _build_recent_store(app)
+    actual_recent_store = recent_store
+    if actual_recent_store is None and not getattr(actual_backend, "owns_library_state", False):
+        actual_recent_store = _build_recent_store(app)
     actual_library = library or LocalMusicService(
         actual_backend,
         music_dir=Path(actual_config.music_dir),

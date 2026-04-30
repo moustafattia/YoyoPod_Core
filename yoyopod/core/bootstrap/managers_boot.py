@@ -117,7 +117,11 @@ class ManagersBoot:
             self.app.local_music_service = self.local_music_service_cls(
                 self.app.music_backend,
                 music_dir=music_config.music_dir,
-                recent_store=self.app.recent_track_store,
+                recent_store=(
+                    None
+                    if getattr(self.app.music_backend, "owns_library_state", False)
+                    else self.app.recent_track_store
+                ),
             )
             if self.app.output_volume is None:
                 self.app.output_volume = self.output_volume_controller_cls(self.app.music_backend)
