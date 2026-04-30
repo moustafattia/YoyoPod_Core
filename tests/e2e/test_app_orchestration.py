@@ -47,7 +47,6 @@ from yoyopod.integrations.power.models import BatteryState, PowerSnapshot
 from yoyopod.core.loop import RuntimeLoopService
 from yoyopod.core import UserActivityEvent
 from yoyopod.integrations.power import PowerAlert
-from yoyopod.integrations.network.models import ModemPhase, ModemState, SignalInfo
 from yoyopod.ui.input import InputManager, InteractionProfile
 from yoyopod.ui.rust_host.facade import RustUiFacade
 from yoyopod.ui.screens.manager import VisibleTickRefreshResult
@@ -330,48 +329,6 @@ class FakeRecoveringMusicBackend(MockMusicBackend):
         result_index = min(self.start_calls - 1, len(self._start_results) - 1)
         self._connected = self._start_results[result_index]
         return self._connected
-
-
-class FakeRecoveringNetworkManager:
-    """Minimal network-manager double for recovery backoff tests."""
-
-    def __init__(
-        self,
-        recover_results: list[bool],
-        *,
-        fail_on_online_check: bool = False,
-    ) -> None:
-        self._recover_results = recover_results
-        self._fail_on_online_check = fail_on_online_check
-        self.recover_calls = 0
-        self.is_online_checks = 0
-        self.config = SimpleNamespace(enabled=True)
-        self._online = False
-        self._state = ModemState(
-            phase=ModemPhase.REGISTERED,
-            signal=SignalInfo(csq=20),
-            carrier="Telekom.de",
-            network_type="4G",
-            sim_ready=True,
-        )
-
-    def recover(self) -> bool:
-        self.recover_calls += 1
-        result_index = min(self.recover_calls - 1, len(self._recover_results) - 1)
-        self._online = self._recover_results[result_index]
-        self._state.phase = ModemPhase.ONLINE if self._online else ModemPhase.REGISTERED
-        return self._online
-
-    @property
-    def is_online(self) -> bool:
-        self.is_online_checks += 1
-        if self._fail_on_online_check:
-            raise AssertionError("is_online should not be queried while recovery is in flight")
-        return self._online
-
-    @property
-    def modem_state(self) -> ModemState:
-        return self._state
 
 
 class FakeStoppingVoIPManager:
