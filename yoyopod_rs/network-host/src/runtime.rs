@@ -574,6 +574,7 @@ where
     }
 
     fn touch(&mut self, now_ms: u64) {
+        self.snapshot.refresh_derived();
         self.snapshot.updated_at_ms = now_ms;
     }
 

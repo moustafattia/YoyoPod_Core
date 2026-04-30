@@ -56,6 +56,11 @@ pub struct NetworkRuntimeSnapshot {
     pub signal: SignalSnapshot,
     pub ppp: PppSnapshot,
     pub gps: GpsSnapshot,
+    pub connected: bool,
+    pub gps_has_fix: bool,
+    pub connection_type: String,
+    pub network_status: String,
+    pub gps_status: String,
     pub recovering: bool,
     pub retryable: bool,
     pub reconnect_attempts: u32,
@@ -67,7 +72,7 @@ pub struct NetworkRuntimeSnapshot {
 
 impl NetworkRuntimeSnapshot {
     pub fn offline(config_dir: &str) -> Self {
-        Self {
+        let mut snapshot = Self {
             enabled: false,
             gps_enabled: false,
             config_dir: config_dir.to_string(),
@@ -93,6 +98,11 @@ impl NetworkRuntimeSnapshot {
                 timestamp: None,
                 last_query_result: "idle".to_string(),
             },
+            connected: false,
+            gps_has_fix: false,
+            connection_type: String::new(),
+            network_status: String::new(),
+            gps_status: String::new(),
             recovering: false,
             retryable: false,
             reconnect_attempts: 0,
@@ -100,13 +110,16 @@ impl NetworkRuntimeSnapshot {
             error_code: String::new(),
             error_message: String::new(),
             updated_at_ms: 0,
-        }
+        };
+        snapshot.refresh_derived();
+        snapshot
     }
 
     pub fn from_config(config_dir: &str, config: &NetworkHostConfig) -> Self {
         let mut snapshot = Self::offline(config_dir);
         snapshot.enabled = config.enabled;
         snapshot.gps_enabled = config.gps_enabled;
+        snapshot.refresh_derived();
         snapshot
     }
 
@@ -116,6 +129,81 @@ impl NetworkRuntimeSnapshot {
         snapshot.retryable = false;
         snapshot.error_code = "config_load_failed".to_string();
         snapshot.error_message = error.to_string();
+        snapshot.refresh_derived();
         snapshot
+    }
+
+    pub fn refresh_derived(&mut self) {
+        self.connected = self.enabled && self.ppp.up;
+        self.gps_has_fix = self.enabled && self.gps_enabled && self.gps.has_fix;
+        self.connection_type = if self.enabled && (self.connected || self.has_cellular_visibility())
+        {
+            "4g".to_string()
+        } else {
+            "none".to_string()
+        };
+        self.network_status = self.derive_network_status().to_string();
+        self.gps_status = self.derive_gps_status().to_string();
+    }
+
+    fn has_cellular_visibility(&self) -> bool {
+        self.registered
+            || self.sim_ready
+            || !self.carrier.trim().is_empty()
+            || !self.network_type.trim().is_empty()
+            || self.signal.bars > 0
+            || matches!(
+                self.state,
+                NetworkLifecycleState::Probing
+                    | NetworkLifecycleState::Ready
+                    | NetworkLifecycleState::Registering
+                    | NetworkLifecycleState::Registered
+                    | NetworkLifecycleState::PppStarting
+                    | NetworkLifecycleState::Online
+                    | NetworkLifecycleState::PppStopping
+                    | NetworkLifecycleState::Recovering
+                    | NetworkLifecycleState::Degraded
+            )
+    }
+
+    fn derive_network_status(&self) -> &'static str {
+        if !self.enabled {
+            return "disabled";
+        }
+        if self.connected {
+            return "online";
+        }
+        match self.state {
+            NetworkLifecycleState::Registered | NetworkLifecycleState::PppStarting | NetworkLifecycleState::PppStopping => {
+                "registered"
+            }
+            NetworkLifecycleState::Probing
+            | NetworkLifecycleState::Ready
+            | NetworkLifecycleState::Registering
+            | NetworkLifecycleState::Recovering => "connecting",
+            NetworkLifecycleState::Degraded => "degraded",
+            _ => "offline",
+        }
+    }
+
+    fn derive_gps_status(&self) -> &'static str {
+        if !self.enabled || !self.gps_enabled {
+            return "disabled";
+        }
+        if self.gps_has_fix {
+            return "fix";
+        }
+        match self.state {
+            NetworkLifecycleState::Off
+            | NetworkLifecycleState::Probing
+            | NetworkLifecycleState::Ready => "starting",
+            NetworkLifecycleState::Registering
+            | NetworkLifecycleState::Registered
+            | NetworkLifecycleState::PppStarting
+            | NetworkLifecycleState::Online
+            | NetworkLifecycleState::PppStopping
+            | NetworkLifecycleState::Recovering
+            | NetworkLifecycleState::Degraded => "searching",
+        }
     }
 }

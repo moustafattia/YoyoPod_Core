@@ -61,44 +61,47 @@ def _disabled_gps_rows() -> list[tuple[str, str]]:
 def _runtime_snapshot(network_runtime: object | None) -> object | None:
     if network_runtime is None:
         return None
+    is_available = getattr(network_runtime, "is_available", None)
+    if callable(is_available) and not is_available():
+        return None
     snapshot = getattr(network_runtime, "snapshot", None)
     if not callable(snapshot):
         return None
-    return snapshot()
+    value = snapshot()
+    if isinstance(value, dict):
+        return value
+    return None
 
 
 def _build_network_rows_from_runtime(network_runtime: object | None) -> list[tuple[str, str]]:
     """Build cellular rows from the Rust-owned network snapshot."""
 
     snapshot = _runtime_snapshot(network_runtime)
-    if snapshot is None or not getattr(snapshot, "enabled", False):
+    if snapshot is None or not bool(snapshot.get("enabled", False)):
         return [("Status", "Disabled")]
 
-    state = str(getattr(snapshot, "state", "") or "").strip()
-    connected = bool(getattr(snapshot, "connected", False))
-    if connected:
-        status_text = "Online"
-    elif state in {"registered", "ppp_starting", "ppp_stopping"}:
-        status_text = "Registered"
-    elif state in {"probing", "ready", "registering", "recovering"}:
-        status_text = "Connecting"
-    elif state == "degraded":
-        status_text = "Degraded"
-    else:
-        status_text = "Offline"
+    status_text = {
+        "online": "Online",
+        "registered": "Registered",
+        "connecting": "Connecting",
+        "degraded": "Degraded",
+        "offline": "Offline",
+        "disabled": "Disabled",
+    }.get(str(snapshot.get("network_status", "") or "").strip(), "Offline")
 
-    signal = getattr(snapshot, "signal", None)
-    signal_bars = max(0, min(4, int(getattr(signal, "bars", 0) or 0)))
+    signal = snapshot.get("signal")
+    signal_data = signal if isinstance(signal, dict) else {}
+    signal_bars = max(0, min(4, int(signal_data.get("bars", 0) or 0)))
     signal_text = "Unknown"
-    if signal is not None and (getattr(signal, "csq", None) is not None or signal_bars > 0):
+    if signal_data.get("csq") is not None or signal_bars > 0:
         signal_text = f"{signal_bars}/4"
 
     return [
         ("Status", status_text),
-        ("Carrier", str(getattr(snapshot, "carrier", "") or "Unknown")),
-        ("Type", str(getattr(snapshot, "network_type", "") or "Unknown")),
+        ("Carrier", str(snapshot.get("carrier", "") or "Unknown")),
+        ("Type", str(snapshot.get("network_type", "") or "Unknown")),
         ("Signal", signal_text),
-        ("PPP", "Up" if connected else "Down"),
+        ("PPP", "Up" if bool(snapshot.get("connected", False)) else "Down"),
     ]
 
 
@@ -106,27 +109,20 @@ def _build_gps_rows_from_runtime(network_runtime: object | None) -> list[tuple[s
     """Build GPS rows from the Rust-owned network snapshot."""
 
     snapshot = _runtime_snapshot(network_runtime)
-    if snapshot is None or not getattr(snapshot, "enabled", False):
+    if snapshot is None or not bool(snapshot.get("enabled", False)):
         return _disabled_gps_rows()
-    if not getattr(snapshot, "gps_enabled", False):
+    if not bool(snapshot.get("gps_enabled", False)):
         return _disabled_gps_rows()
 
-    gps = getattr(snapshot, "gps", None)
-    if gps is None or not getattr(gps, "has_fix", False):
-        state = str(getattr(snapshot, "state", "") or "").strip()
-        fix_status = "Searching"
-        if state in {"off", "probing", "ready"}:
-            fix_status = "Starting"
-        elif state not in {
-            "registering",
-            "registered",
-            "ppp_starting",
-            "online",
-            "ppp_stopping",
-            "recovering",
-            "degraded",
-        }:
-            fix_status = "Unavailable"
+    gps = snapshot.get("gps")
+    gps_data = gps if isinstance(gps, dict) else {}
+    if str(snapshot.get("gps_status", "") or "").strip() != "fix":
+        fix_status = {
+            "disabled": "Disabled",
+            "starting": "Starting",
+            "searching": "Searching",
+            "unavailable": "Unavailable",
+        }.get(str(snapshot.get("gps_status", "") or "").strip(), "Searching")
         return [
             ("Fix", fix_status),
             ("Lat", "--"),
@@ -137,10 +133,10 @@ def _build_gps_rows_from_runtime(network_runtime: object | None) -> list[tuple[s
 
     return [
         ("Fix", "Yes"),
-        ("Lat", f"{float(getattr(gps, 'lat', 0.0)):.6f}"),
-        ("Lng", f"{float(getattr(gps, 'lng', 0.0)):.6f}"),
-        ("Alt", f"{float(getattr(gps, 'altitude', 0.0)):.1f}m"),
-        ("Speed", f"{float(getattr(gps, 'speed', 0.0)):.1f}km/h"),
+        ("Lat", f"{float(gps_data.get('lat', 0.0) or 0.0):.6f}"),
+        ("Lng", f"{float(gps_data.get('lng', 0.0) or 0.0):.6f}"),
+        ("Alt", f"{float(gps_data.get('altitude', 0.0) or 0.0):.1f}m"),
+        ("Speed", f"{float(gps_data.get('speed', 0.0) or 0.0):.1f}km/h"),
     ]
 
 
@@ -165,9 +161,7 @@ def build_power_screen_state_provider(
         return PowerScreenState(
             snapshot=power_snapshot,
             status=status,
-            network_enabled=bool(
-                network_snapshot is not None and getattr(network_snapshot, "enabled", False)
-            ),
+            network_enabled=bool(network_snapshot is not None and network_snapshot.get("enabled", False)),
             network_rows=tuple(_build_network_rows_from_runtime(network_runtime)),
             gps_rows=tuple(_build_gps_rows_from_runtime(network_runtime)),
             playback_devices=tuple(
@@ -196,9 +190,9 @@ def build_power_screen_actions(
 
     def refresh_gps() -> bool:
         snapshot = _runtime_snapshot(network_runtime)
-        if snapshot is None or not getattr(snapshot, "enabled", False):
+        if snapshot is None or not bool(snapshot.get("enabled", False)):
             return False
-        if not getattr(snapshot, "gps_enabled", False):
+        if not bool(snapshot.get("gps_enabled", False)):
             return False
 
         query_gps = getattr(network_runtime, "query_gps", None)

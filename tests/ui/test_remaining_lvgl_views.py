@@ -936,12 +936,6 @@ def test_power_screen_one_button_voice_page_wraps_immediately() -> None:
 def test_power_screen_reports_full_network_page_count_through_lvgl() -> None:
     """Network-enabled Setup pages should preserve the full page count in LVGL payloads."""
 
-    from yoyopod.integrations.network.snapshot import (
-        RustNetworkGpsSnapshot,
-        RustNetworkPppSnapshot,
-        RustNetworkSignalSnapshot,
-        RustNetworkSnapshot,
-    )
     from yoyopod.ui.screens.system.power import (
         build_power_screen_actions,
         build_power_screen_state_provider,
@@ -949,36 +943,52 @@ def test_power_screen_reports_full_network_page_count_through_lvgl() -> None:
 
     class _FakeNetworkRuntime:
         def __init__(self) -> None:
-            self._snapshot = RustNetworkSnapshot(
-                enabled=True,
-                gps_enabled=True,
-                config_dir="config",
-                state="registered",
-                sim_ready=True,
-                registered=True,
-                carrier="Telekom.de",
-                network_type="4G",
-                signal=RustNetworkSignalSnapshot(csq=20, bars=3),
-                ppp=RustNetworkPppSnapshot(
-                    up=False,
-                    interface="ppp0",
-                    pid=None,
-                    default_route_owned=False,
-                    last_failure="",
-                ),
-                gps=RustNetworkGpsSnapshot(has_fix=False, last_query_result="idle"),
-                recovering=False,
-                retryable=True,
-                reconnect_attempts=0,
-                next_retry_at_ms=None,
-                error_code="",
-                error_message="",
-                updated_at_ms=1,
-            )
+            self._snapshot = {
+                "enabled": True,
+                "gps_enabled": True,
+                "config_dir": "config",
+                "state": "registered",
+                "sim_ready": True,
+                "registered": True,
+                "carrier": "Telekom.de",
+                "network_type": "4G",
+                "signal": {"csq": 20, "bars": 3},
+                "ppp": {
+                    "up": False,
+                    "interface": "ppp0",
+                    "pid": None,
+                    "default_route_owned": False,
+                    "last_failure": "",
+                },
+                "gps": {
+                    "has_fix": False,
+                    "lat": None,
+                    "lng": None,
+                    "altitude": None,
+                    "speed": None,
+                    "timestamp": None,
+                    "last_query_result": "idle",
+                },
+                "connected": False,
+                "gps_has_fix": False,
+                "connection_type": "4g",
+                "network_status": "registered",
+                "gps_status": "searching",
+                "recovering": False,
+                "retryable": True,
+                "reconnect_attempts": 0,
+                "next_retry_at_ms": None,
+                "error_code": "",
+                "error_message": "",
+                "updated_at_ms": 1,
+            }
             self.query_gps_calls = 0
 
-        def snapshot(self) -> RustNetworkSnapshot:
+        def snapshot(self) -> dict[str, object]:
             return self._snapshot
+
+        def is_available(self) -> bool:
+            return True
 
         def query_gps(self):
             self.query_gps_calls += 1

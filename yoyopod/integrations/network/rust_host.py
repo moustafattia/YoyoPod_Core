@@ -9,7 +9,6 @@ from loguru import logger
 
 from yoyopod.core.events import WorkerDomainStateChangedEvent, WorkerMessageReceivedEvent
 from yoyopod.core.workers import WorkerProcessConfig
-from yoyopod.integrations.network.snapshot import RustNetworkSnapshot
 
 
 class RustNetworkFacade:
@@ -18,7 +17,7 @@ class RustNetworkFacade:
     def __init__(self, app: Any, *, worker_domain: str = "network") -> None:
         self.app = app
         self.worker_domain = worker_domain
-        self._snapshot: RustNetworkSnapshot | None = None
+        self._snapshot: dict[str, Any] | None = None
         self._worker_state: str | None = None
         self._worker_reason: str = ""
 
@@ -73,7 +72,7 @@ class RustNetworkFacade:
             return True
         return sent
 
-    def snapshot(self) -> RustNetworkSnapshot | None:
+    def snapshot(self) -> dict[str, Any] | None:
         """Return the latest cached Rust snapshot, when available."""
 
         return self._snapshot
@@ -117,16 +116,20 @@ class RustNetworkFacade:
     def handle_worker_state_change(self, event: WorkerDomainStateChangedEvent) -> None:
         if event.domain != self.worker_domain:
             return
-        previous_connected = self._projected_connected(self._snapshot)
+        previous_connected = _snapshot_connected(self._snapshot)
         self._worker_state = event.state
         self._worker_reason = event.reason
-        if self._snapshot is None:
+        if self._snapshot is None or self._worker_state in _UNAVAILABLE_WORKER_STATES:
             self._clear_context()
+            self._note_connected_edge(
+                previous_connected=previous_connected,
+                current_connected=False,
+            )
             return
         self._sync_context(self._snapshot)
         self._note_connected_edge(
             previous_connected=previous_connected,
-            current_connected=self._projected_connected(self._snapshot),
+            current_connected=_snapshot_connected(self._snapshot),
         )
 
     def _send_command(self, message_type: str) -> bool:
@@ -146,29 +149,33 @@ class RustNetworkFacade:
         snapshot_payload = payload.get("snapshot", payload)
         if not isinstance(snapshot_payload, dict):
             return
-        self._apply_snapshot(RustNetworkSnapshot.from_payload(snapshot_payload))
+        self._apply_snapshot(dict(snapshot_payload))
 
-    def _apply_snapshot(self, snapshot: RustNetworkSnapshot) -> None:
-        previous_connected = self._projected_connected(self._snapshot)
+    def _apply_snapshot(self, snapshot: dict[str, Any]) -> None:
+        previous_connected = _snapshot_connected(self._snapshot)
         self._snapshot = snapshot
         self._worker_state = "running"
         self._worker_reason = ""
         self._sync_context(snapshot)
         self._note_connected_edge(
             previous_connected=previous_connected,
-            current_connected=self._projected_connected(snapshot),
+            current_connected=_snapshot_connected(snapshot),
         )
 
-    def _sync_context(self, snapshot: RustNetworkSnapshot) -> None:
+    def _sync_context(self, snapshot: dict[str, Any]) -> None:
         context = getattr(self.app, "context", None)
         if context is None:
             return
+        signal = snapshot.get("signal")
+        signal_bars = 0
+        if isinstance(signal, dict):
+            signal_bars = max(0, min(4, int(signal.get("bars", 0) or 0)))
         context.update_network_status(
-            network_enabled=snapshot.enabled,
-            signal_bars=snapshot.signal_bars,
-            connection_type=snapshot.connection_type,
-            connected=self._projected_connected(snapshot),
-            gps_has_fix=self._projected_gps_has_fix(snapshot),
+            network_enabled=bool(snapshot.get("enabled", False)),
+            signal_bars=signal_bars,
+            connection_type=str(snapshot.get("connection_type", "none") or "none"),
+            connected=_snapshot_connected(snapshot),
+            gps_has_fix=bool(snapshot.get("gps_has_fix", False)),
         )
 
     def _clear_context(self) -> None:
@@ -182,18 +189,6 @@ class RustNetworkFacade:
             connected=False,
             gps_has_fix=False,
         )
-
-    def _projected_connected(self, snapshot: RustNetworkSnapshot | None) -> bool | None:
-        if snapshot is None:
-            return None
-        if self._worker_state in _UNAVAILABLE_WORKER_STATES:
-            return False
-        return snapshot.connected
-
-    def _projected_gps_has_fix(self, snapshot: RustNetworkSnapshot) -> bool:
-        if self._worker_state in _UNAVAILABLE_WORKER_STATES:
-            return False
-        return snapshot.gps_has_fix
 
     def _note_connected_edge(
         self,
@@ -214,6 +209,12 @@ class RustNetworkFacade:
 
 
 _UNAVAILABLE_WORKER_STATES = {"degraded", "disabled", "stopped"}
+
+
+def _snapshot_connected(snapshot: dict[str, Any] | None) -> bool | None:
+    if snapshot is None:
+        return None
+    return bool(snapshot.get("connected", False))
 
 
 __all__ = ["RustNetworkFacade"]
