@@ -13,7 +13,7 @@ from yoyopod.config import ConfigManager
 from yoyopod.core.audio_volume import OutputVolumeController
 from yoyopod.core.events import WorkerMessageReceivedEvent
 from yoyopod.core.hardware import AudioDeviceCatalog
-from yoyopod.integrations.call import CallHistoryStore, VoIPConfig, VoIPManager
+from yoyopod.integrations.call import VoIPConfig, VoIPManager
 from yoyopod.integrations.cloud.manager import CloudManager
 from yoyopod.integrations.contacts.directory import PeopleManager
 from yoyopod.integrations.music import LocalMusicService
@@ -49,7 +49,6 @@ class RuntimeBootService:
             logger=logger,
             config_manager_cls=ConfigManager,
             people_manager_cls=PeopleManager,
-            call_history_store_cls=CallHistoryStore,
             audio_device_catalog_cls=AudioDeviceCatalog,
         )
         self._components_boot = ComponentsBoot(

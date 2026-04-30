@@ -18,14 +18,12 @@ class ConfigBoot:
         logger: Any,
         config_manager_cls: Any,
         people_manager_cls: Any,
-        call_history_store_cls: Any,
         audio_device_catalog_cls: Any,
     ) -> None:
         self.app = app
         self.logger = logger
         self.config_manager_cls = config_manager_cls
         self.people_manager_cls = people_manager_cls
-        self.call_history_store_cls = call_history_store_cls
         self.audio_device_catalog_cls = audio_device_catalog_cls
 
     def load_configuration(self) -> bool:
@@ -39,11 +37,7 @@ class ConfigBoot:
             self.app.people_directory = self.people_manager_cls.from_config_manager(
                 self.app.config_manager
             )
-            self.app.call_history_store = self.call_history_store_cls(
-                self.app.config_manager.resolve_runtime_path(
-                    self.app.config_manager.get_call_history_file()
-                )
-            )
+            self.app.call_history_store = None
             self.app.recent_track_store = None
             self.app.audio_device_catalog = self.audio_device_catalog_cls()
             self.app.audio_device_catalog.refresh_async()
