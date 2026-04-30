@@ -60,3 +60,13 @@ def test_dev_unit_references_checkout_and_venv() -> None:
     assert "YOYOPOD_DEV_VENV" in exec_start
     assert "/opt/yoyopod-dev/venv" in exec_start
     assert "-m yoyopod_cli.main build ensure-native" in exec_start_pre
+
+
+def test_dev_unit_defaults_to_python_with_rust_runtime_opt_in() -> None:
+    cfg = _parse("yoyopod-dev.service")
+    exec_start = cfg["Service"]["ExecStart"]
+
+    assert "$${YOYOPOD_DEV_RUNTIME:-python}" in exec_start
+    assert "yoyopod_rs/runtime/build/yoyopod-runtime" in exec_start
+    assert "--config-dir $$CHECKOUT/config --hardware whisplay" in exec_start
+    assert '"$$VENV/bin/python" yoyopod.py' in exec_start

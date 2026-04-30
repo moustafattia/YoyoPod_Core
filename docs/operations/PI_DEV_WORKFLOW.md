@@ -204,6 +204,29 @@ yoyopod remote sync --branch <branch> --sha <commit>
 
 Use this when you want the stable checkout updated but do not want the full validate flow yet.
 
+### Rust Runtime Dev-Lane Entry Point
+
+The dev lane starts the Python app by default. To run the Rust runtime as the
+long-running dev service, set the target environment override:
+
+```ini
+Environment=YOYOPOD_DEV_RUNTIME=rust
+```
+
+With that opt-in, `yoyopod-dev.service` executes:
+
+```bash
+/opt/yoyopod-dev/checkout/yoyopod_rs/runtime/build/yoyopod-runtime \
+  --config-dir /opt/yoyopod-dev/checkout/config \
+  --hardware whisplay
+```
+
+Use committed GitHub Actions artifacts for the exact commit under test. The
+expected runtime artifact is `yoyopod-runtime-<sha>` and it should be installed
+as `yoyopod_rs/runtime/build/yoyopod-runtime` in the dev checkout before the
+service is restarted. Do not build Rust binaries on the Pi Zero 2W unless the
+user explicitly overrides that rule.
+
 ### Run validation
 
 ```bash

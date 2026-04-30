@@ -32,20 +32,26 @@ def test_rust_ui_ci_builds_arm64_binary_artifact() -> None:
     assert "working-directory: yoyopod_rs" in workflow
     assert "bazelbuild/setup-bazelisk" in workflow
     assert "git clone --depth 1 --branch v9.5.0 https://github.com/lvgl/lvgl.git .cache/lvgl/lvgl-9.5.0" in workflow
-    assert "bazel test //yoyopod_rs/ui-host/... //yoyopod_rs/media-host/... //yoyopod_rs/voip-host/..." in workflow
+    assert (
+        "bazel test //yoyopod_rs/ui-host/... //yoyopod_rs/media-host/... "
+        "//yoyopod_rs/voip-host/... //yoyopod_rs/runtime/..."
+    ) in workflow
     assert "cargo test --workspace --locked --features whisplay-hardware,native-lvgl" in workflow
     assert (
         "cargo build --release -p yoyopod-ui-host --features whisplay-hardware,native-lvgl --locked"
         in workflow
     )
     assert "cargo build --release -p yoyopod-media-host --locked" in workflow
+    assert "cargo build --release -p yoyopod-runtime --locked" in workflow
     assert "uses: actions/upload-artifact@v4" in workflow
     assert "name: yoyopod-ui-host-${{ env.RUST_ARTIFACT_SHA }}" in workflow
     assert "name: yoyopod-media-host-${{ env.RUST_ARTIFACT_SHA }}" in workflow
     assert "name: yoyopod-voip-host-${{ env.RUST_ARTIFACT_SHA }}" in workflow
+    assert "name: yoyopod-runtime-${{ env.RUST_ARTIFACT_SHA }}" in workflow
     assert "yoyopod_rs/ui-host/build/yoyopod-ui-host" in workflow
     assert "yoyopod_rs/media-host/build/yoyopod-media-host" in workflow
     assert "yoyopod_rs/voip-host/build/yoyopod-voip-host" in workflow
+    assert "yoyopod_rs/runtime/build/yoyopod-runtime" in workflow
     assert (
         "cargo build --release -p yoyopod-voip-host --features native-liblinphone --locked"
         in workflow
@@ -54,6 +60,13 @@ def test_rust_ui_ci_builds_arm64_binary_artifact() -> None:
     assert "liblinphone-shim/build" not in workflow
     assert "actions/download-artifact@v4" in workflow
     assert "path: yoyopod_rs/media-host/build" in workflow
+    assert "path: yoyopod_rs/runtime/build" in workflow
+
+
+def test_slot_arm64_change_detector_includes_rust_workspace() -> None:
+    workflow = CI_YML.read_text(encoding="utf-8")
+
+    assert "|yoyopod_rs/" in workflow
 
 
 def test_voip_host_runtime_loads_liblinphone_without_ci_runner_soname() -> None:

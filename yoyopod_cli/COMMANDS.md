@@ -72,6 +72,7 @@ For live help, use `yoyopod <cmd> --help`.
 | `yoyopod build clean-native` | Remove mutable native CMake build dirs before a clean rebuild. |
 | `yoyopod build ensure-native` | Build missing or stale native artifacts required by the app. |
 | `yoyopod build lvgl` | Build the pinned LVGL shim for the current platform. |
+| `yoyopod build rust-runtime` | Build the Rust runtime binary. |
 | `yoyopod build rust-ui-host` | Build the Rust UI host binary. |
 | `yoyopod build rust-ui-poc` | Compatibility alias for `yoyopod build rust-ui-host`. |
 | `yoyopod build simulation` | Build the LVGL native shim required by ``python yoyopod.py --simulate``. |

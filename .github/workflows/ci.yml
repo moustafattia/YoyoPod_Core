@@ -47,7 +47,7 @@ jobs:
           git diff --name-only "${BASE_SHA}" "${GITHUB_SHA}" > changed-files.txt
           cat changed-files.txt
 
-          if grep -Eq '^(\.github/workflows/(ci|release)\.yml|\.python-version|pyproject\.toml|yoyopod\.py|config/|deploy/docker/slot-builder\.Dockerfile|deploy/scripts/(install_release|launch)\.sh|scripts/(build_release\.py|build_slot_artifact_ci\.sh)|workers/voice/go/|src/|yoyopod/|yoyopod_cli/)' changed-files.txt; then
+          if grep -Eq '^(\.github/workflows/(ci|release)\.yml|\.python-version|pyproject\.toml|yoyopod\.py|config/|deploy/docker/slot-builder\.Dockerfile|deploy/scripts/(install_release|launch)\.sh|scripts/(build_release\.py|build_slot_artifact_ci\.sh)|workers/voice/go/|src/|yoyopod/|yoyopod_cli/|yoyopod_rs/)' changed-files.txt; then
             echo "slot_arm64=true" >> "${GITHUB_OUTPUT}"
           else
             echo "slot_arm64=false" >> "${GITHUB_OUTPUT}"
@@ -142,7 +142,7 @@ jobs:
           sudo apt-get install -y pkg-config liblinphone-dev
 
       - name: Run Bazel Rust host tests
-        run: bazel test //yoyopod_rs/ui-host/... //yoyopod_rs/media-host/... //yoyopod_rs/voip-host/...
+        run: bazel test //yoyopod_rs/ui-host/... //yoyopod_rs/media-host/... //yoyopod_rs/voip-host/... //yoyopod_rs/runtime/...
 
       - name: Run Rust UI host tests
         working-directory: yoyopod_rs
@@ -191,6 +191,21 @@ jobs:
         with:
           name: yoyopod-voip-host-${{ env.RUST_ARTIFACT_SHA }}
           path: yoyopod_rs/voip-host/build/yoyopod-voip-host
+          if-no-files-found: error
+
+      - name: Build Rust runtime
+        working-directory: yoyopod_rs
+        run: |
+          set -euo pipefail
+          cargo build --release -p yoyopod-runtime --locked
+          mkdir -p runtime/build
+          cp target/release/yoyopod-runtime runtime/build/yoyopod-runtime
+
+      - name: Upload Rust runtime ARM64 artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: yoyopod-runtime-${{ env.RUST_ARTIFACT_SHA }}
+          path: yoyopod_rs/runtime/build/yoyopod-runtime
           if-no-files-found: error
 
   slot-arm64:
@@ -242,6 +257,12 @@ jobs:
         with:
           name: yoyopod-voip-host-${{ env.RUST_ARTIFACT_SHA }}
           path: yoyopod_rs/voip-host/build
+
+      - name: Download Rust runtime artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: yoyopod-runtime-${{ env.RUST_ARTIFACT_SHA }}
+          path: yoyopod_rs/runtime/build
 
       - name: Build ARM64 slot artifact
         run: |
