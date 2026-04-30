@@ -1,1 +1,424 @@
+use serde_json::{json, Value};
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WorkerDomain {
+    Ui,
+    Media,
+    Voip,
+}
+
+impl WorkerDomain {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Ui => "ui",
+            Self::Media => "media",
+            Self::Voip => "voip",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WorkerState {
+    Stopped,
+    Starting,
+    Running,
+    Degraded,
+    Disabled,
+}
+
+impl WorkerState {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Stopped => "stopped",
+            Self::Starting => "starting",
+            Self::Running => "running",
+            Self::Degraded => "degraded",
+            Self::Disabled => "disabled",
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WorkerHealth {
+    pub state: WorkerState,
+    pub restart_count: u64,
+    pub protocol_errors: u64,
+    pub last_reason: String,
+}
+
+impl Default for WorkerHealth {
+    fn default() -> Self {
+        Self {
+            state: WorkerState::Stopped,
+            restart_count: 0,
+            protocol_errors: 0,
+            last_reason: String::new(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CallState {
+    Idle,
+    Incoming,
+    Outgoing,
+    Active,
+    Error,
+}
+
+impl CallState {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Idle => "idle",
+            Self::Incoming => "incoming",
+            Self::Outgoing => "outgoing",
+            Self::Active => "active",
+            Self::Error => "error",
+        }
+    }
+
+    fn from_worker_state(raw: &str) -> Self {
+        let normalized = raw.trim().to_ascii_lowercase();
+        if normalized.starts_with("outgoing_") {
+            return Self::Outgoing;
+        }
+
+        match normalized.as_str() {
+            "incoming" => Self::Incoming,
+            "outgoing" => Self::Outgoing,
+            "connected" | "streams_running" | "paused" | "paused_by_remote"
+            | "updated_by_remote" | "active" => Self::Active,
+            "error" => Self::Error,
+            _ => Self::Idle,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ListItem {
+    pub id: String,
+    pub title: String,
+    pub subtitle: String,
+    pub icon_key: String,
+}
+
+impl ListItem {
+    fn from_snapshot(value: &Value, icon_key: &'static str) -> Option<Self> {
+        if !value.is_object() {
+            return None;
+        }
+
+        let id = string_field(value, "uri")
+            .or_else(|| string_field(value, "id"))
+            .unwrap_or_default();
+        let title = string_field(value, "name")
+            .or_else(|| string_field(value, "title"))
+            .unwrap_or_default();
+        let subtitle = string_field(value, "artist")
+            .or_else(|| string_field(value, "subtitle"))
+            .unwrap_or_default();
+
+        Some(Self {
+            id,
+            title,
+            subtitle,
+            icon_key: icon_key.to_string(),
+        })
+    }
+
+    fn to_payload(&self) -> Value {
+        json!({
+            "id": self.id,
+            "title": self.title,
+            "subtitle": self.subtitle,
+            "icon_key": self.icon_key,
+        })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MediaState {
+    pub connected: bool,
+    pub playback_state: String,
+    pub title: String,
+    pub artist: String,
+    pub progress_permille: i32,
+    pub playlists: Vec<ListItem>,
+    pub recent_tracks: Vec<ListItem>,
+}
+
+impl Default for MediaState {
+    fn default() -> Self {
+        Self {
+            connected: false,
+            playback_state: "stopped".to_string(),
+            title: "Nothing Playing".to_string(),
+            artist: String::new(),
+            progress_permille: 0,
+            playlists: Vec::new(),
+            recent_tracks: Vec::new(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CallRuntimeState {
+    pub registered: bool,
+    pub registration_state: String,
+    pub state: CallState,
+    pub peer_name: String,
+    pub peer_address: String,
+    pub muted: bool,
+}
+
+impl Default for CallRuntimeState {
+    fn default() -> Self {
+        Self {
+            registered: false,
+            registration_state: "none".to_string(),
+            state: CallState::Idle,
+            peer_name: String::new(),
+            peer_address: String::new(),
+            muted: false,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RuntimeState {
+    pub current_screen: String,
+    pub media: MediaState,
+    pub call: CallRuntimeState,
+    pub ui: WorkerHealth,
+    pub media_worker: WorkerHealth,
+    pub voip_worker: WorkerHealth,
+    pub loop_iterations: u64,
+    pub last_loop_duration_ms: u64,
+}
+
+impl Default for RuntimeState {
+    fn default() -> Self {
+        Self {
+            current_screen: "hub".to_string(),
+            media: MediaState::default(),
+            call: CallRuntimeState::default(),
+            ui: WorkerHealth::default(),
+            media_worker: WorkerHealth::default(),
+            voip_worker: WorkerHealth::default(),
+            loop_iterations: 0,
+            last_loop_duration_ms: 0,
+        }
+    }
+}
+
+impl RuntimeState {
+    pub fn mark_worker(
+        &mut self,
+        domain: WorkerDomain,
+        state: WorkerState,
+        reason: impl Into<String>,
+    ) {
+        let health = match domain {
+            WorkerDomain::Ui => &mut self.ui,
+            WorkerDomain::Media => &mut self.media_worker,
+            WorkerDomain::Voip => &mut self.voip_worker,
+        };
+        health.state = state;
+        health.last_reason = reason.into();
+    }
+
+    pub fn apply_media_snapshot(&mut self, snapshot: &Value) {
+        if let Some(connected) = snapshot.get("connected").and_then(Value::as_bool) {
+            self.media.connected = connected;
+        }
+        if let Some(playback_state) = string_field(snapshot, "playback_state") {
+            self.media.playback_state = playback_state;
+        }
+        if let Some(progress_permille) = i32_field(snapshot, "progress_permille") {
+            self.media.progress_permille = progress_permille;
+        }
+        if let Some(track) = snapshot.get("current_track") {
+            self.media.title = string_field(track, "name")
+                .or_else(|| string_field(track, "title"))
+                .unwrap_or_else(|| "Nothing Playing".to_string());
+            self.media.artist = first_artist(track).unwrap_or_default();
+        }
+        if let Some(playlists) = snapshot.get("playlists").and_then(Value::as_array) {
+            self.media.playlists = playlists
+                .iter()
+                .filter_map(|item| ListItem::from_snapshot(item, "playlist"))
+                .collect();
+        }
+        if let Some(recent_tracks) = snapshot.get("recent_tracks").and_then(Value::as_array) {
+            self.media.recent_tracks = recent_tracks
+                .iter()
+                .filter_map(|item| ListItem::from_snapshot(item, "track"))
+                .collect();
+        }
+    }
+
+    pub fn apply_voip_snapshot(&mut self, snapshot: &Value) {
+        if let Some(registered) = snapshot.get("registered").and_then(Value::as_bool) {
+            self.call.registered = registered;
+        }
+        if let Some(registration_state) = string_field(snapshot, "registration_state") {
+            self.call.registration_state = registration_state;
+        }
+        if let Some(call_state) = snapshot.get("call_state") {
+            self.call.state = call_state
+                .as_str()
+                .map(CallState::from_worker_state)
+                .unwrap_or(CallState::Idle);
+        }
+        if let Some(active_call_peer) = string_field(snapshot, "active_call_peer") {
+            self.call.peer_address = active_call_peer;
+        }
+        if let Some(muted) = snapshot.get("muted").and_then(Value::as_bool) {
+            self.call.muted = muted;
+        }
+    }
+
+    pub fn ui_snapshot_payload(&self) -> Value {
+        json!({
+            "app_state": self.current_screen,
+            "hub": {
+                "cards": default_hub_cards(),
+            },
+            "music": {
+                "playing": self.media.playback_state == "playing",
+                "paused": self.media.playback_state == "paused",
+                "title": self.media.title,
+                "artist": self.media.artist,
+                "progress_permille": self.media.progress_permille,
+                "playlists": list_payload(&self.media.playlists),
+                "recent_tracks": list_payload(&self.media.recent_tracks),
+            },
+            "call": {
+                "state": self.call.state.as_str(),
+                "peer_name": self.call.peer_name,
+                "peer_address": self.call.peer_address,
+                "duration_text": "",
+                "muted": self.call.muted,
+                "contacts": [],
+                "history": [],
+            },
+            "voice": {
+                "phase": "idle",
+                "headline": "Ask",
+                "body": "Ask me anything...",
+                "capture_in_flight": false,
+                "ptt_active": false,
+            },
+            "power": {
+                "battery_percent": 100,
+                "charging": false,
+                "power_available": true,
+                "rows": [],
+            },
+            "network": {
+                "enabled": false,
+                "connected": false,
+                "signal_strength": 0,
+                "gps_has_fix": false,
+            },
+            "overlay": {
+                "loading": false,
+                "error": "",
+                "message": "",
+            },
+        })
+    }
+
+    pub fn status_payload(&self) -> Value {
+        json!({
+            "screen": {
+                "current": self.current_screen,
+            },
+            "media": {
+                "connected": self.media.connected,
+                "playback_state": self.media.playback_state,
+                "title": self.media.title,
+                "artist": self.media.artist,
+                "progress_permille": self.media.progress_permille,
+            },
+            "voip": {
+                "registered": self.call.registered,
+                "registration_state": self.call.registration_state,
+                "call_state": self.call.state.as_str(),
+                "peer_name": self.call.peer_name,
+                "peer_address": self.call.peer_address,
+                "muted": self.call.muted,
+            },
+            "workers": {
+                WorkerDomain::Ui.as_str(): worker_payload(&self.ui),
+                WorkerDomain::Media.as_str(): worker_payload(&self.media_worker),
+                WorkerDomain::Voip.as_str(): worker_payload(&self.voip_worker),
+            },
+            "loop": {
+                "iterations": self.loop_iterations,
+                "last_duration_ms": self.last_loop_duration_ms,
+            },
+        })
+    }
+}
+
+fn string_field(value: &Value, key: &str) -> Option<String> {
+    value.get(key).and_then(Value::as_str).map(str::to_string)
+}
+
+fn i32_field(value: &Value, key: &str) -> Option<i32> {
+    let raw = value.get(key)?.as_i64()?;
+    i32::try_from(raw).ok()
+}
+
+fn first_artist(track: &Value) -> Option<String> {
+    track
+        .get("artists")
+        .and_then(Value::as_array)
+        .and_then(|artists| artists.first())
+        .and_then(Value::as_str)
+        .map(str::to_string)
+        .or_else(|| string_field(track, "artist"))
+}
+
+fn list_payload(items: &[ListItem]) -> Vec<Value> {
+    items.iter().map(ListItem::to_payload).collect()
+}
+
+fn worker_payload(worker: &WorkerHealth) -> Value {
+    json!({
+        "state": worker.state.as_str(),
+        "restart_count": worker.restart_count,
+        "protocol_errors": worker.protocol_errors,
+        "last_reason": worker.last_reason,
+    })
+}
+
+fn default_hub_cards() -> Vec<Value> {
+    vec![
+        json!({
+            "key": "listen",
+            "title": "Listen",
+            "subtitle": "",
+            "accent": 0x00FF88,
+        }),
+        json!({
+            "key": "talk",
+            "title": "Talk",
+            "subtitle": "Ready",
+            "accent": 0x00D4FF,
+        }),
+        json!({
+            "key": "ask",
+            "title": "Ask",
+            "subtitle": "Voice",
+            "accent": 0x9F7AEA,
+        }),
+        json!({
+            "key": "setup",
+            "title": "Setup",
+            "subtitle": "Status",
+            "accent": 0xF6AD55,
+        }),
+    ]
+}

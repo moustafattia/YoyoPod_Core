@@ -24,6 +24,7 @@ RUNTIME_TESTS = [
     "config",
     "protocol",
     "smoke",
+    "state",
 ]
 
 yoyopod_rust_host_integration_tests(
