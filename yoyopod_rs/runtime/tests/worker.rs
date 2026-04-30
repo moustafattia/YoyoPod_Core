@@ -6,6 +6,7 @@ use yoyopod_runtime::protocol::{EnvelopeKind, WorkerEnvelope, SUPPORTED_SCHEMA_V
 use yoyopod_runtime::state::WorkerDomain;
 use yoyopod_runtime::worker::{
     command_envelope, record_worker_stdout_line, WorkerProtocolError, WorkerSpec, WorkerSupervisor,
+    MAX_PRESERVED_READY_MESSAGES,
 };
 
 #[test]
@@ -73,6 +74,32 @@ fn wait_for_ready_preserves_non_ready_messages_for_later_drain() {
 
     assert_eq!(messages.len(), 1);
     assert_eq!(messages[0].message_type, "ui.input");
+    supervisor.stop_all(Duration::from_millis(100));
+}
+
+#[test]
+fn wait_for_ready_caps_preserved_messages_and_keeps_latest_before_ready() {
+    let mut lines = Vec::new();
+    for index in 0..(MAX_PRESERVED_READY_MESSAGES + 5) {
+        lines.push(format!(
+            r#"{{"schema_version":1,"kind":"event","type":"ui.input","payload":{{"index":{index}}}}}"#
+        ));
+    }
+    lines.push(r#"{"schema_version":1,"kind":"event","type":"ui.ready","payload":{}}"#.to_string());
+    let line_refs = lines.iter().map(String::as_str).collect::<Vec<_>>();
+
+    let mut supervisor = WorkerSupervisor::default();
+    assert!(supervisor.start(stdout_lines_worker_spec(WorkerDomain::Ui, &line_refs)));
+
+    assert!(supervisor.wait_for_ready(WorkerDomain::Ui, "ui.ready", Duration::from_secs(5)));
+    let messages = supervisor.drain_messages(WorkerDomain::Ui, MAX_PRESERVED_READY_MESSAGES + 10);
+
+    assert_eq!(messages.len(), MAX_PRESERVED_READY_MESSAGES);
+    assert_eq!(messages[0].payload["index"], json!(5));
+    assert_eq!(
+        messages[MAX_PRESERVED_READY_MESSAGES - 1].payload["index"],
+        json!(MAX_PRESERVED_READY_MESSAGES + 4)
+    );
     supervisor.stop_all(Duration::from_millis(100));
 }
 

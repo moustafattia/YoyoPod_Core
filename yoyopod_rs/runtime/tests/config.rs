@@ -97,6 +97,10 @@ fn write(path: &Path, contents: &str) {
     fs::write(path, contents).expect("write config");
 }
 
+fn yaml_path(path: &Path) -> String {
+    path.to_string_lossy().replace('\\', "/")
+}
+
 #[test]
 fn loads_minimal_worker_and_audio_config() {
     let _lock = lock_env();
@@ -180,7 +184,8 @@ secrets:
     assert_eq!(config.voip.sip_password, "secret");
     assert_eq!(config.voip.iterate_interval_ms, 25);
     assert_eq!(config.pid_file, "/tmp/yoyopod-test.pid");
-    assert_eq!(config.log_file, "logs/yoyopod.log");
+    assert!(Path::new(&config.log_file).ends_with(Path::new("logs/yoyopod.log")));
+    assert!(Path::new(&config.log_file).is_absolute());
     assert_eq!(
         config.worker_paths.ui,
         "yoyopod_rs/ui-host/build/yoyopod-ui-host"
@@ -201,7 +206,8 @@ fn missing_files_fall_back_to_dev_defaults() {
     assert_eq!(config.voip.transport, "tcp");
     assert_eq!(config.ui.hardware, "auto");
     assert_eq!(config.pid_file, "/tmp/yoyopod.pid");
-    assert_eq!(config.log_file, "logs/yoyopod.log");
+    assert!(Path::new(&config.log_file).ends_with(Path::new("logs/yoyopod.log")));
+    assert!(Path::new(&config.log_file).is_absolute());
 }
 
 #[test]
@@ -218,11 +224,66 @@ logging:
     );
 
     let yaml_config = RuntimeConfig::load(&dir).expect("load yaml config");
-    assert_eq!(yaml_config.log_file, "logs/from-yaml.log");
+    assert!(Path::new(&yaml_config.log_file).ends_with(Path::new("logs/from-yaml.log")));
+    assert!(Path::new(&yaml_config.log_file).is_absolute());
 
     std::env::set_var("YOYOPOD_LOG_FILE", "/tmp/from-env.log");
     let env_config = RuntimeConfig::load(&dir).expect("load env config");
     assert_eq!(env_config.log_file, "/tmp/from-env.log");
+}
+
+#[test]
+fn relative_logging_paths_resolve_against_config_root_parent() {
+    let _lock = lock_env();
+    let _env = clean_config_env();
+    let root = temp_config_dir("relative-logging-root");
+    let config_dir = root.join("config");
+    write(
+        &config_dir.join("app/core.yaml"),
+        r#"
+logging:
+  pid_file: "run/yoyopod.pid"
+  file: "logs/runtime.log"
+"#,
+    );
+
+    let config = RuntimeConfig::load(&config_dir).expect("load runtime config");
+
+    assert_eq!(
+        PathBuf::from(&config.pid_file),
+        root.join("run/yoyopod.pid")
+    );
+    assert_eq!(
+        PathBuf::from(&config.log_file),
+        root.join("logs/runtime.log")
+    );
+}
+
+#[test]
+fn absolute_logging_paths_stay_absolute() {
+    let _lock = lock_env();
+    let _env = clean_config_env();
+    let root = temp_config_dir("absolute-logging-root");
+    let config_dir = root.join("config");
+    let pid_file = root.join("absolute/yoyopod.pid");
+    let log_file = root.join("absolute/yoyopod.log");
+    write(
+        &config_dir.join("app/core.yaml"),
+        &format!(
+            r#"
+logging:
+  pid_file: "{}"
+  file: "{}"
+"#,
+            yaml_path(&pid_file),
+            yaml_path(&log_file)
+        ),
+    );
+
+    let config = RuntimeConfig::load(&config_dir).expect("load runtime config");
+
+    assert_eq!(PathBuf::from(&config.pid_file), pid_file);
+    assert_eq!(PathBuf::from(&config.log_file), log_file);
 }
 
 #[test]

@@ -1,6 +1,6 @@
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use clap::CommandFactory;
 use yoyopod_runtime::cli::{run, Args};
@@ -66,6 +66,79 @@ fn pid_and_log_helpers_write_expected_runtime_files() {
 }
 
 #[test]
+fn startup_log_failure_removes_pid_file() {
+    let dir = temp_dir("startup-log-failure");
+    let config_dir = dir.join("config");
+    let pid_file = dir.join("run/yoyopod.pid");
+    let log_file = dir.join("log-dir");
+    fs::create_dir_all(&log_file).expect("log dir");
+    write(
+        &config_dir.join("app/core.yaml"),
+        &format!(
+            r#"
+logging:
+  pid_file: "{}"
+  file: "{}"
+"#,
+            yaml_path(&pid_file),
+            yaml_path(&log_file)
+        ),
+    );
+
+    let error = run(Args {
+        config_dir,
+        dry_run: false,
+        hardware: "whisplay".to_string(),
+    })
+    .expect_err("directory log path must fail");
+
+    let _ = error;
+    assert!(!pid_file.exists());
+}
+
+#[test]
+fn boot_sends_initial_runtime_snapshot_before_idle_loop() {
+    let dir = temp_dir("initial-snapshot");
+    let config_dir = dir.join("config");
+    let ui_stdin = dir.join("ui-stdin.ndjson");
+    let ui_worker = write_ui_worker_script(&dir, &ui_stdin);
+    write(
+        &config_dir.join("app/core.yaml"),
+        &format!(
+            r#"
+logging:
+  pid_file: "{}"
+  file: "{}"
+"#,
+            yaml_path(&dir.join("run/yoyopod.pid")),
+            yaml_path(&dir.join("logs/yoyopod.log"))
+        ),
+    );
+    std::env::set_var("YOYOPOD_RUST_UI_HOST_WORKER", &ui_worker);
+
+    let result = run(Args {
+        config_dir,
+        dry_run: false,
+        hardware: "whisplay".to_string(),
+    });
+    std::env::remove_var("YOYOPOD_RUST_UI_HOST_WORKER");
+    result.expect("runtime exits after UI shutdown intent");
+
+    let captured = wait_for_file(&ui_stdin);
+    let set_backlight = captured
+        .find(r#""type":"ui.set_backlight""#)
+        .expect("set backlight command");
+    let snapshot = captured
+        .find(r#""type":"ui.runtime_snapshot""#)
+        .expect("initial runtime snapshot command");
+    let tick = captured.find(r#""type":"ui.tick""#).expect("tick command");
+
+    assert!(set_backlight < snapshot);
+    assert!(snapshot < tick);
+    assert!(captured.contains(r#""app_state":"hub""#));
+}
+
+#[test]
 fn cli_test_is_registered_in_bazel_runtime_tests() {
     let build_file = include_str!("../BUILD.bazel");
 
@@ -85,4 +158,52 @@ fn write(path: &Path, contents: &str) {
         fs::create_dir_all(parent).expect("parent dir");
     }
     fs::write(path, contents).expect("write file");
+}
+
+fn yaml_path(path: &Path) -> String {
+    path.to_string_lossy().replace('\\', "/")
+}
+
+fn write_ui_worker_script(dir: &Path, stdin_path: &Path) -> PathBuf {
+    let script_path = dir.join("ui-worker.ps1");
+    write(
+        &script_path,
+        &format!(
+            r#"
+Write-Output '{{"schema_version":1,"kind":"event","type":"ui.ready","payload":{{}}}}'
+Write-Output '{{"schema_version":1,"kind":"event","type":"ui.intent","payload":{{"domain":"runtime","action":"shutdown","payload":{{}}}}}}'
+$lines = @()
+while (($line = [Console]::In.ReadLine()) -ne $null) {{
+  $lines += $line
+  if ($line -match '"type":"ui.tick"') {{
+    break
+  }}
+}}
+Set-Content -LiteralPath '{}' -Value $lines
+"#,
+            stdin_path.to_string_lossy().replace('\'', "''")
+        ),
+    );
+    let command_path = dir.join("ui-worker.cmd");
+    write(
+        &command_path,
+        &format!(
+            "@echo off\r\npowershell -NoProfile -ExecutionPolicy Bypass -File \"{}\"\r\n",
+            script_path.to_string_lossy()
+        ),
+    );
+    command_path
+}
+
+fn wait_for_file(path: &Path) -> String {
+    let deadline = std::time::Instant::now() + Duration::from_secs(5);
+    while std::time::Instant::now() < deadline {
+        if let Ok(contents) = fs::read_to_string(path) {
+            if !contents.trim().is_empty() {
+                return contents;
+            }
+        }
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    panic!("timed out waiting for {}", path.display());
 }

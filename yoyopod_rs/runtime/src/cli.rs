@@ -4,7 +4,7 @@ use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
 
-use anyhow::{bail, Result};
+use anyhow::{bail, Context, Result};
 use clap::Parser;
 use serde_json::json;
 
@@ -12,6 +12,7 @@ use crate::config::RuntimeConfig;
 use crate::logging::{
     log_marker, remove_pid_file, shutdown_marker, startup_marker, write_pid_file,
 };
+use crate::protocol::WorkerEnvelope;
 use crate::runtime_loop::RuntimeLoop;
 use crate::state::{RuntimeState, WorkerDomain, WorkerState};
 use crate::worker::{WorkerSpec, WorkerSupervisor};
@@ -41,10 +42,14 @@ pub fn run(args: Args) -> Result<String> {
 fn run_runtime(config: RuntimeConfig, hardware: &str) -> Result<()> {
     let pid = std::process::id();
     write_pid_file(&config.pid_file, pid)?;
-    log_marker(
+    if let Err(error) = log_marker(
         &config.log_file,
         startup_marker(env!("CARGO_PKG_VERSION"), pid),
-    )?;
+    ) {
+        let _ = remove_pid_file(&config.pid_file);
+        return Err(error)
+            .with_context(|| format!("failed to write startup log marker to {}", config.log_file));
+    }
 
     let result = run_runtime_inner(&config, hardware);
 
@@ -73,6 +78,7 @@ fn run_runtime_inner(config: &RuntimeConfig, hardware: &str) -> Result<()> {
         }
     };
     send_startup_commands(&mut workers, config);
+    send_initial_runtime_snapshot(&mut workers, &state);
 
     let mut runtime = RuntimeLoop::new(state);
     while !shutdown.load(Ordering::SeqCst) && !runtime.shutdown_requested() {
@@ -155,4 +161,10 @@ fn send_startup_commands(workers: &mut WorkerSupervisor, config: &RuntimeConfig)
         config.voip.to_worker_payload(),
     );
     workers.send_command(WorkerDomain::Voip, "voip.register", json!({}));
+}
+
+fn send_initial_runtime_snapshot(workers: &mut WorkerSupervisor, state: &RuntimeState) {
+    let envelope =
+        WorkerEnvelope::command("ui.runtime_snapshot", None, state.ui_snapshot_payload());
+    let _ = workers.send_envelope(WorkerDomain::Ui, envelope);
 }

@@ -95,6 +95,7 @@ pub enum ConfigError {
 impl RuntimeConfig {
     pub fn load(config_dir: impl AsRef<Path>) -> Result<Self, ConfigError> {
         let config_dir = config_dir.as_ref();
+        let runtime_root = runtime_root_for_config_dir(config_dir);
         let app = read_yaml(config_dir.join("app/core.yaml"))?;
         let hardware = read_yaml(config_dir.join("device/hardware.yaml"))?;
         let music = read_yaml(config_dir.join("audio/music.yaml"))?;
@@ -306,17 +307,23 @@ impl RuntimeConfig {
                     "yoyopod_rs/voip-host/build/yoyopod-voip-host",
                 ),
             },
-            pid_file: string_at_env(
-                &app,
-                &["logging", "pid_file"],
-                "/tmp/yoyopod.pid",
-                "YOYOPOD_PID_FILE",
+            pid_file: resolve_runtime_path(
+                &runtime_root,
+                string_at_env(
+                    &app,
+                    &["logging", "pid_file"],
+                    "/tmp/yoyopod.pid",
+                    "YOYOPOD_PID_FILE",
+                ),
             ),
-            log_file: string_at_env(
-                &app,
-                &["logging", "file"],
-                "logs/yoyopod.log",
-                "YOYOPOD_LOG_FILE",
+            log_file: resolve_runtime_path(
+                &runtime_root,
+                string_at_env(
+                    &app,
+                    &["logging", "file"],
+                    "logs/yoyopod.log",
+                    "YOYOPOD_LOG_FILE",
+                ),
             ),
         })
     }
@@ -572,6 +579,29 @@ fn ui_worker_path() -> String {
 
 fn env_or_default(name: &str, default: &str) -> String {
     env_string(name).unwrap_or_else(|| default.to_string())
+}
+
+fn runtime_root_for_config_dir(config_dir: &Path) -> PathBuf {
+    let config_dir = if config_dir.is_absolute() {
+        config_dir.to_path_buf()
+    } else {
+        std::env::current_dir()
+            .map(|cwd| cwd.join(config_dir))
+            .unwrap_or_else(|_| config_dir.to_path_buf())
+    };
+    config_dir
+        .parent()
+        .map(Path::to_path_buf)
+        .unwrap_or(config_dir)
+}
+
+fn resolve_runtime_path(runtime_root: &Path, raw_path: String) -> String {
+    let path = Path::new(&raw_path);
+    if path.is_absolute() || raw_path.starts_with('/') {
+        raw_path
+    } else {
+        runtime_root.join(path).to_string_lossy().to_string()
+    }
 }
 
 fn redacted_secret(value: &str) -> &'static str {

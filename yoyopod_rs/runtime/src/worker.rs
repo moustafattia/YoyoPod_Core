@@ -10,6 +10,8 @@ use serde_json::{json, Value};
 use crate::protocol::{EnvelopeKind, WorkerEnvelope, SUPPORTED_SCHEMA_VERSION};
 use crate::state::WorkerDomain;
 
+pub const MAX_PRESERVED_READY_MESSAGES: usize = 32;
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct WorkerSpec {
     pub domain: WorkerDomain,
@@ -178,7 +180,7 @@ impl WorkerSupervisor {
                 prepend_pending(worker, preserved);
                 return true;
             }
-            preserved.push_back(message);
+            preserve_ready_backlog(&mut preserved, message);
         }
 
         while Instant::now() < deadline {
@@ -187,7 +189,7 @@ impl WorkerSupervisor {
                     prepend_pending(worker, preserved);
                     return true;
                 }
-                preserved.push_back(message);
+                preserve_ready_backlog(&mut preserved, message);
             }
             thread::sleep(Duration::from_millis(20));
         }
@@ -322,6 +324,13 @@ fn drain_worker_messages(worker: &mut WorkerProcess, limit: usize) -> Vec<Worker
 fn prepend_pending(worker: &mut WorkerProcess, mut preserved: VecDeque<WorkerEnvelope>) {
     preserved.append(&mut worker.pending_messages);
     worker.pending_messages = preserved;
+}
+
+fn preserve_ready_backlog(backlog: &mut VecDeque<WorkerEnvelope>, message: WorkerEnvelope) {
+    if backlog.len() == MAX_PRESERVED_READY_MESSAGES {
+        let _ = backlog.pop_front();
+    }
+    backlog.push_back(message);
 }
 
 fn all_worker_domains() -> [WorkerDomain; 6] {
