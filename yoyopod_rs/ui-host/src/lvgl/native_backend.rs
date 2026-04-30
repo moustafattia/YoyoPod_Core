@@ -8,6 +8,7 @@ use anyhow::{anyhow, bail, Context, Result};
 
 use crate::framebuffer::Framebuffer;
 use crate::lvgl::sys;
+use crate::lvgl::theme::{self, WidgetStyle};
 use crate::lvgl::{LvglFacade, WidgetId};
 
 const DEFAULT_WIDTH: i32 = 240;
@@ -215,9 +216,17 @@ impl NativeLvglFacade {
             .display_size
             .map(|(width, height)| (width as i32, height as i32))
             .unwrap_or((DEFAULT_WIDTH, DEFAULT_HEIGHT));
-        unsafe {
-            sys::lv_obj_set_size(blank.as_ptr(), size.0, size.1);
-        }
+        Self::reset_style_raw(blank);
+        Self::apply_style_raw(blank, theme::style_for_role("root"));
+        Self::apply_layout_raw(
+            blank,
+            Layout {
+                x: 0,
+                y: 0,
+                width: size.0,
+                height: size.1,
+            },
+        );
         self.blank_screen = Some(blank);
         Ok(blank)
     }
@@ -243,6 +252,47 @@ impl NativeLvglFacade {
         unsafe {
             sys::lv_obj_set_pos(obj.as_ptr(), layout.x, layout.y);
             sys::lv_obj_set_size(obj.as_ptr(), layout.width.max(1), layout.height.max(1));
+        }
+    }
+
+    fn reset_style_raw(obj: NonNull<sys::lv_obj_t>) {
+        unsafe {
+            sys::lv_obj_remove_style_all(obj.as_ptr());
+        }
+    }
+
+    fn apply_style_raw(obj: NonNull<sys::lv_obj_t>, style: WidgetStyle) {
+        const SELECTOR: sys::LvStyleSelector = 0;
+
+        unsafe {
+            if let Some(bg_color) = style.bg_color {
+                sys::lv_obj_set_style_bg_color(
+                    obj.as_ptr(),
+                    sys::lv_color_hex(bg_color & 0xFFFFFF),
+                    SELECTOR,
+                );
+            }
+            sys::lv_obj_set_style_bg_opa(obj.as_ptr(), style.bg_opa, SELECTOR);
+
+            if let Some(text_color) = style.text_color {
+                sys::lv_obj_set_style_text_color(
+                    obj.as_ptr(),
+                    sys::lv_color_hex(text_color & 0xFFFFFF),
+                    SELECTOR,
+                );
+            }
+
+            if let Some(border_color) = style.border_color {
+                sys::lv_obj_set_style_border_color(
+                    obj.as_ptr(),
+                    sys::lv_color_hex(border_color & 0xFFFFFF),
+                    SELECTOR,
+                );
+            }
+            sys::lv_obj_set_style_border_width(obj.as_ptr(), style.border_width, SELECTOR);
+            sys::lv_obj_set_style_radius(obj.as_ptr(), style.radius, SELECTOR);
+            sys::lv_obj_set_style_outline_width(obj.as_ptr(), style.outline_width, SELECTOR);
+            sys::lv_obj_set_style_shadow_width(obj.as_ptr(), style.shadow_width, SELECTOR);
         }
     }
 
@@ -472,6 +522,8 @@ impl LvglFacade for NativeLvglFacade {
         let obj = unsafe { sys::lv_obj_create(ptr::null_mut()) };
         let obj = NonNull::new(obj).ok_or_else(|| anyhow!("LVGL root widget creation failed"))?;
         let layout = self.layout_for_root();
+        Self::reset_style_raw(obj);
+        Self::apply_style_raw(obj, theme::style_for_role("root"));
         Self::apply_layout_raw(obj, layout);
         unsafe {
             sys::lv_screen_load(obj.as_ptr());
@@ -489,6 +541,8 @@ impl LvglFacade for NativeLvglFacade {
         let obj = NonNull::new(obj)
             .ok_or_else(|| anyhow!("LVGL container creation failed for {role}"))?;
         let layout = self.next_role_layout(Some(parent), role)?;
+        Self::reset_style_raw(obj);
+        Self::apply_style_raw(obj, theme::style_for_role(role));
         Self::apply_layout_raw(obj, layout);
         Ok(self.register_widget(obj, WidgetKind::Container, role, Some(parent), layout))
     }
@@ -499,6 +553,8 @@ impl LvglFacade for NativeLvglFacade {
         let obj =
             NonNull::new(obj).ok_or_else(|| anyhow!("LVGL label creation failed for {role}"))?;
         let layout = self.next_role_layout(Some(parent), role)?;
+        Self::reset_style_raw(obj);
+        Self::apply_style_raw(obj, theme::style_for_role(role));
         Self::apply_layout_raw(obj, layout);
         let empty = CString::new("").expect("empty CString");
         unsafe {
@@ -529,6 +585,10 @@ impl LvglFacade for NativeLvglFacade {
                 layout.x -= 6;
                 layout.width += 12;
             }
+            Self::apply_style_raw(
+                node.obj,
+                theme::style_for_selected_role(node.role, _selected),
+            );
             Self::apply_layout_raw(node.obj, layout);
         }
         Ok(())

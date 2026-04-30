@@ -19,7 +19,16 @@ pub struct lv_area_t {
     pub y2: i32,
 }
 
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub struct lv_color_t {
+    pub blue: u8,
+    pub green: u8,
+    pub red: u8,
+}
+
 pub type LvDisplayFlushCb = unsafe extern "C" fn(*mut lv_display_t, *const lv_area_t, *mut u8);
+pub type LvStyleSelector = u32;
 
 pub const LV_DISPLAY_RENDER_MODE_PARTIAL: i32 = 0;
 
@@ -45,6 +54,8 @@ unsafe extern "C" {
     pub fn lv_display_flush_ready(display: *mut lv_display_t);
     pub fn lv_display_get_screen_active(display: *mut lv_display_t) -> *mut lv_obj_t;
 
+    pub fn lv_color_hex(color: u32) -> lv_color_t;
+
     pub fn lv_obj_create(parent: *mut lv_obj_t) -> *mut lv_obj_t;
     pub fn lv_obj_delete(obj: *mut lv_obj_t);
     pub fn lv_obj_set_pos(obj: *mut lv_obj_t, x: i32, y: i32);
@@ -52,6 +63,31 @@ unsafe extern "C" {
     pub fn lv_obj_set_width(obj: *mut lv_obj_t, width: i32);
     pub fn lv_obj_set_height(obj: *mut lv_obj_t, height: i32);
     pub fn lv_obj_invalidate(obj: *mut lv_obj_t);
+    pub fn lv_obj_remove_style_all(obj: *mut lv_obj_t);
+    pub fn lv_obj_set_style_bg_color(
+        obj: *mut lv_obj_t,
+        value: lv_color_t,
+        selector: LvStyleSelector,
+    );
+    pub fn lv_obj_set_style_bg_opa(obj: *mut lv_obj_t, value: u8, selector: LvStyleSelector);
+    pub fn lv_obj_set_style_text_color(
+        obj: *mut lv_obj_t,
+        value: lv_color_t,
+        selector: LvStyleSelector,
+    );
+    pub fn lv_obj_set_style_border_color(
+        obj: *mut lv_obj_t,
+        value: lv_color_t,
+        selector: LvStyleSelector,
+    );
+    pub fn lv_obj_set_style_border_width(obj: *mut lv_obj_t, value: i32, selector: LvStyleSelector);
+    pub fn lv_obj_set_style_radius(obj: *mut lv_obj_t, value: i32, selector: LvStyleSelector);
+    pub fn lv_obj_set_style_outline_width(
+        obj: *mut lv_obj_t,
+        value: i32,
+        selector: LvStyleSelector,
+    );
+    pub fn lv_obj_set_style_shadow_width(obj: *mut lv_obj_t, value: i32, selector: LvStyleSelector);
 
     pub fn lv_label_create(parent: *mut lv_obj_t) -> *mut lv_obj_t;
     pub fn lv_label_set_text(obj: *mut lv_obj_t, text: *const c_char);

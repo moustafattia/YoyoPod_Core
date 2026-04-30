@@ -1,6 +1,6 @@
 use anyhow::Result;
 use yoyopod_ui_host::lvgl::{
-    CallController, LvglFacade, LvglRenderer, OverlayController, PowerController, SceneKey,
+    theme, CallController, LvglFacade, LvglRenderer, OverlayController, PowerController, SceneKey,
     ScreenController, WidgetId,
 };
 use yoyopod_ui_host::runtime::UiScreen;
@@ -140,6 +140,25 @@ impl LvglFacade for FakeFacade {
         }
         Ok(())
     }
+}
+
+#[test]
+fn theme_styles_keep_native_lvgl_away_from_default_white_widgets() {
+    let root = theme::style_for_role("root");
+    assert_eq!(root.bg_color, Some(theme::BACKGROUND_RGB));
+    assert_eq!(root.bg_opa, theme::OPA_COVER);
+    assert_ne!(root.bg_color, Some(0xFFFFFF));
+
+    let title = theme::style_for_role("list_title");
+    assert_eq!(title.text_color, Some(theme::INK_RGB));
+
+    let row = theme::style_for_role("list_row");
+    assert_eq!(row.bg_color, Some(theme::SURFACE_RAISED_RGB));
+    assert_eq!(row.border_color, Some(theme::BORDER_RGB));
+
+    let selected_row = theme::style_for_selected_role("list_row", true);
+    assert_eq!(selected_row.bg_color, Some(theme::ACCENT_CYAN_RGB));
+    assert_eq!(selected_row.border_color, Some(theme::ACCENT_CYAN_RGB));
 }
 
 #[test]

@@ -5,12 +5,13 @@ mod native_backend;
 pub mod primitives;
 #[cfg(feature = "native-lvgl")]
 pub mod sys;
+pub mod theme;
 
 use std::path::Path;
 
-use anyhow::{anyhow, Result};
 #[cfg(not(feature = "native-lvgl"))]
 use anyhow::bail;
+use anyhow::{anyhow, Result};
 
 use crate::runtime::UiScreen;
 use crate::screens::ScreenModel;
