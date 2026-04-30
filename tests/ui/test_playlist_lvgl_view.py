@@ -5,10 +5,11 @@ from __future__ import annotations
 from pathlib import Path
 
 from yoyopod.core import AppContext
-from yoyopod.backends.music import MockMusicBackend
+from yoyopod.backends.music import MockMusicBackend, Playlist
 from yoyopod.integrations.music import LocalMusicService
 from yoyopod.ui.input import InteractionProfile
 from yoyopod.ui.screens.music.playlist import PlaylistScreen
+from yoyopod.ui.screens.manager import ScreenManager, VisibleTickRefreshResult
 
 
 class FakeLvglBinding:
@@ -54,6 +55,21 @@ class FakeLvglDisplay:
 
     def is_portrait(self) -> bool:
         return True
+
+
+class SnapshotOwnedPlaylistBackend:
+    owns_library_state = True
+
+    def __init__(self, *, library_state_ready: bool) -> None:
+        self.library_state_ready = library_state_ready
+
+    @property
+    def is_connected(self) -> bool:
+        return False
+
+    def list_playlists(self, fetch_track_counts: bool = False) -> list[Playlist]:
+        assert fetch_track_counts is True
+        return [Playlist(uri="/music/Alpha.m3u", name="Alpha", track_count=3)]
 
 
 def _write_playlist(path: Path, track_count: int) -> None:
@@ -229,5 +245,31 @@ def test_playlist_screen_recovers_after_music_backend_connects(tmp_path: Path) -
     backend.start()
     screen.render()
 
+    assert binding.playlist_sync_payloads[-1]["items"] == ["Alpha"]
+    assert binding.playlist_sync_payloads[-1]["badges"] == ["3"]
+
+
+def test_playlist_screen_visible_tick_recovers_after_library_snapshot_arrives() -> None:
+    """PlaylistScreen should repopulate after Rust-owned library state becomes ready."""
+
+    binding = FakeLvglBinding()
+    display = FakeLvglDisplay(binding)
+    backend = SnapshotOwnedPlaylistBackend(library_state_ready=False)
+    screen = PlaylistScreen(
+        display,
+        AppContext(interaction_profile=InteractionProfile.ONE_BUTTON),
+        music_service=LocalMusicService(backend),
+    )
+    manager = ScreenManager(display)
+    manager.register_screen("playlists", screen)
+    manager.push_screen("playlists")
+    assert manager.flush_pending_navigation_refresh() is True
+
+    assert binding.playlist_sync_payloads[-1]["items"] == []
+    assert binding.playlist_sync_payloads[-1]["empty_subtitle"] == "Music offline"
+
+    backend.library_state_ready = True
+
+    assert manager.refresh_current_screen_for_visible_tick() is VisibleTickRefreshResult.RENDERED
     assert binding.playlist_sync_payloads[-1]["items"] == ["Alpha"]
     assert binding.playlist_sync_payloads[-1]["badges"] == ["3"]

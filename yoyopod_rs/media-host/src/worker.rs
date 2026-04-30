@@ -98,6 +98,7 @@ where
                             continue;
                         }
 
+                        let request_id = envelope.request_id.clone();
                         match handle_command(envelope, &mut host) {
                             Ok(outcome) => {
                                 for envelope in &outcome.envelopes {
@@ -114,7 +115,7 @@ where
                                     output,
                                     &WorkerEnvelope::error(
                                         "media.error",
-                                        None,
+                                        request_id,
                                         "command_failed",
                                         error.to_string(),
                                     ),

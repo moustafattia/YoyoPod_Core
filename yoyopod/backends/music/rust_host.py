@@ -75,6 +75,7 @@ class RustHostBackend:
         self._playback_state = "stopped"
         self._time_position_ms = 0
         self._volume_percent = 100
+        self._library_state_ready = False
         self._playlists: list[Playlist] = []
         self._recent_tracks: list[Any] = []
         self._menu_items: list[Any] = []
@@ -178,6 +179,7 @@ class RustHostBackend:
             self._current_track = None
             self._playback_state = "stopped"
             self._time_position_ms = 0
+            self._library_state_ready = False
 
     @property
     def is_connected(self) -> bool:
@@ -189,6 +191,10 @@ class RustHostBackend:
         return self._starting or self._warm_start_pending or (
             thread is not None and thread.is_alive()
         )
+
+    @property
+    def library_state_ready(self) -> bool:
+        return self._library_state_ready
 
     def play(self) -> bool:
         return self._send("media.play", {})
@@ -520,6 +526,7 @@ class RustHostBackend:
         self._starting = False
         self._warm_start_pending = False
         self.running = False
+        self._library_state_ready = False
         for pending in pending_requests:
             self._complete_pending_request_once(
                 pending,
@@ -546,6 +553,7 @@ class RustHostBackend:
         self._time_position_ms = next_time_position_ms
         if next_volume >= 0:
             self._volume_percent = next_volume
+        self._library_state_ready = True
         self._playlists = next_playlists
         self._recent_tracks = next_recent_tracks
         self._menu_items = next_menu_items
