@@ -20,7 +20,7 @@ If the file does not exist yet, run `yoyopod remote config edit` first. That com
    yoyopod remote mode status
    ```
 
-2. **Restart and verify the dev app service.** Run:
+2. **Restart and verify the dev lane service.** Run:
    ```bash
    yoyopod remote restart
    ```
@@ -31,4 +31,6 @@ If the file does not exist yet, run `yoyopod remote config edit` first. That com
    ```
    Include the relevant error output in your response.
 
-Report whether the dev lane restart succeeded. For prod, report `yoyopod remote release status` instead of using this skill.
+Report whether the dev lane restart succeeded and whether the service came up
+as `yoyopod-runtime` or the Python fallback. For prod, report
+`yoyopod remote release status` instead of using this skill.

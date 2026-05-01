@@ -1,60 +1,68 @@
-# Quality Gates
+# Verification Policy
 
-This repo now owns one obvious local command that mirrors current CI expectations:
+The project is now Rust-first for runtime work. The old Python quality gate is
+not the default local pre-commit or pre-push requirement for Rust runtime,
+worker, or LVGL scene work.
 
-```bash
-uv run python scripts/quality.py ci
-```
+## Rust Runtime Checks
 
-That command runs:
-
-- the staged quality gate: `uv run python scripts/quality.py gate`
-- the Python test suite: `uv run pytest -q`
-
-CI currently runs those same two steps in separate jobs.
-
-## Local CI mirror
-
-Use `ci` as the default local before-PR command when you want the same gate-plus-tests contract CI expects.
-
-## Staged gate
-
-The staged gate currently covers the developer-workflow surface tracked in `[tool.yoyopod_quality]` inside `pyproject.toml`:
-
-- `scripts/quality.py`
-- `yoyopod/main.py`
-- `yoyopod_cli/`
-
-The gate enforces:
-
-- `black --check`
-- `ruff check`
-- `mypy`
-
-That means pull requests can no longer regress the entrypoint and Pi workflow tooling without CI calling it out.
-
-## Ungated now
-
-Everything outside the staged target lists above is still outside the lint/type/format gate.
-
-That is deliberate, not hidden:
-
-- full-repo `black --check` still wants to rewrite a large chunk of the tree
-- full-repo `ruff check .` still reports existing violations outside the gated workflow surface
-- full-repo `mypy yoyopod` still reports substantial legacy type debt outside the gated workflow surface
-
-You can measure the current full-repo debt with:
+Use focused Rust checks for the crate you changed:
 
 ```bash
-uv run python scripts/quality.py audit
+cargo test --manifest-path yoyopod_rs/Cargo.toml -p yoyopod-runtime --locked
+cargo test --manifest-path yoyopod_rs/Cargo.toml -p yoyopod-ui-host --locked
+cargo test --manifest-path yoyopod_rs/Cargo.toml -p yoyopod-media-host --locked
+cargo test --manifest-path yoyopod_rs/Cargo.toml -p yoyopod-voip-host --locked
+cargo test --manifest-path yoyopod_rs/Cargo.toml -p yoyopod-network-host --locked
 ```
 
-## Path to full gating
+For broad Rust workspace changes:
 
-The rollout path is explicit:
+```bash
+cargo test --manifest-path yoyopod_rs/Cargo.toml --workspace --locked
+```
 
-1. Clean one subsystem at a time with `uv run python scripts/quality.py audit`.
-2. Expand the `[tool.yoyopod_quality]` gate target lists in `pyproject.toml`.
-3. Once the repo is clean enough, replace the staged lists with whole-tree targets.
+If native LVGL or Whisplay hardware features are involved, use the CI-built ARM
+artifact for the exact commit before claiming hardware parity.
 
-The point is to make progress visible and enforceable without pretending the repo is already cleaner than it is.
+## Hardware Checks
+
+The Raspberry Pi is the real validation target for runtime ownership, display,
+button input, audio, SIP, modem, power, and LVGL behavior.
+
+Normal committed-code flow:
+
+```bash
+git rev-parse HEAD
+yoyopod remote mode activate dev
+yoyopod remote validate --branch <branch> --sha <commit> --with-rust-ui-host --with-lvgl-soak
+```
+
+When testing `yoyopod-runtime`, install the exact-SHA Rust artifacts first. See
+`skills/yoyopod-rust-artifact/SKILL.md`.
+
+## Python Checks
+
+Python remains for CLI, deployment, compatibility, and selected tests. Run
+targeted Python tests when those surfaces change:
+
+```bash
+uv run pytest -q tests/cli
+uv run pytest -q tests/deploy
+```
+
+The legacy wrapper still exists for Python CI maintenance, but it is no longer
+documented as a default local gate. Use it only when you are working on Python
+tooling, fixing CI, or explicitly asked to mirror the current Python CI jobs.
+Do not treat it as the default gate for Rust runtime iteration.
+
+## Reporting
+
+Always report the checks that actually ran. For hardware validation, include:
+
+- branch
+- exact commit SHA
+- artifact names and CI run ID
+- active runtime owner (`yoyopod-runtime` or Python fallback)
+- Pi command result
+- whether the dev service was left running

@@ -28,20 +28,27 @@ If the file does not exist yet, run `yoyopod remote config edit` first. That com
    yoyopod remote sync
    ```
 
-4. **If branch switching may have stale native CMake caches,** run:
+4. **Remember what sync does not do.** Dirty sync can update Python, config,
+   docs, and native C shim sources. It does not create trustworthy Rust
+   binaries for Pi validation. For Rust runtime/worker binaries, use exact-SHA
+   CI artifacts from `skills/yoyopod-rust-artifact/SKILL.md`.
+
+5. **If branch switching may have stale native CMake caches,** run:
    ```bash
    yoyopod remote sync --clean-native
    ```
 
-5. **If the user explicitly wants sync without restart,** run:
+6. **If the user explicitly wants sync without restart,** run:
    ```bash
    yoyopod remote sync --skip-restart
    ```
 
-6. **Handle failures.** If the sync or restart step fails, run:
+7. **Handle failures.** If the sync or restart step fails, run:
    ```bash
    yoyopod remote logs --lines 20
    ```
    Include the relevant error output in your response.
 
-7. **Report the result clearly.** Say that this mutated the dev lane checkout, was a dirty-tree validation override, and was not the normal committed branch/SHA workflow.
+8. **Report the result clearly.** Say that this mutated the dev lane checkout,
+   was a dirty-tree validation override, was not the normal committed branch/SHA
+   workflow, and did not replace the exact-artifact Rust validation path.

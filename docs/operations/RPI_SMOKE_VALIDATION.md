@@ -1,21 +1,22 @@
 # Raspberry Pi Smoke Validation
 
-This guide separates CI-safe checks from the target-hardware checks that still require a Raspberry Pi, the mpv music backend, and a reachable SIP account.
+This guide separates local Rust checks from the target-hardware checks that
+still require a Raspberry Pi, the mpv music backend, and a reachable SIP
+account.
 
 The default board-validation path from the dev machine is now committed-code validation through `yoyopod remote validate`.
 
 ## Validation Layers
 
-### 1. CI-safe Python checks
+### 1. Local Rust checks
 
 Run these anywhere:
 
 ```bash
-uv sync --extra dev
-uv run python scripts/quality.py ci
+cargo test --manifest-path yoyopod_rs/Cargo.toml --workspace --locked
 ```
 
-This mirrors the same staged gate plus pure-Python regression suite CI expects.
+Use targeted Python CLI/deploy checks only when that surface changed.
 
 ### 2. Default dev-machine-to-board validation
 
@@ -104,7 +105,9 @@ Useful flags:
 ### Full application startup on the Pi
 
 ```bash
-uv run python yoyopod.py
+YOYOPOD_DEV_RUNTIME=rust /opt/yoyopod-dev/checkout/yoyopod_rs/runtime/build/yoyopod-runtime \
+  --config-dir /opt/yoyopod-dev/checkout/config \
+  --hardware whisplay
 ```
 
 Verify:
@@ -273,12 +276,13 @@ Use this when you want a focused battery, charging, RTC, shutdown-threshold, and
 
 ## Suggested Order On Hardware
 
-1. `uv sync --extra dev`
-2. `uv run python scripts/quality.py ci`
+1. Run focused Rust tests for the changed crates.
+2. Commit the intended change.
 3. `git push`
 4. `git rev-parse HEAD`
-5. `yoyopod remote validate --branch <branch> --sha <commit> --with-music --with-voip`
-6. manual follow-up on the still-running app
+5. Install exact-SHA Rust artifacts when testing the Rust runtime owner.
+6. `yoyopod remote validate --branch <branch> --sha <commit> --with-music --with-voip`
+7. manual follow-up on the still-running app
 
 ## Dirty-Tree Escape Hatch
 

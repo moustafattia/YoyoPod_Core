@@ -296,12 +296,13 @@ tool.
 When you are checking whether an architecture change regressed the Pi, use this
 order:
 
-1. Run `uv run python scripts/quality.py gate && uv run pytest -q`.
-2. Run `yoyopod remote validate --branch <branch> --sha <commit> --with-music --with-voip --with-navigation`.
-3. Inspect `coord` and `comm` log warnings first.
-4. Compare `simulate-bootstrap` or `simulate-loop` with `yoyopod dev profile`.
-5. If the Pi still looks CPU-bound, attach `py-spy`.
-6. If the time is disappearing into native code or scheduling, use `perf`.
+1. Run focused Rust tests for the runtime/worker crates you changed.
+2. Install exact-SHA Rust artifacts when profiling the Rust owner.
+3. Run `yoyopod remote validate --branch <branch> --sha <commit> --with-music --with-voip --with-navigation`.
+4. Inspect `coord` and `comm` log warnings first.
+5. Compare `simulate-bootstrap` or `simulate-loop` with `yoyopod dev profile`.
+6. If the Pi still looks CPU-bound, attach `py-spy`.
+7. If the time is disappearing into native code or scheduling, use `perf`.
 
 That order keeps the cheapest and most repo-specific signals first, and only
 drops to heavier system profilers when the app's own diagnostics are not enough.

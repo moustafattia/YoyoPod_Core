@@ -1,6 +1,6 @@
 ---
 name: yoyopod-screenshot
-description: Capture a screenshot of the app's display from Raspberry Pi
+description: Capture a screenshot of the active YoYoPod display from Raspberry Pi
 disable-model-invocation: true
 allowed-tools:
   - Read
@@ -22,7 +22,7 @@ Parse the arguments string provided after `/yoyopod-screenshot`:
 
 ## Steps
 
-1. **Check which lane owns the display.**
+1. **Check which lane/runtime owns the display.**
    ```bash
    yoyopod remote mode status
    ```
