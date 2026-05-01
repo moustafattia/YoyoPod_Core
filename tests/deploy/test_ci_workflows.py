@@ -125,6 +125,26 @@ def test_runtime_bazel_integration_tests_register_all_runtime_tests() -> None:
         assert f'"{test_name}"' in build_file
 
 
+def test_network_host_bazel_integration_tests_register_all_network_tests() -> None:
+    build_file = (
+        REPO_ROOT / "yoyopod_rs" / "network-host" / "BUILD.bazel"
+    ).read_text(encoding="utf-8")
+
+    for test_name in (
+        "config",
+        "gps",
+        "lifecycle",
+        "ppp",
+        "protocol",
+        "runtime_snapshot",
+        "worker",
+    ):
+        assert f'"{test_name}"' in build_file
+
+    assert '"lifecycle": ["tests/support/mod.rs"]' in build_file
+    assert '"worker": ["tests/support/mod.rs"]' in build_file
+
+
 def test_rust_ui_worker_lockfile_is_committable_for_locked_ci_builds() -> None:
     assert RUST_UI_LOCK.exists()
 

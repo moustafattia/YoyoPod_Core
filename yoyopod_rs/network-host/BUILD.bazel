@@ -21,9 +21,12 @@ yoyopod_rust_host_binary(
 )
 
 NETWORK_HOST_TESTS = [
+    "config",
     "gps",
+    "lifecycle",
     "ppp",
     "protocol",
+    "runtime_snapshot",
     "worker",
 ]
 
@@ -31,4 +34,8 @@ yoyopod_rust_host_integration_tests(
     name = "tests",
     tests = NETWORK_HOST_TESTS,
     deps = [":network_host_lib"],
+    extra_srcs_by_test = {
+        "lifecycle": ["tests/support/mod.rs"],
+        "worker": ["tests/support/mod.rs"],
+    },
 )
