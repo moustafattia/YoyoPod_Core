@@ -992,7 +992,7 @@ impl LvglFacade for NativeLvglFacade {
 impl NativeLvglFacade {
     fn apply_accent_raw(obj: NonNull<sys::lv_obj_t>, role: &'static str, rgb: u32) {
         const SELECTOR: sys::LvStyleSelector = 0;
-        let accent = sys::lv_color_hex(rgb & 0xFFFFFF);
+        let accent = unsafe { sys::lv_color_hex(rgb & 0xFFFFFF) };
         unsafe {
             match role {
                 "hub_icon_glow" | "talk_card_glow" | "call_icon_halo" => {
