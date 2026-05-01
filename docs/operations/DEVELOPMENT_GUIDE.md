@@ -133,13 +133,19 @@ Current approved-contacts behavior:
 
 ## Running
 
-Production app:
+Rust runtime dry run:
+
+```bash
+cargo run --manifest-path yoyopod_rs/Cargo.toml -p yoyopod-runtime -- --config-dir config --dry-run
+```
+
+Legacy Python fallback:
 
 ```bash
 python yoyopod.py
 ```
 
-Simulation:
+Legacy Python simulation:
 
 ```bash
 yoyopod build simulation
@@ -165,15 +171,17 @@ python demos/demo_runtime_state.py --simulate
 Local validation:
 
 ```bash
-uv run python scripts/quality.py gate
-uv run pytest -q
-uv run python scripts/quality.py ci
+cargo test --manifest-path yoyopod_rs/Cargo.toml --workspace --locked
 ```
 
-CI currently runs `uv run python scripts/quality.py gate` plus `uv run pytest -q`.
-Use `uv run python scripts/quality.py ci` as the local wrapper when you want both in one command.
+Run targeted Python checks only when Python CLI/deploy/compatibility files
+change:
 
-Optional extra syntax/import smoke for broad tree changes:
+```bash
+uv run pytest -q tests/cli tests/deploy
+```
+
+Optional extra syntax/import smoke for broad Python tree changes:
 
 ```bash
 python -m compileall yoyopod tests demos scripts

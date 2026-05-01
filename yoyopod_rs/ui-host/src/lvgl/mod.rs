@@ -1,27 +1,35 @@
 mod chrome;
 pub mod controllers;
 #[cfg(feature = "native-lvgl")]
+mod hub_icon_assets;
+#[cfg(feature = "native-lvgl")]
 mod native_backend;
 pub mod primitives;
+pub mod scene_backend;
 #[cfg(feature = "native-lvgl")]
 pub mod sys;
+pub mod theme;
 
 use std::path::Path;
 
-use anyhow::{anyhow, Result};
 #[cfg(not(feature = "native-lvgl"))]
 use anyhow::bail;
+use anyhow::{anyhow, Result};
 
 use crate::runtime::UiScreen;
 use crate::screens::ScreenModel;
 
 pub use controllers::{
-    AskController, CallController, HubController, ListController, NowPlayingController,
-    OverlayController, PowerController, ScreenController,
+    AskController, CallController, HubController, ListController, ListenController,
+    NowPlayingController, OverlayController, PlaylistController, PowerController, ScreenController,
+    TalkActionsController, TalkController,
 };
 #[cfg(feature = "native-lvgl")]
 pub use native_backend::NativeLvglFacade;
 pub use primitives::WidgetId;
+#[cfg(feature = "native-lvgl")]
+pub use scene_backend::ShimSceneBridge;
+pub use scene_backend::{NativeSceneRenderer, RustSceneBridge, SceneBridge};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SceneKey {
@@ -65,6 +73,61 @@ impl SceneKey {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NativeSceneKey {
+    Hub,
+    Listen,
+    Playlist,
+    NowPlaying,
+    Talk,
+    TalkActions,
+    IncomingCall,
+    OutgoingCall,
+    InCall,
+    Ask,
+    Power,
+    Overlay,
+}
+
+impl NativeSceneKey {
+    pub const fn for_screen(screen: UiScreen) -> Self {
+        match screen {
+            UiScreen::Hub => Self::Hub,
+            UiScreen::Listen => Self::Listen,
+            UiScreen::Playlists
+            | UiScreen::RecentTracks
+            | UiScreen::Contacts
+            | UiScreen::CallHistory => Self::Playlist,
+            UiScreen::NowPlaying => Self::NowPlaying,
+            UiScreen::Talk => Self::Talk,
+            UiScreen::VoiceNote => Self::TalkActions,
+            UiScreen::IncomingCall => Self::IncomingCall,
+            UiScreen::OutgoingCall => Self::OutgoingCall,
+            UiScreen::InCall => Self::InCall,
+            UiScreen::Ask => Self::Ask,
+            UiScreen::Power => Self::Power,
+            UiScreen::Loading | UiScreen::Error => Self::Overlay,
+        }
+    }
+
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Hub => "hub",
+            Self::Listen => "listen",
+            Self::Playlist => "playlist",
+            Self::NowPlaying => "now_playing",
+            Self::Talk => "talk",
+            Self::TalkActions => "talk_actions",
+            Self::IncomingCall => "incoming_call",
+            Self::OutgoingCall => "outgoing_call",
+            Self::InCall => "in_call",
+            Self::Ask => "ask",
+            Self::Power => "power",
+            Self::Overlay => "overlay",
+        }
+    }
+}
+
 pub trait LvglFacade {
     fn create_root(&mut self) -> Result<WidgetId>;
 
@@ -81,6 +144,11 @@ pub trait LvglFacade {
     fn set_progress(&mut self, widget: WidgetId, value: i32) -> Result<()>;
 
     fn set_visible(&mut self, widget: WidgetId, visible: bool) -> Result<()>;
+
+    fn set_accent(&mut self, widget: WidgetId, rgb: u32) -> Result<()> {
+        let _ = (widget, rgb);
+        Ok(())
+    }
 
     fn destroy(&mut self, widget: WidgetId) -> Result<()>;
 }
@@ -119,6 +187,10 @@ where
 
     fn set_visible(&mut self, widget: WidgetId, visible: bool) -> Result<()> {
         (**self).set_visible(widget, visible)
+    }
+
+    fn set_accent(&mut self, widget: WidgetId, rgb: u32) -> Result<()> {
+        (**self).set_accent(widget, rgb)
     }
 
     fn destroy(&mut self, widget: WidgetId) -> Result<()> {

@@ -1,20 +1,21 @@
 # YoYoPod - Agent Instructions
 
-Last Updated: 2026-04-28
+Last Updated: 2026-05-01
 Target Hardware: Raspberry Pi Zero 2W
-Project: iPod-inspired VoIP + local music device with small-screen button UI
+Project: Rust-first iPod-inspired VoIP + local music device with small-screen button UI
 
 Purpose
-- Keep this file small. It is the always-loaded agent brief, not a dump of the whole codebase.
-- For detail, read the referenced docs instead of stuffing more into this file.
+- Keep this file small. It is the always-loaded agent brief, not a full design doc.
+- Current code beats old plans. Treat Python runtime docs as legacy unless the
+  current code still routes through them.
 
 Guidance order
-1. Current code in `yoyopod/`
-2. `README.md` and `docs/README.md`
-3. `rules/` for constraints and style
-4. This file for quick operating context
+1. Current Rust code in `yoyopod_rs/`
+2. Current deploy/runtime code in `deploy/`, `yoyopod_cli/`, and `yoyopod/`
+3. `README.md`, `docs/README.md`, and current operation docs
+4. `rules/` for constraints and style
 5. `skills/` for deploy/debug playbooks
-6. `.claude/` and `.agents/` as tool-facing mirrors
+6. Historical plans only when they match current code
 
 Read these rules first
 - `rules/project.md`
@@ -34,81 +35,94 @@ Canonical deploy/debug skills
 - `skills/yoyopod-status/SKILL.md`
 - `skills/yoyopod-screenshot/SKILL.md`
 - `skills/yoyopod-rust-artifact/SKILL.md`
-- `docs/operations/SLOT_DEPLOY.md` (slot-deploy + OTA-ready flow; coexists with the legacy skills above)
+- `docs/operations/SLOT_DEPLOY.md` for prod slot/OTA-ready flow
 
-Current runtime summary
-- Entrypoint: `yoyopod.py` -> `yoyopod.main` -> `YoyoPodApp`
-- Main packages: `yoyopod/core/`, `yoyopod/integrations/`, `yoyopod/backends/`, `yoyopod/ui/`, `yoyopod/config/`
-- Runtime structure: canonical `YoyoPodApp` in `yoyopod/core/application.py`, boot in `yoyopod/core/bootstrap/`, loop in `yoyopod/core/loop.py`, workers in `yoyopod/core/workers/`, diagnostics in `yoyopod/core/diagnostics/`; shared `scheduler -> bus -> ui` runtime seam under `yoyopod/core/`
-- Backends: `yoyopod/backends/{music,voip,voice,cloud,network,power,location}/` — production audio is mpv (`music/`), production VoIP is Liblinphone (`voip/`)
-- UI: `yoyopod/ui/{lvgl_binding,display,input,screens}/` — raw LVGL confined to `lvgl_binding/`
-- Cross-language: Go cloud voice worker under `workers/voice/go/` (separate Go module, gated by CI)
-- Production service templates: `deploy/systemd/`
-- CLI package: `yoyopod_cli/` (flat, single `yoyopod` entry point)
-- Tests: `tests/` (pytest testpath; Python 3.12+)
+Current Runtime Status
+- Rust is the target runtime owner. The top-level Rust entrypoint is
+  `yoyopod_rs/runtime/src/main.rs`, binary `yoyopod-runtime`.
+- `yoyopod-runtime` loads config, owns PID/log lifecycle, supervises worker
+  processes, routes worker events, composes app state, and sends UI snapshots.
+- Rust worker domains live under:
+  - `yoyopod_rs/ui-host/` for Whisplay UI and LVGL rendering
+  - `yoyopod_rs/media-host/` for local music/mpv ownership
+  - `yoyopod_rs/voip-host/` for Liblinphone/SIP ownership
+  - `yoyopod_rs/network-host/` for SIM7600/PPP/GPS ownership
+- The Rust UI host now contains native Rust LVGL scene controllers for the main
+  screen set. The C LVGL shim and LVGL native library still exist as display
+  infrastructure during the transition.
+- Python is no longer the architectural target for the app runtime. It remains
+  for CLI/deploy tooling, compatibility paths, tests, and any domain that has
+  not been fully removed yet.
+- Dev service can run either owner. Rust is selected with
+  `YOYOPOD_DEV_RUNTIME=rust`; the legacy fallback is `python yoyopod.py`.
 
-Pi lanes and bootstrap
-- Dev lane: mutable hardware-testing checkout at `/opt/yoyopod-dev/checkout`, venv at `/opt/yoyopod-dev/venv`, service `yoyopod-dev.service`.
-- Prod lane: immutable packaged slots under `/opt/yoyopod-prod`, service `yoyopod-prod.service`; use `remote release ...`, not `remote sync`.
-- Check lane ownership first with `yoyopod remote mode status`; dev/prod services should not own hardware together.
-- Fresh board: run the curl installer: `curl -fsSL https://raw.githubusercontent.com/moustafattia/yoyopod-core/main/deploy/scripts/install_pi.sh | sudo -E bash -s --`; add `--release-url=<artifact-url>` for first prod install.
-- Migration: `--migrate` preserves old config/logs for reference only. It does not copy old `~/yoyopod-core` into dev; live dev truth is `/opt/yoyopod-dev/checkout`.
-- Hard cut: supported runtime owners are only `yoyopod-dev.service` and `yoyopod-prod.service`; `yoyopod@*.service`, `yoyopod-slot.service`, unmanaged `python yoyopod.py`, and `remote service ...` are legacy contamination paths.
-- Dev deploy loop: `yoyopod remote mode activate dev`, then `yoyopod remote setup` once, then `yoyopod remote sync --branch <branch>`; add `--clean-native` after native/CMake/lib changes or branch switches.
-- Rust binary deploy rule: commit and push first, then use the GitHub Actions artifact for the exact commit under test. Do not build Rust binaries on the Pi Zero 2W with `cargo build` or `yoyopod build rust-ui-poc` unless the user explicitly overrides this rule. Native C shim rebuilds via `--clean-native` remain allowed.
-- Lane details live in `docs/operations/DEV_PROD_LANES.md`, dev workflow in `docs/operations/PI_DEV_WORKFLOW.md`, prod slot/OTA flow in `docs/operations/SLOT_DEPLOY.md`.
+Pi Lanes And Bootstrap
+- Dev lane: mutable hardware-testing checkout at `/opt/yoyopod-dev/checkout`,
+  venv at `/opt/yoyopod-dev/venv`, service `yoyopod-dev.service`.
+- Prod lane: immutable packaged slots under `/opt/yoyopod-prod`, service
+  `yoyopod-prod.service`; use `remote release ...`, not `remote sync`.
+- Check lane ownership first with `yoyopod remote mode status`; dev/prod
+  services should not own hardware together.
+- Hard cut: supported runtime owners are only `yoyopod-dev.service` and
+  `yoyopod-prod.service`; `yoyopod@*.service`, `yoyopod-slot.service`,
+  unmanaged `python yoyopod.py`, and `remote service ...` are contamination
+  paths.
+- Dev deploy loop: `yoyopod remote mode activate dev`, then
+  `yoyopod remote sync --branch <branch>`. Add `--clean-native` after
+  native/CMake/lib changes or branch switches.
+- Rust binary deploy rule: commit and push first, then use GitHub Actions
+  artifacts for the exact commit under test. Do not build Rust binaries on the
+  Pi Zero 2W unless the user explicitly overrides this rule.
 
-Source-of-truth files
-- `yoyopod/core/application.py`
-- `yoyopod/core/bootstrap/`
-- `yoyopod/core/loop.py`
-- `yoyopod/core/bus.py`
-- `yoyopod/core/scheduler.py`
-- `yoyopod/core/events.py`
-- `yoyopod/core/app_state.py`
-- `yoyopod/integrations/`
-- `yoyopod/backends/`
-- `yoyopod/ui/`
+Source Of Truth
+- `yoyopod_rs/runtime/`
+- `yoyopod_rs/ui-host/`
+- `yoyopod_rs/media-host/`
+- `yoyopod_rs/voip-host/`
+- `yoyopod_rs/network-host/`
+- `deploy/systemd/yoyopod-dev.service`
+- `deploy/systemd/yoyopod-prod.service`
 - `yoyopod_cli/main.py`
 - `yoyopod_cli/COMMANDS.md`
-- `README.md`
-- `docs/architecture/SYSTEM_ARCHITECTURE.md`
 - `docs/operations/DEV_PROD_LANES.md`
 - `docs/operations/PI_DEV_WORKFLOW.md`
 - `docs/operations/SLOT_DEPLOY.md`
-- `docs/hardware/POWER_MODULE.md`
 - `docs/architecture/DISPLAY_HAL_ARCHITECTURE.md`
 - `docs/design/WHISPLAY_SIMULATION_PARITY_CONTRACT.md`
-- `docs/features/LOCAL_FIRST_MUSIC_PLAN.md`
-- `docs/architecture/RUNTIME_EVENT_FLOW.md`
-- `docs/operations/QUALITY_GATES.md`
+- `docs/superpowers/specs/2026-04-30-rust-runtime-host-design.md`
 
-High-value commands
-- Install/test env: `uv sync --extra dev`
-- Tests: `uv run pytest -q`
-- **CI quality gate (run before every commit + push):** `uv run python scripts/quality.py gate`
-- **CI test suite (run before every commit + push):** `uv run pytest -q`
-- Pi smoke: `yoyopod pi validate smoke`
+High-Value Commands
+- Rust workspace tests: `cargo test --manifest-path yoyopod_rs/Cargo.toml --workspace --locked`
+- Rust runtime tests: `cargo test --manifest-path yoyopod_rs/Cargo.toml -p yoyopod-runtime --locked`
+- Rust UI tests: `cargo test --manifest-path yoyopod_rs/Cargo.toml -p yoyopod-ui-host --locked`
+- Rust runtime dry run: `cargo run --manifest-path yoyopod_rs/Cargo.toml -p yoyopod-runtime -- --config-dir config --dry-run`
+- Build local artifact on development machine: `uv run yoyopod build rust-runtime`
+- Pi lane status: `yoyopod remote mode status`
+- Pi validation: `yoyopod remote validate --branch <branch> --sha <commit>`
 - Remote operations: `yoyopod remote ...`
-- Dev deploy: `yoyopod remote sync --branch <branch>` after `yoyopod remote mode activate dev`
-- Full command reference: `yoyopod_cli/COMMANDS.md` (auto-generated; regenerate via `yoyopod dev docs`)
+- Command reference: `yoyopod_cli/COMMANDS.md`
 
-Pre-commit rule
-- Before every `git commit` (including `--amend`) and every `git push`, run BOTH commands above. They mirror exactly what CI runs in `.github/workflows/ci.yml` — the `quality` job runs `scripts/quality.py gate` (black + ruff + mypy on gate paths, no pytest), and the `test` job runs `pytest -q` (full suite).
-- Per-file pytest/ruff runs are NOT enough. CI gates format + lint + type + full test suite across the paths in `[tool.yoyopod_quality]`, and rendering/behavior can differ between local terminals and Linux CI (terminal width, color, `COLUMNS` env).
-- Windows note: CI is Linux-only. A handful of tests have known Windows-specific failures (faulthandler, native shim loading, Windows-path/font behavior) that are green on Linux. If you're on Windows and see failures, diff them against the latest green main CI run — flag only NEW failures.
-- When dispatching implementer subagents, include "run `uv run python scripts/quality.py gate && uv run pytest -q` before the final commit step" as an explicit requirement.
+Verification Policy
+- Do not run the old Python quality gate by default. It is no longer the
+  required pre-commit/pre-push path for Rust runtime work.
+- Prefer Rust checks for Rust changes. Run targeted Python tests only when the
+  changed surface is Python CLI/deploy/compatibility code.
+- For hardware work, exact-commit CI artifacts and the Pi result matter more
+  than local Python gates. Always report the commit SHA, artifact names, and
+  hardware command/result.
+- If a CI failure is specifically in Python tooling, fix and verify that Python
+  surface directly; do not let it block unrelated Rust runtime iteration.
 
-Hardware modes
-- Pimoroni Display HAT Mini: landscape + four buttons on the shared LVGL path
-- PiSugar Whisplay: portrait + single button
-- Simulation: shared LVGL browser preview + keyboard/web-button input
+Hardware Modes
+- PiSugar Whisplay: portrait + single button; primary Rust target.
+- Pimoroni Display HAT Mini: landscape + four buttons on shared LVGL path.
+- Simulation: shared LVGL/browser preview remains useful for UI comparison but
+  does not replace Whisplay hardware checks.
 
 Guardrails
 - Prefer narrow, reviewable changes.
-- Keep raw LVGL confined to `yoyopod/ui/lvgl_binding/` and display-layer code.
+- Keep raw LVGL confined to display/LVGL binding layers.
 - Prefer `yoyopod remote` over ad-hoc SSH sequences.
-- Current code and runtime docs beat old plan docs when they disagree.
-- `docs/history/` and `docs/archive/` are history, not truth.
-
-If you need more than this file gives you, read the referenced rules/docs instead of expanding this file again.
+- Use current Rust code and hardware evidence as truth. `docs/history/`,
+  `docs/archive/`, and older Python runtime docs are historical unless proven
+  current.

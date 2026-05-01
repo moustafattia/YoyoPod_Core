@@ -54,18 +54,18 @@ Per-board overrides still belong in `deploy/pi-deploy.local.yaml`.
 - `yoyopod-prod-rollback.service` is triggered by prod service failure.
 - `yoyopod-prod-ota.timer` and `yoyopod-prod-ota.service` are reserved for the OTA poller.
 
-The dev and prod app units conflict with each other. Lane activation also
+The dev and prod runtime units conflict with each other. Lane activation also
 disables and removes unsupported old `yoyopod-slot.service` and
 `yoyopod@<user>.service` unit files, removes `/etc/default/yoyopod`, and stops
-unmanaged `python ... yoyopod.py` app processes before starting the requested
-lane.
+unmanaged `yoyopod-runtime` or `python ... yoyopod.py` processes before
+starting the requested lane.
 
 Before changing lanes, run `yoyopod remote mode status`. It reports:
 
 - `active_lane`: `dev`, `prod`, `legacy`, `manual-process`, `conflict`, or `none`.
 - `legacy_units`: unsupported old `yoyopod@*.service` or `yoyopod-slot.service`
   units that can still own hardware.
-- `manual_processes`: ad hoc `python ... yoyopod.py` or `yoyopod.main` processes.
+- `manual_processes`: ad hoc `yoyopod-runtime`, `python ... yoyopod.py`, or `yoyopod.main` processes.
 - `prod_ota_conflict`: whether prod OTA is active while dev owns the board.
 - `conflict_reasons`: the active conflict sources.
 

@@ -1,6 +1,6 @@
 ---
 name: yoyopod-rust-artifact
-description: Deploy and test Rust binaries from GitHub Actions artifacts instead of building on Raspberry Pi
+description: Deploy and test Rust runtime/worker binaries from GitHub Actions artifacts instead of building on Raspberry Pi
 disable-model-invocation: true
 allowed-tools:
   - Read
@@ -21,51 +21,40 @@ allowed-tools:
 
 Rust binaries for hardware validation must come from GitHub Actions artifacts
 for the exact commit being tested. Do not run `cargo build`,
-`yoyopod build rust-ui-host`, `yoyopod build rust-ui-poc`, or any other Rust
-compile on the Raspberry Pi Zero 2W unless the user explicitly overrides this
-rule.
+`yoyopod build rust-runtime`, `yoyopod build rust-ui-host`,
+`yoyopod build rust-ui-poc`, or any other Rust compile on the Raspberry Pi
+Zero 2W unless the user explicitly overrides this rule.
 
 Native C shim work is different only for LVGL:
 `yoyopod remote sync --clean-native` may still rebuild the LVGL C shim on the
-Pi when native/CMake inputs change. The VoIP host must come from CI artifacts.
+Pi when native/CMake inputs change.
 
-## Rust UI Host Artifact
+## Current Rust Artifact Contract
 
-The Rust UI Host artifact is:
+Use the artifact whose suffix equals the exact commit under test, not a pull
+request merge SHA.
 
-```bash
-yoyopod-ui-host-<sha>
-```
-
-It contains the ARM64 Linux binary that should be installed at:
+The CI artifact is:
 
 ```bash
-/opt/yoyopod-dev/checkout/yoyopod_rs/ui-host/build/yoyopod-ui-host
+yoyopod-rust-device-arm64-<sha>
 ```
 
-The uploaded binary must come from the CI build with
-`whisplay-hardware,native-lvgl` enabled. The artifact suffix must match the
-exact commit under test, not a pull-request merge SHA.
-
-Do not build `yoyopod-ui-host` on the Raspberry Pi Zero 2W.
-
-## Rust VoIP Host Artifact
-
-The Rust VoIP Host artifact is:
+It contains:
 
 ```bash
-yoyopod-voip-host-<sha>
+yoyopod-rust-device-arm64-<sha>.tar.gz
 ```
 
-Install it at:
+That tarball extracts an install-ready `yoyopod_rs/.../build/...` tree:
 
-```bash
-/opt/yoyopod-dev/checkout/yoyopod_rs/voip-host/build/yoyopod-voip-host
-```
-
-Its artifact suffix must also match the exact commit under test.
-
-Do not build `yoyopod-voip-host` on the Raspberry Pi Zero 2W.
+| Path inside extracted tree | Purpose |
+| --- | --- |
+| `yoyopod_rs/runtime/build/yoyopod-runtime` | Top-level Rust runtime entrypoint when `YOYOPOD_DEV_RUNTIME=rust`. |
+| `yoyopod_rs/ui-host/build/yoyopod-ui-host` | Whisplay UI worker and LVGL renderer. |
+| `yoyopod_rs/media-host/build/yoyopod-media-host` | Rust media/mpv worker. |
+| `yoyopod_rs/voip-host/build/yoyopod-voip-host` | Rust Liblinphone/SIP worker. |
+| `yoyopod_rs/network-host/build/yoyopod-network-host` | Rust SIM7600/PPP/GPS worker. |
 
 ## Steps
 
@@ -93,38 +82,55 @@ Do not build `yoyopod-voip-host` on the Raspberry Pi Zero 2W.
    conclusion is `success`. If the run is still queued or in progress, wait.
    If it failed, inspect the failed job before hardware deploy.
 
-5. **Download the artifact locally.**
+5. **Download and extract the Rust device bundle locally.**
 
    ```bash
-   mkdir -p .artifacts/rust-ui/<sha>
-   gh run download <run-id> --name yoyopod-ui-host-<sha> --dir .artifacts/rust-ui/<sha>
-   chmod +x .artifacts/rust-ui/<sha>/yoyopod-ui-host
+   mkdir -p .artifacts/rust-device/<sha>
+   gh run download <run-id> --name yoyopod-rust-device-arm64-<sha> --dir .artifacts/rust-device/<sha>
+   tar -xzf .artifacts/rust-device/<sha>/yoyopod-rust-device-arm64-<sha>.tar.gz -C .artifacts/rust-device/<sha>
+   chmod +x .artifacts/rust-device/<sha>/yoyopod_rs/runtime/build/yoyopod-runtime
+   chmod +x .artifacts/rust-device/<sha>/yoyopod_rs/ui-host/build/yoyopod-ui-host
+   chmod +x .artifacts/rust-device/<sha>/yoyopod_rs/media-host/build/yoyopod-media-host
+   chmod +x .artifacts/rust-device/<sha>/yoyopod_rs/voip-host/build/yoyopod-voip-host
+   chmod +x .artifacts/rust-device/<sha>/yoyopod_rs/network-host/build/yoyopod-network-host
    ```
 
 6. **Make sure the Pi dev checkout is on the same commit.**
 
    ```bash
    yoyopod remote mode activate dev
-   yoyopod remote sync --branch <branch>
+   yoyopod remote sync --branch <branch> --sha <sha>
    ```
 
    Add `--clean-native` only when native C/CMake/shim inputs changed.
 
-7. **Install the CI-built Rust binary on the Pi.**
+7. **Install the CI-built Rust binaries on the Pi.**
 
    ```bash
-   ssh <user>@<host> 'mkdir -p /opt/yoyopod-dev/checkout/yoyopod_rs/ui-host/build'
-   scp .artifacts/rust-ui/<sha>/yoyopod-ui-host <user>@<host>:/opt/yoyopod-dev/checkout/yoyopod_rs/ui-host/build/yoyopod-ui-host
-   ssh <user>@<host> 'chmod +x /opt/yoyopod-dev/checkout/yoyopod_rs/ui-host/build/yoyopod-ui-host'
+   scp .artifacts/rust-device/<sha>/yoyopod-rust-device-arm64-<sha>.tar.gz <user>@<host>:/tmp/yoyopod-rust-device-arm64-<sha>.tar.gz
+   ssh <user>@<host> 'cd /opt/yoyopod-dev/checkout && tar -xzf /tmp/yoyopod-rust-device-arm64-<sha>.tar.gz && chmod +x yoyopod_rs/runtime/build/yoyopod-runtime yoyopod_rs/ui-host/build/yoyopod-ui-host yoyopod_rs/media-host/build/yoyopod-media-host yoyopod_rs/voip-host/build/yoyopod-voip-host yoyopod_rs/network-host/build/yoyopod-network-host'
    ```
 
-8. **Run the Rust UI hardware command from the Pi checkout.** For Whisplay hub
-   validation:
+8. **Select the Rust dev-lane owner and restart.** The dev service still has a
+   Python fallback, so set the override before testing the Rust entrypoint:
 
    ```bash
-   ssh <user>@<host> 'cd /opt/yoyopod-dev/checkout && YOYOPOD_WHISPLAY_DC_GPIO=27 YOYOPOD_WHISPLAY_RESET_GPIO=4 YOYOPOD_WHISPLAY_BUTTON_GPIO=17 YOYOPOD_WHISPLAY_BUTTON_ACTIVE_LOW=0 LD_LIBRARY_PATH=/opt/yoyopod-dev/checkout/yoyopod/ui/lvgl_binding/native/build/lvgl/lib:/opt/yoyopod-dev/checkout/yoyopod/ui/lvgl_binding/native/build:$LD_LIBRARY_PATH /opt/yoyopod-dev/venv/bin/python -m yoyopod_cli.main pi rust-ui-host --worker yoyopod_rs/ui-host/build/yoyopod-ui-host --screen hub --hub-renderer lvgl --frames 1'
+   ssh <user>@<host> 'set -e; sudo touch /etc/default/yoyopod-dev; if sudo grep -q "^YOYOPOD_DEV_RUNTIME=" /etc/default/yoyopod-dev; then sudo sed -i "s/^YOYOPOD_DEV_RUNTIME=.*/YOYOPOD_DEV_RUNTIME=rust/" /etc/default/yoyopod-dev; else printf "%s\n" "YOYOPOD_DEV_RUNTIME=rust" | sudo tee -a /etc/default/yoyopod-dev >/dev/null; fi'
+   yoyopod remote restart
    ```
 
-9. **Report exact provenance.** Include the branch, commit SHA, CI run ID,
-   artifact name, Pi host, command result, and whether the dev service was left
-   running.
+9. **Validate the Rust path.**
+
+   ```bash
+   yoyopod remote validate --branch <branch> --sha <sha> --with-rust-ui-host --with-lvgl-soak
+   ```
+
+   For a direct UI worker check, run from the Pi checkout:
+
+   ```bash
+   ssh <user>@<host> 'cd /opt/yoyopod-dev/checkout && YOYOPOD_WHISPLAY_DC_GPIO=27 YOYOPOD_WHISPLAY_RESET_GPIO=4 YOYOPOD_WHISPLAY_BUTTON_GPIO=17 YOYOPOD_WHISPLAY_BUTTON_ACTIVE_LOW=0 LD_LIBRARY_PATH=/opt/yoyopod-dev/checkout/yoyopod/ui/lvgl_binding/native/build/lvgl/lib:/opt/yoyopod-dev/checkout/yoyopod/ui/lvgl_binding/native/build:$LD_LIBRARY_PATH /opt/yoyopod-dev/checkout/yoyopod_rs/ui-host/build/yoyopod-ui-host --hardware whisplay'
+   ```
+
+10. **Report exact provenance.** Include the branch, commit SHA, CI run ID,
+    artifact names, Pi host, active runtime owner, command result, and whether
+    the dev service was left running.

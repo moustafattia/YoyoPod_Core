@@ -204,6 +204,29 @@ yoyopod remote sync --branch <branch> --sha <commit>
 
 Use this when you want the stable checkout updated but do not want the full validate flow yet.
 
+### Rust Runtime Dev-Lane Entry Point
+
+The Rust runtime is the target long-running dev service. The systemd unit still
+has a Python fallback for compatibility, so make the active owner explicit when
+testing the Rust path:
+
+```ini
+Environment=YOYOPOD_DEV_RUNTIME=rust
+```
+
+With that override, `yoyopod-dev.service` executes:
+
+```bash
+/opt/yoyopod-dev/checkout/yoyopod_rs/runtime/build/yoyopod-runtime \
+  --config-dir /opt/yoyopod-dev/checkout/config \
+  --hardware whisplay
+```
+
+Use committed GitHub Actions artifacts for the exact commit under test. Install
+`yoyopod-rust-device-arm64-<sha>` into the dev checkout before restarting the
+service. Do not build Rust binaries on the Pi Zero 2W unless the user
+explicitly overrides that rule.
+
 ### Run validation
 
 ```bash
@@ -346,11 +369,13 @@ yoyopod remote preflight --branch <branch> --with-music --with-voip --with-navig
 What it does:
 
 1. runs local `compileall`
-2. runs local `uv run pytest -q`
+2. runs local Python tests when the preflight command requests that legacy path
 3. syncs the chosen branch to the Raspberry Pi
 4. runs the Raspberry Pi smoke pass
 
-Use it before commit when you want an extra sanity pass, or before `yoyopod remote validate` when you want a stricter gate.
+Use it before `yoyopod remote validate` when you want a broader sanity pass. It
+is not the Rust artifact contract and does not replace exact-SHA CI artifacts
+for `yoyopod-runtime` or Rust workers.
 
 ## Dirty-Tree Escape Hatch
 
@@ -372,9 +397,10 @@ If you use it, say clearly that the board is running a dirty-tree override inste
 
 ## Suggested Daily Loop
 
-1. Run local checks as needed:
+1. Run focused local Rust checks as needed:
    ```bash
-   uv run python scripts/quality.py ci
+   cargo test --manifest-path yoyopod_rs/Cargo.toml -p yoyopod-runtime --locked
+   cargo test --manifest-path yoyopod_rs/Cargo.toml -p yoyopod-ui-host --locked
    ```
 2. Commit the intended change.
 3. Push the branch.
@@ -384,7 +410,7 @@ If you use it, say clearly that the board is running a dirty-tree override inste
    ```
 5. Validate on the Pi:
    ```bash
-   yoyopod remote validate --branch <branch> --sha <commit> --with-music --with-voip
+   yoyopod remote validate --branch <branch> --sha <commit> --with-rust-ui-host --with-lvgl-soak
    ```
 6. Manually test on the target hardware while the app remains running.
 
@@ -396,11 +422,12 @@ yoyopod remote validate --branch <branch> --sha <commit> --with-music --with-nav
 
 ## Release / Pre-Merge Checklist
 
-- local branch is green with `uv run python scripts/quality.py ci`
+- local Rust checks relevant to the changed crates pass
 - branch is pushed and reviewed
+- exact-SHA Rust artifacts are installed when testing the Rust runtime owner
 - `yoyopod remote validate --branch <branch> --sha <commit> --with-music --with-voip --with-lvgl-soak` passes
 - if you touched idle navigation, `yoyopod remote validate --branch <branch> --sha <commit> --with-music --with-navigation` passes
-- the app starts cleanly and stays running for manual hardware testing
+- the selected runtime owner starts cleanly and stays running for manual hardware testing
 - manual sanity still passes for display, input, music, SIP registration, and call flow
 
 ## Notes

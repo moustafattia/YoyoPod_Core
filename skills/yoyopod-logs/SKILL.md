@@ -1,6 +1,6 @@
 ---
 name: yoyopod-logs
-description: Tail application logs from Raspberry Pi
+description: Tail YoYoPod runtime/service logs from Raspberry Pi
 disable-model-invocation: true
 allowed-tools:
   - Read
@@ -33,11 +33,11 @@ Multiple flags can be combined.
    ```
    Add `--lines`, `--errors`, `--filter`, and `--follow` based on the parsed arguments.
 
-2. **If lane ownership matters, also run:**
+2. **If lane or runtime ownership matters, also run:**
    ```bash
    yoyopod remote mode status
    ```
 
-3. **Present the log output.** Return the raw log lines directly. Do not summarize or truncate unless the user explicitly asks.
+3. **Present the log output.** Return the raw log lines directly. Do not summarize or truncate unless the user explicitly asks. If the user is debugging Rust ownership, call out whether the logs show `yoyopod-runtime` or the Python fallback.
 
 After presenting the logs, remind the user they can ask follow-up questions about the log content, such as "why did the call drop?" or "what errors happened in the last minute?"

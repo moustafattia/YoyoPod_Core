@@ -1,6 +1,6 @@
 ---
 name: yoyopod-deploy
-description: Commit-safe dev-lane branch/SHA validation or prod slot install on Raspberry Pi
+description: Commit-safe Rust-first dev-lane branch/SHA validation or prod slot install on Raspberry Pi
 disable-model-invocation: true
 allowed-tools:
   - Read
@@ -37,19 +37,27 @@ If the file does not exist yet, run `yoyopod remote config edit` first. That com
    ```
    If `mode status` reports `active_lane=conflict`, include the conflict lines in the response and let `mode activate dev` clean the lane before validation.
 
-5. **Validate the committed branch and exact SHA on the Pi.** Run:
+5. **Install Rust artifacts when validating the Rust owner.** If the task is
+   testing `yoyopod-runtime`, `yoyopod-ui-host`, media, or VoIP Rust workers,
+   use `skills/yoyopod-rust-artifact/SKILL.md` first. Do not build Rust
+   binaries on the Pi Zero 2W unless the user explicitly overrides that rule.
+
+6. **Validate the committed branch and exact SHA on the Pi.** Run:
    ```bash
    yoyopod remote validate --branch <branch> --sha <commit>
    ```
    Add smoke flags such as `--with-music`, `--with-voip`, `--with-power`, `--with-rtc`, or `--with-lvgl-soak` when the task calls for them.
 
-6. **Handle failures.** If validation fails, run:
+7. **Handle failures.** If validation fails, run:
    ```bash
    yoyopod remote logs --lines 20
    ```
    Include the relevant error output in your response.
 
-7. **Report the result.** Include the validated branch, exact SHA, lane state, whether validation passed, and that the dev app was left running for manual testing when the flow succeeded.
+8. **Report the result.** Include the validated branch, exact SHA, lane state,
+   active runtime owner (`rust` or Python fallback), whether validation passed,
+   and that the dev lane was left running for manual testing when the flow
+   succeeded.
 
 ## Prod Slot Flow
 

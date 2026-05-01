@@ -1,14 +1,40 @@
 use std::path::Path;
 
-use anyhow::Result;
-#[cfg(not(feature = "native-lvgl"))]
-use anyhow::bail;
+use anyhow::{bail, Result};
 
 use crate::framebuffer::Framebuffer;
-#[cfg(feature = "native-lvgl")]
-use crate::lvgl::NativeLvglFacade;
 use crate::lvgl::{LvglFacade, LvglRenderer as SemanticLvglRenderer};
+#[cfg(feature = "native-lvgl")]
+use crate::lvgl::{
+    NativeLvglFacade, NativeSceneRenderer, RustSceneBridge, SceneBridge, ShimSceneBridge,
+};
 use crate::screens::ScreenModel;
+
+#[cfg(any(test, feature = "native-lvgl"))]
+const SCENE_BACKEND_ENV: &str = "YOYOPOD_LVGL_SCENE_BACKEND";
+
+#[cfg(any(test, feature = "native-lvgl"))]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum SceneBackendMode {
+    Shim,
+    Rust,
+}
+
+#[cfg(any(test, feature = "native-lvgl"))]
+fn scene_backend_mode_from_value(value: Option<&str>) -> Result<SceneBackendMode> {
+    let value = value.map(str::trim).filter(|value| !value.is_empty());
+    match value.unwrap_or("rust").to_ascii_lowercase().as_str() {
+        "shim" | "c" | "lvgl_shim" => Ok(SceneBackendMode::Shim),
+        "rust" | "native" | "rust_native" => Ok(SceneBackendMode::Rust),
+        other => bail!("unsupported {SCENE_BACKEND_ENV}={other:?}; expected shim or rust"),
+    }
+}
+
+#[cfg(feature = "native-lvgl")]
+fn scene_backend_mode_from_env() -> Result<SceneBackendMode> {
+    let value = std::env::var(SCENE_BACKEND_ENV).ok();
+    scene_backend_mode_from_value(value.as_deref())
+}
 
 #[allow(dead_code)]
 pub(crate) trait RuntimeLvglBackend: LvglFacade {
@@ -20,15 +46,15 @@ pub(crate) trait RuntimeLvglBackend: LvglFacade {
 #[cfg(feature = "native-lvgl")]
 impl RuntimeLvglBackend for NativeLvglFacade {
     fn display_needs_reset(&self, framebuffer: &Framebuffer) -> bool {
-        self.display_needs_reset(framebuffer)
+        NativeLvglFacade::display_needs_reset(self, framebuffer)
     }
 
     fn ensure_display_registered(&mut self, framebuffer: &Framebuffer) -> Result<()> {
-        self.ensure_display_registered(framebuffer)
+        NativeLvglFacade::ensure_display_registered(self, framebuffer)
     }
 
     fn render_frame(&mut self, framebuffer: &mut Framebuffer) -> Result<()> {
-        self.render_frame(framebuffer)
+        NativeLvglFacade::render_frame(self, framebuffer)
     }
 }
 
@@ -80,18 +106,21 @@ pub struct LvglRenderer;
 
 #[cfg(feature = "native-lvgl")]
 pub struct LvglRenderer {
-    renderer: RuntimeLvglRenderer<NativeLvglFacade>,
+    renderer: ActiveRuntimeSceneLvglRenderer,
 }
 
 #[cfg(feature = "native-lvgl")]
 impl LvglRenderer {
     pub fn open(explicit_source: Option<&Path>) -> Result<Self> {
-        let facade = NativeLvglFacade::open(explicit_source)?;
-        Ok(Self {
-            renderer: RuntimeLvglRenderer {
-                renderer: SemanticLvglRenderer::new(facade),
-            },
-        })
+        let renderer = match scene_backend_mode_from_env()? {
+            SceneBackendMode::Shim => ActiveRuntimeSceneLvglRenderer::Shim(
+                RuntimeSceneLvglRenderer::new(ShimSceneBridge::open(explicit_source)?),
+            ),
+            SceneBackendMode::Rust => ActiveRuntimeSceneLvglRenderer::Rust(
+                RuntimeSceneLvglRenderer::new(RustSceneBridge::open(explicit_source)?),
+            ),
+        };
+        Ok(Self { renderer })
     }
 
     pub fn render_screen_model(
@@ -100,6 +129,95 @@ impl LvglRenderer {
         model: &ScreenModel,
     ) -> Result<()> {
         self.renderer.render_screen_model(framebuffer, model)
+    }
+}
+
+#[cfg(feature = "native-lvgl")]
+trait RuntimeSceneBridge: SceneBridge {
+    fn display_needs_reset(&self, framebuffer: &Framebuffer) -> bool;
+    fn ensure_display_registered(&mut self, framebuffer: &Framebuffer) -> Result<()>;
+    fn render_frame(&mut self, framebuffer: &mut Framebuffer) -> Result<()>;
+}
+
+#[cfg(feature = "native-lvgl")]
+impl RuntimeSceneBridge for ShimSceneBridge {
+    fn display_needs_reset(&self, framebuffer: &Framebuffer) -> bool {
+        ShimSceneBridge::display_needs_reset(self, framebuffer)
+    }
+
+    fn ensure_display_registered(&mut self, framebuffer: &Framebuffer) -> Result<()> {
+        ShimSceneBridge::ensure_display_registered(self, framebuffer)
+    }
+
+    fn render_frame(&mut self, framebuffer: &mut Framebuffer) -> Result<()> {
+        ShimSceneBridge::render_frame(self, framebuffer)
+    }
+}
+
+#[cfg(feature = "native-lvgl")]
+impl RuntimeSceneBridge for RustSceneBridge<NativeLvglFacade> {
+    fn display_needs_reset(&self, framebuffer: &Framebuffer) -> bool {
+        RustSceneBridge::<NativeLvglFacade>::display_needs_reset(self, framebuffer)
+    }
+
+    fn ensure_display_registered(&mut self, framebuffer: &Framebuffer) -> Result<()> {
+        RustSceneBridge::<NativeLvglFacade>::ensure_display_registered(self, framebuffer)
+    }
+
+    fn render_frame(&mut self, framebuffer: &mut Framebuffer) -> Result<()> {
+        RustSceneBridge::<NativeLvglFacade>::render_frame(self, framebuffer)
+    }
+}
+
+#[cfg(feature = "native-lvgl")]
+enum ActiveRuntimeSceneLvglRenderer {
+    Shim(RuntimeSceneLvglRenderer<ShimSceneBridge>),
+    Rust(RuntimeSceneLvglRenderer<RustSceneBridge<NativeLvglFacade>>),
+}
+
+#[cfg(feature = "native-lvgl")]
+impl ActiveRuntimeSceneLvglRenderer {
+    fn render_screen_model(
+        &mut self,
+        framebuffer: &mut Framebuffer,
+        model: &ScreenModel,
+    ) -> Result<()> {
+        match self {
+            Self::Shim(renderer) => renderer.render_screen_model(framebuffer, model),
+            Self::Rust(renderer) => renderer.render_screen_model(framebuffer, model),
+        }
+    }
+}
+
+#[cfg(feature = "native-lvgl")]
+struct RuntimeSceneLvglRenderer<B> {
+    renderer: NativeSceneRenderer<B>,
+}
+
+#[cfg(feature = "native-lvgl")]
+impl<B> RuntimeSceneLvglRenderer<B>
+where
+    B: RuntimeSceneBridge,
+{
+    fn new(bridge: B) -> Self {
+        Self {
+            renderer: NativeSceneRenderer::new(bridge),
+        }
+    }
+
+    fn render_screen_model(
+        &mut self,
+        framebuffer: &mut Framebuffer,
+        model: &ScreenModel,
+    ) -> Result<()> {
+        if self.renderer.bridge().display_needs_reset(framebuffer) {
+            self.renderer.clear()?;
+        }
+        self.renderer
+            .bridge_mut()
+            .ensure_display_registered(framebuffer)?;
+        self.renderer.render(model)?;
+        self.renderer.bridge_mut().render_frame(framebuffer)
     }
 }
 
@@ -126,6 +244,36 @@ mod tests {
     use crate::framebuffer::Framebuffer;
     use crate::lvgl::{LvglFacade, WidgetId};
     use crate::screens::{ChromeModel, HubCardModel, HubViewModel, ScreenModel, StatusBarModel};
+
+    #[test]
+    fn scene_backend_mode_parser_defaults_to_rust_and_accepts_shim_fallback() -> Result<()> {
+        assert_eq!(
+            super::scene_backend_mode_from_value(None)?,
+            super::SceneBackendMode::Rust
+        );
+        assert_eq!(
+            super::scene_backend_mode_from_value(Some("shim"))?,
+            super::SceneBackendMode::Shim
+        );
+        assert_eq!(
+            super::scene_backend_mode_from_value(Some("c"))?,
+            super::SceneBackendMode::Shim
+        );
+        assert_eq!(
+            super::scene_backend_mode_from_value(Some("rust"))?,
+            super::SceneBackendMode::Rust
+        );
+        assert_eq!(
+            super::scene_backend_mode_from_value(Some("native"))?,
+            super::SceneBackendMode::Rust
+        );
+
+        let error = super::scene_backend_mode_from_value(Some("python"))
+            .expect_err("unknown LVGL scene backend should be rejected");
+        assert!(error.to_string().contains("YOYOPOD_LVGL_SCENE_BACKEND"));
+
+        Ok(())
+    }
 
     #[derive(Default)]
     struct FakeBackend {
@@ -167,8 +315,12 @@ mod tests {
             Ok(id)
         }
 
-        fn create_container(&mut self, _parent: WidgetId, _role: &'static str) -> Result<WidgetId> {
-            unreachable!("hub scene should not create containers")
+        fn create_container(&mut self, _parent: WidgetId, role: &'static str) -> Result<WidgetId> {
+            let id = WidgetId::new(self.next_id);
+            self.next_id += 1;
+            self.events
+                .push(format!("create_container:{role}:{}", id.raw()));
+            Ok(id)
         }
 
         fn create_label(&mut self, _parent: WidgetId, role: &'static str) -> Result<WidgetId> {
@@ -201,6 +353,10 @@ mod tests {
             Ok(())
         }
 
+        fn set_accent(&mut self, _widget: WidgetId, _rgb: u32) -> Result<()> {
+            Ok(())
+        }
+
         fn destroy(&mut self, widget: WidgetId) -> Result<()> {
             self.events.push(format!("destroy:{}", widget.raw()));
             Ok(())
@@ -221,12 +377,50 @@ mod tests {
             renderer.backend_for_test().events,
             vec![
                 "create_root:0",
-                "create_label:hub_title:1",
-                "set_text:1:Listen",
+                "create_container:hub_icon_glow:1",
+                "create_container:hub_card_panel:2",
+                "create_label:hub_icon:3",
+                "create_label:hub_title:4",
+                "create_label:hub_subtitle:5",
+                "create_container:hub_dot:6",
+                "create_container:hub_dot:7",
+                "create_container:hub_dot:8",
+                "create_container:hub_dot:9",
+                "create_container:status_bar:10",
+                "create_label:status_network:11",
+                "create_label:status_signal:12",
+                "create_label:status_battery:13",
+                "set_text:11:NET",
+                "set_text:12:||||",
+                "set_text:13:80%",
+                "create_container:footer_bar:14",
+                "create_label:hub_footer:15",
+                "set_text:15:Footer",
+                "set_text:4:Listen",
+                "set_text:5:Subtitle",
                 "destroy:0",
-                "create_root:2",
-                "create_label:hub_title:3",
-                "set_text:3:Talk",
+                "create_root:16",
+                "create_container:hub_icon_glow:17",
+                "create_container:hub_card_panel:18",
+                "create_label:hub_icon:19",
+                "create_label:hub_title:20",
+                "create_label:hub_subtitle:21",
+                "create_container:hub_dot:22",
+                "create_container:hub_dot:23",
+                "create_container:hub_dot:24",
+                "create_container:hub_dot:25",
+                "create_container:status_bar:26",
+                "create_label:status_network:27",
+                "create_label:status_signal:28",
+                "create_label:status_battery:29",
+                "set_text:27:NET",
+                "set_text:28:||||",
+                "set_text:29:80%",
+                "create_container:footer_bar:30",
+                "create_label:hub_footer:31",
+                "set_text:31:Footer",
+                "set_text:20:Talk",
+                "set_text:21:Subtitle",
             ]
         );
 

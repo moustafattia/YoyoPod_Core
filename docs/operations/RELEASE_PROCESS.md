@@ -65,12 +65,11 @@ The release workflow runs on:
 - push of a tag like `v0.2.0`
 - manual dispatch with an existing release tag
 
-The workflow:
+The workflow currently:
 
 1. checks out the tagged revision
 2. installs the dev environment with `uv`
-3. runs `uv run python scripts/quality.py gate`
-4. runs `uv run pytest -q`
+3. runs the configured CI jobs, including legacy Python CLI/deploy checks while they still exist
 5. runs `uv run yoyopod release build --check-tag <tag>`
 6. builds a Linux ARM64 self-contained slot artifact via `deploy/docker/slot-builder.Dockerfile`
 7. uploads the built artifacts
@@ -96,12 +95,13 @@ The published ARM64 slot artifact is intended to be installed directly under
    uv run yoyopod release bump patch
    ```
 
-2. Run the repo gates:
+2. Run the relevant Rust checks:
 
    ```bash
-   uv run python scripts/quality.py gate
-   uv run pytest -q
+   cargo test --manifest-path yoyopod_rs/Cargo.toml --workspace --locked
    ```
+
+   Add targeted Python CLI/deploy tests only if that surface changed.
 
 3. Commit and merge the version bump.
 4. Tag the release from the merged commit:

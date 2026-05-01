@@ -7,7 +7,9 @@ use std::time::Instant;
 use anyhow::{anyhow, bail, Context, Result};
 
 use crate::framebuffer::Framebuffer;
+use crate::lvgl::hub_icon_assets;
 use crate::lvgl::sys;
+use crate::lvgl::theme::{self, WidgetStyle};
 use crate::lvgl::{LvglFacade, WidgetId};
 
 const DEFAULT_WIDTH: i32 = 240;
@@ -28,6 +30,7 @@ enum WidgetKind {
     Root,
     Container,
     Label,
+    Image,
 }
 
 #[derive(Debug)]
@@ -55,6 +58,7 @@ pub struct NativeLvglFacade {
     next_widget_id: u64,
     widgets: HashMap<WidgetId, WidgetNode>,
     active_root: Option<WidgetId>,
+    hub_dot_count: usize,
     list_row_count: usize,
     power_row_count: usize,
 }
@@ -76,6 +80,7 @@ impl NativeLvglFacade {
             next_widget_id: 0,
             widgets: HashMap::new(),
             active_root: None,
+            hub_dot_count: 0,
             list_row_count: 0,
             power_row_count: 0,
         })
@@ -215,9 +220,17 @@ impl NativeLvglFacade {
             .display_size
             .map(|(width, height)| (width as i32, height as i32))
             .unwrap_or((DEFAULT_WIDTH, DEFAULT_HEIGHT));
-        unsafe {
-            sys::lv_obj_set_size(blank.as_ptr(), size.0, size.1);
-        }
+        Self::reset_style_raw(blank);
+        Self::apply_style_raw(blank, theme::style_for_role("root"));
+        Self::apply_layout_raw(
+            blank,
+            Layout {
+                x: 0,
+                y: 0,
+                width: size.0,
+                height: size.1,
+            },
+        );
         self.blank_screen = Some(blank);
         Ok(blank)
     }
@@ -234,6 +247,7 @@ impl NativeLvglFacade {
         self.blank_screen = None;
         self.widgets.clear();
         self.active_root = None;
+        self.hub_dot_count = 0;
         self.list_row_count = 0;
         self.power_row_count = 0;
         self.flush_target.framebuffer = ptr::null_mut();
@@ -243,6 +257,164 @@ impl NativeLvglFacade {
         unsafe {
             sys::lv_obj_set_pos(obj.as_ptr(), layout.x, layout.y);
             sys::lv_obj_set_size(obj.as_ptr(), layout.width.max(1), layout.height.max(1));
+        }
+    }
+
+    fn apply_role_tuning_raw(obj: NonNull<sys::lv_obj_t>, role: &'static str) {
+        const SELECTOR: sys::LvStyleSelector = 0;
+
+        unsafe {
+            match role {
+                "hub_card_panel" => {
+                    sys::lv_obj_set_style_pad_left(obj.as_ptr(), 0, SELECTOR);
+                    sys::lv_obj_set_style_pad_right(obj.as_ptr(), 0, SELECTOR);
+                    sys::lv_obj_set_style_pad_top(obj.as_ptr(), 0, SELECTOR);
+                    sys::lv_obj_set_style_pad_bottom(obj.as_ptr(), 0, SELECTOR);
+                    sys::lv_obj_set_style_shadow_width(obj.as_ptr(), 24, SELECTOR);
+                    sys::lv_obj_set_style_shadow_opa(obj.as_ptr(), 76, SELECTOR);
+                    sys::lv_obj_set_scrollbar_mode(obj.as_ptr(), sys::LV_SCROLLBAR_MODE_OFF);
+                }
+                "hub_icon_glow" | "footer_bar" | "talk_card_panel" | "talk_card_glow"
+                | "ask_icon_glow" | "ask_icon_halo" | "power_icon_halo" | "power_row" => {
+                    sys::lv_obj_set_scrollbar_mode(obj.as_ptr(), sys::LV_SCROLLBAR_MODE_OFF);
+                }
+                "hub_icon" | "ask_icon" => {
+                    sys::lv_obj_set_style_image_recolor_opa(
+                        obj.as_ptr(),
+                        theme::OPA_COVER,
+                        SELECTOR,
+                    );
+                    sys::lv_obj_set_style_image_opa(obj.as_ptr(), theme::OPA_COVER, SELECTOR);
+                }
+                "hub_title" | "power_title" => {
+                    sys::lv_obj_set_style_text_font(
+                        obj.as_ptr(),
+                        &sys::lv_font_montserrat_24,
+                        SELECTOR,
+                    );
+                    sys::lv_obj_set_style_text_align(
+                        obj.as_ptr(),
+                        sys::LV_TEXT_ALIGN_CENTER,
+                        SELECTOR,
+                    );
+                }
+                "hub_subtitle" => {
+                    sys::lv_label_set_long_mode(obj.as_ptr(), sys::LV_LABEL_LONG_MODE_CLIP);
+                    sys::lv_obj_set_style_text_font(
+                        obj.as_ptr(),
+                        &sys::lv_font_montserrat_12,
+                        SELECTOR,
+                    );
+                    sys::lv_obj_set_style_text_align(
+                        obj.as_ptr(),
+                        sys::LV_TEXT_ALIGN_CENTER,
+                        SELECTOR,
+                    );
+                }
+                "hub_footer"
+                | "ask_footer"
+                | "call_footer"
+                | "power_footer"
+                | "overlay_footer"
+                | "now_playing_footer"
+                | "listen_footer"
+                | "playlist_footer"
+                | "talk_footer"
+                | "talk_actions_footer" => {
+                    sys::lv_label_set_long_mode(obj.as_ptr(), sys::LV_LABEL_LONG_MODE_CLIP);
+                    sys::lv_obj_set_style_text_font(
+                        obj.as_ptr(),
+                        &sys::lv_font_montserrat_12,
+                        SELECTOR,
+                    );
+                    sys::lv_obj_set_style_text_align(
+                        obj.as_ptr(),
+                        sys::LV_TEXT_ALIGN_CENTER,
+                        SELECTOR,
+                    );
+                }
+                "status_network" | "status_signal" | "status_battery" => {
+                    sys::lv_label_set_long_mode(obj.as_ptr(), sys::LV_LABEL_LONG_MODE_CLIP);
+                    sys::lv_obj_set_style_text_font(
+                        obj.as_ptr(),
+                        &sys::lv_font_montserrat_12,
+                        SELECTOR,
+                    );
+                    sys::lv_obj_set_style_text_align(
+                        obj.as_ptr(),
+                        sys::LV_TEXT_ALIGN_CENTER,
+                        SELECTOR,
+                    );
+                }
+                "power_icon" => {
+                    sys::lv_obj_set_style_text_font(
+                        obj.as_ptr(),
+                        &sys::lv_font_montserrat_24,
+                        SELECTOR,
+                    );
+                    sys::lv_obj_set_style_text_align(
+                        obj.as_ptr(),
+                        sys::LV_TEXT_ALIGN_CENTER,
+                        SELECTOR,
+                    );
+                    sys::lv_obj_align(obj.as_ptr(), sys::LV_ALIGN_CENTER, 0, 0);
+                }
+                "power_row_title" => {
+                    sys::lv_label_set_long_mode(obj.as_ptr(), sys::LV_LABEL_LONG_MODE_CLIP);
+                    sys::lv_obj_set_style_text_font(
+                        obj.as_ptr(),
+                        &sys::lv_font_montserrat_12,
+                        SELECTOR,
+                    );
+                    sys::lv_obj_set_style_text_align(
+                        obj.as_ptr(),
+                        sys::LV_TEXT_ALIGN_LEFT,
+                        SELECTOR,
+                    );
+                }
+                _ => {}
+            }
+        }
+    }
+
+    fn reset_style_raw(obj: NonNull<sys::lv_obj_t>) {
+        unsafe {
+            sys::lv_obj_remove_style_all(obj.as_ptr());
+        }
+    }
+
+    fn apply_style_raw(obj: NonNull<sys::lv_obj_t>, style: WidgetStyle) {
+        const SELECTOR: sys::LvStyleSelector = 0;
+
+        unsafe {
+            if let Some(bg_color) = style.bg_color {
+                sys::lv_obj_set_style_bg_color(
+                    obj.as_ptr(),
+                    sys::lv_color_hex(bg_color & 0xFFFFFF),
+                    SELECTOR,
+                );
+            }
+            sys::lv_obj_set_style_bg_opa(obj.as_ptr(), style.bg_opa, SELECTOR);
+
+            if let Some(text_color) = style.text_color {
+                sys::lv_obj_set_style_text_color(
+                    obj.as_ptr(),
+                    sys::lv_color_hex(text_color & 0xFFFFFF),
+                    SELECTOR,
+                );
+            }
+
+            if let Some(border_color) = style.border_color {
+                sys::lv_obj_set_style_border_color(
+                    obj.as_ptr(),
+                    sys::lv_color_hex(border_color & 0xFFFFFF),
+                    SELECTOR,
+                );
+            }
+            sys::lv_obj_set_style_border_width(obj.as_ptr(), style.border_width, SELECTOR);
+            sys::lv_obj_set_style_radius(obj.as_ptr(), style.radius, SELECTOR);
+            sys::lv_obj_set_style_outline_width(obj.as_ptr(), style.outline_width, SELECTOR);
+            sys::lv_obj_set_style_shadow_width(obj.as_ptr(), style.shadow_width, SELECTOR);
         }
     }
 
@@ -272,37 +444,246 @@ impl NativeLvglFacade {
             .unwrap_or("root");
 
         let layout = match role {
+            "status_bar" => Layout {
+                x: 0,
+                y: 0,
+                width: 240,
+                height: 30,
+            },
+            "status_network" => Layout {
+                x: 16,
+                y: 8,
+                width: 36,
+                height: 14,
+            },
+            "status_signal" => Layout {
+                x: 98,
+                y: 8,
+                width: 44,
+                height: 14,
+            },
+            "status_battery" => Layout {
+                x: 188,
+                y: 8,
+                width: 36,
+                height: 14,
+            },
+            "footer_bar" => Layout {
+                x: 0,
+                y: 248,
+                width: 240,
+                height: 32,
+            },
+            _ if parent_role == "footer_bar" => Layout {
+                x: 10,
+                y: 8,
+                width: 220,
+                height: 16,
+            },
+            "listen_footer" | "now_playing_footer" | "power_footer" => Layout {
+                x: 13,
+                y: 256,
+                width: 214,
+                height: 16,
+            },
+            "hub_icon_glow" => Layout {
+                x: 62,
+                y: 48,
+                width: 116,
+                height: 116,
+            },
+            "hub_card_panel" => Layout {
+                x: 72,
+                y: 58,
+                width: 96,
+                height: 96,
+            },
+            "hub_icon" => Layout {
+                x: 20,
+                y: 20,
+                width: 56,
+                height: 56,
+            },
             "hub_title" => Layout {
-                x: 30,
-                y: 122,
-                width: 180,
+                x: 60,
+                y: 176,
+                width: 120,
                 height: 28,
             },
+            "hub_subtitle" => Layout {
+                x: 60,
+                y: 204,
+                width: 120,
+                height: 18,
+            },
+            "hub_dot" => {
+                let index = self.hub_dot_count;
+                self.hub_dot_count += 1;
+                Layout {
+                    x: 103 + (index as i32 * 10),
+                    y: 218,
+                    width: 4,
+                    height: 4,
+                }
+            }
             "list_title" => Layout {
-                x: 16,
-                y: 36,
-                width: 208,
+                x: 20,
+                y: 42,
+                width: 200,
                 height: 24,
             },
             "list_subtitle" => Layout {
-                x: 16,
-                y: 60,
-                width: 208,
-                height: 18,
-            },
-            "list_footer" | "ask_footer" | "call_footer" | "power_footer" | "overlay_footer"
-            | "now_playing_footer" => Layout {
                 x: 20,
-                y: 252,
+                y: 66,
                 width: 200,
                 height: 18,
+            },
+            "listen_title" => Layout {
+                x: 16,
+                y: 38,
+                width: 208,
+                height: 28,
+            },
+            "listen_subtitle" => Layout {
+                x: 16,
+                y: 68,
+                width: 208,
+                height: 16,
+            },
+            "listen_panel" => Layout {
+                x: 16,
+                y: 92,
+                width: 208,
+                height: 188,
+            },
+            "listen_row" => {
+                let index = self.list_row_count;
+                self.list_row_count += 1;
+                Layout {
+                    x: 0,
+                    y: index as i32 * 52,
+                    width: 208,
+                    height: 44,
+                }
+            }
+            "listen_row_icon" => Layout {
+                x: 16,
+                y: 12,
+                width: 28,
+                height: 18,
+            },
+            "listen_row_title" => Layout {
+                x: 48,
+                y: 8,
+                width: 120,
+                height: 18,
+            },
+            "listen_row_subtitle" => Layout {
+                x: 48,
+                y: 26,
+                width: 120,
+                height: 14,
+            },
+            "listen_empty_panel" => Layout {
+                x: 18,
+                y: 94,
+                width: 204,
+                height: 156,
+            },
+            "listen_empty_icon" => Layout {
+                x: 72,
+                y: 18,
+                width: 60,
+                height: 24,
+            },
+            "listen_empty_title" => Layout {
+                x: 18,
+                y: 84,
+                width: 168,
+                height: 22,
+            },
+            "listen_empty_subtitle" => Layout {
+                x: 18,
+                y: 112,
+                width: 168,
+                height: 36,
+            },
+            "playlist_title" => Layout {
+                x: 18,
+                y: 38,
+                width: 150,
+                height: 22,
+            },
+            "playlist_underline" => Layout {
+                x: 18,
+                y: 60,
+                width: 30,
+                height: 3,
+            },
+            "playlist_panel" => Layout {
+                x: 12,
+                y: 86,
+                width: 216,
+                height: 166,
+            },
+            "playlist_row" => {
+                let index = self.list_row_count;
+                self.list_row_count += 1;
+                Layout {
+                    x: 16,
+                    y: 8 + (index as i32 * 48),
+                    width: 184,
+                    height: 44,
+                }
+            }
+            "playlist_row_icon" => Layout {
+                x: 14,
+                y: 12,
+                width: 26,
+                height: 18,
+            },
+            "playlist_row_title" => Layout {
+                x: 44,
+                y: 7,
+                width: 92,
+                height: 18,
+            },
+            "playlist_row_subtitle" => Layout {
+                x: 44,
+                y: 24,
+                width: 92,
+                height: 14,
+            },
+            "playlist_empty_panel" => Layout {
+                x: 18,
+                y: 96,
+                width: 204,
+                height: 156,
+            },
+            "playlist_empty_icon" => Layout {
+                x: 72,
+                y: 18,
+                width: 60,
+                height: 24,
+            },
+            "playlist_empty_title" => Layout {
+                x: 18,
+                y: 84,
+                width: 168,
+                height: 22,
+            },
+            "playlist_empty_subtitle" => Layout {
+                x: 18,
+                y: 112,
+                width: 168,
+                height: 36,
             },
             "list_row" => {
                 let index = self.list_row_count;
                 self.list_row_count += 1;
                 Layout {
                     x: 16,
-                    y: 92 + (index as i32 * 40),
+                    y: 94 + (index as i32 * 36),
                     width: 208,
                     height: 32,
                 }
@@ -325,87 +706,231 @@ impl NativeLvglFacade {
                 width: 144,
                 height: 12,
             },
+            "now_playing_panel" => Layout {
+                x: 0,
+                y: 38,
+                width: 240,
+                height: 214,
+            },
+            "now_playing_icon_halo" => Layout {
+                x: 74,
+                y: 12,
+                width: 92,
+                height: 66,
+            },
+            "now_playing_icon_label" => Layout {
+                x: 16,
+                y: 21,
+                width: 60,
+                height: 24,
+            },
+            "now_playing_state_chip" => Layout {
+                x: 70,
+                y: 170,
+                width: 100,
+                height: 24,
+            },
+            "now_playing_state_label" => Layout {
+                x: 10,
+                y: 6,
+                width: 80,
+                height: 12,
+            },
             "now_playing_title" => Layout {
-                x: 20,
-                y: 84,
-                width: 200,
-                height: 22,
+                x: 16,
+                y: 96,
+                width: 208,
+                height: 44,
             },
             "now_playing_artist" => Layout {
-                x: 20,
-                y: 114,
-                width: 200,
-                height: 18,
-            },
-            "now_playing_state" => Layout {
-                x: 20,
+                x: 16,
                 y: 146,
-                width: 200,
+                width: 208,
+                height: 16,
+            },
+            "now_playing_progress_track" => Layout {
+                x: 36,
+                y: 202,
+                width: 168,
+                height: 8,
+            },
+            "now_playing_progress_fill" => Layout {
+                x: 0,
+                y: 0,
+                width: 1,
+                height: 8,
+            },
+            "talk_card_glow" => Layout {
+                x: 58,
+                y: 42,
+                width: 124,
+                height: 124,
+            },
+            "talk_card_panel" => Layout {
+                x: 64,
+                y: 48,
+                width: 112,
+                height: 112,
+            },
+            "talk_card_label" => Layout {
+                x: 26,
+                y: 44,
+                width: 60,
+                height: 24,
+            },
+            "talk_title" => Layout {
+                x: 30,
+                y: 176,
+                width: 180,
+                height: 28,
+            },
+            "talk_actions_header_box" => Layout {
+                x: 96,
+                y: 50,
+                width: 48,
+                height: 48,
+            },
+            "talk_actions_header_label" => Layout {
+                x: 9,
+                y: 15,
+                width: 30,
                 height: 18,
             },
-            "now_playing_progress" => Layout {
-                x: 20,
-                y: 178,
-                width: 200,
-                height: 18,
+            "talk_actions_header_name" => Layout {
+                x: 50,
+                y: 104,
+                width: 140,
+                height: 16,
+            },
+            "talk_actions_primary_button" => Layout {
+                x: 76,
+                y: 126,
+                width: 88,
+                height: 88,
+            },
+            "talk_actions_button_label" => Layout {
+                x: 24,
+                y: 32,
+                width: 40,
+                height: 24,
+            },
+            "talk_actions_status_label" => Layout {
+                x: 30,
+                y: 220,
+                width: 180,
+                height: 16,
+            },
+            "ask_icon_halo" => Layout {
+                x: 72,
+                y: 56,
+                width: 96,
+                height: 96,
+            },
+            "ask_icon_glow" => Layout {
+                x: 60,
+                y: 44,
+                width: 120,
+                height: 120,
             },
             "ask_icon" => Layout {
-                x: 90,
-                y: 54,
-                width: 60,
-                height: 18,
+                x: 20,
+                y: 20,
+                width: 56,
+                height: 56,
             },
             "ask_title" => Layout {
                 x: 20,
-                y: 112,
+                y: 176,
                 width: 200,
                 height: 24,
             },
             "ask_subtitle" => Layout {
-                x: 20,
-                y: 144,
-                width: 200,
-                height: 20,
+                x: 24,
+                y: 212,
+                width: 192,
+                height: 28,
+            },
+            "call_panel" => Layout {
+                x: 64,
+                y: 48,
+                width: 112,
+                height: 112,
+            },
+            "call_icon_halo" => Layout {
+                x: 58,
+                y: 42,
+                width: 124,
+                height: 124,
             },
             "call_state_icon" => Layout {
-                x: 92,
-                y: 52,
+                x: 26,
+                y: 44,
                 width: 60,
-                height: 18,
+                height: 24,
             },
             "call_title" => Layout {
-                x: 20,
-                y: 88,
+                x: 30,
+                y: 176,
                 width: 200,
                 height: 24,
             },
             "call_subtitle" => Layout {
-                x: 20,
-                y: 120,
-                width: 200,
+                x: 30,
+                y: 204,
+                width: 180,
                 height: 18,
             },
             "call_detail" => Layout {
-                x: 20,
-                y: 148,
-                width: 200,
+                x: 48,
+                y: 226,
+                width: 144,
                 height: 18,
             },
+            "call_state_chip" => Layout {
+                x: 54,
+                y: 208,
+                width: 132,
+                height: 24,
+            },
+            "call_state_label" => Layout {
+                x: 10,
+                y: 6,
+                width: 112,
+                height: 12,
+            },
             "call_mute_badge" => Layout {
-                x: 162,
-                y: 52,
-                width: 58,
+                x: 72,
+                y: 232,
+                width: 96,
+                height: 24,
+            },
+            "call_mute_label" => Layout {
+                x: 12,
+                y: 6,
+                width: 72,
+                height: 12,
+            },
+            "power_icon_halo" => Layout {
+                x: 92,
+                y: 42,
+                width: 56,
+                height: 56,
+            },
+            "power_icon" => Layout {
+                x: 8,
+                y: 18,
+                width: 40,
                 height: 18,
             },
             "power_title" => Layout {
-                x: 20,
-                y: 36,
-                width: 200,
+                x: 60,
+                y: 98,
+                width: 120,
                 height: 24,
             },
             "power_subtitle" => Layout {
                 x: 20,
-                y: 64,
+                y: 122,
                 width: 200,
                 height: 18,
             },
@@ -414,38 +939,26 @@ impl NativeLvglFacade {
                 self.power_row_count += 1;
                 Layout {
                     x: 16,
-                    y: 96 + (index as i32 * 34),
+                    y: 126 + (index as i32 * 22),
                     width: 208,
-                    height: 26,
+                    height: 18,
                 }
             }
-            "power_row_icon" => Layout {
-                x: 8,
-                y: 6,
-                width: 40,
-                height: 14,
-            },
             "power_row_title" => Layout {
-                x: 48,
-                y: 3,
-                width: 144,
+                x: 12,
+                y: 2,
+                width: 184,
                 height: 14,
-            },
-            "power_row_subtitle" => Layout {
-                x: 48,
-                y: 15,
-                width: 144,
-                height: 12,
             },
             "overlay_title" => Layout {
                 x: 20,
-                y: 98,
+                y: 104,
                 width: 200,
                 height: 24,
             },
             "overlay_subtitle" => Layout {
                 x: 20,
-                y: 128,
+                y: 136,
                 width: 200,
                 height: 20,
             },
@@ -472,10 +985,13 @@ impl LvglFacade for NativeLvglFacade {
         let obj = unsafe { sys::lv_obj_create(ptr::null_mut()) };
         let obj = NonNull::new(obj).ok_or_else(|| anyhow!("LVGL root widget creation failed"))?;
         let layout = self.layout_for_root();
+        Self::reset_style_raw(obj);
+        Self::apply_style_raw(obj, theme::style_for_role("root"));
         Self::apply_layout_raw(obj, layout);
         unsafe {
             sys::lv_screen_load(obj.as_ptr());
         }
+        self.hub_dot_count = 0;
         self.list_row_count = 0;
         self.power_row_count = 0;
         let id = self.register_widget(obj, WidgetKind::Root, "root", None, layout);
@@ -489,22 +1005,45 @@ impl LvglFacade for NativeLvglFacade {
         let obj = NonNull::new(obj)
             .ok_or_else(|| anyhow!("LVGL container creation failed for {role}"))?;
         let layout = self.next_role_layout(Some(parent), role)?;
+        Self::reset_style_raw(obj);
+        Self::apply_style_raw(obj, theme::style_for_role(role));
         Self::apply_layout_raw(obj, layout);
+        Self::apply_role_tuning_raw(obj, role);
         Ok(self.register_widget(obj, WidgetKind::Container, role, Some(parent), layout))
     }
 
     fn create_label(&mut self, parent: WidgetId, role: &'static str) -> Result<WidgetId> {
         let parent_obj = self.widget_obj(parent)?;
-        let obj = unsafe { sys::lv_label_create(parent_obj.as_ptr()) };
+        let is_image = matches!(role, "hub_icon" | "ask_icon");
+        let obj = unsafe {
+            if is_image {
+                sys::lv_image_create(parent_obj.as_ptr())
+            } else {
+                sys::lv_label_create(parent_obj.as_ptr())
+            }
+        };
         let obj =
             NonNull::new(obj).ok_or_else(|| anyhow!("LVGL label creation failed for {role}"))?;
         let layout = self.next_role_layout(Some(parent), role)?;
+        Self::reset_style_raw(obj);
+        Self::apply_style_raw(obj, theme::style_for_role(role));
         Self::apply_layout_raw(obj, layout);
-        let empty = CString::new("").expect("empty CString");
-        unsafe {
-            sys::lv_label_set_text(obj.as_ptr(), empty.as_ptr());
+        Self::apply_role_tuning_raw(obj, role);
+        let kind = if is_image {
+            WidgetKind::Image
+        } else {
+            let empty = CString::new("").expect("empty CString");
+            unsafe {
+                sys::lv_label_set_text(obj.as_ptr(), empty.as_ptr());
+            }
+            WidgetKind::Label
+        };
+        if is_image {
+            unsafe {
+                sys::lv_obj_center(obj.as_ptr());
+            }
         }
-        Ok(self.register_widget(obj, WidgetKind::Label, role, Some(parent), layout))
+        Ok(self.register_widget(obj, kind, role, Some(parent), layout))
     }
 
     fn set_text(&mut self, widget: WidgetId, text: &str) -> Result<()> {
@@ -523,23 +1062,49 @@ impl LvglFacade for NativeLvglFacade {
 
     fn set_selected(&mut self, _widget: WidgetId, _selected: bool) -> Result<()> {
         let node = self.widget_node_mut(_widget)?;
-        if matches!(node.role, "list_row" | "power_row") {
-            let mut layout = node.layout;
-            if _selected {
-                layout.x -= 6;
-                layout.width += 12;
-            }
-            Self::apply_layout_raw(node.obj, layout);
-        }
+        Self::apply_style_raw(
+            node.obj,
+            theme::style_for_selected_role(node.role, _selected),
+        );
+        Self::apply_layout_raw(node.obj, node.layout);
         Ok(())
     }
 
     fn set_icon(&mut self, widget: WidgetId, icon_key: &str) -> Result<()> {
-        self.set_text(widget, icon_label(icon_key))
+        let node = self.widget_node_mut(widget)?;
+        if node._kind == WidgetKind::Image {
+            let descriptor = hub_icon_assets::descriptor_for_key(icon_key);
+            unsafe {
+                sys::lv_image_set_src(
+                    node.obj.as_ptr(),
+                    descriptor as *const _ as *const std::ffi::c_void,
+                );
+                sys::lv_obj_center(node.obj.as_ptr());
+            }
+            return Ok(());
+        }
+        self.set_text(widget, &icon_label(icon_key))
     }
 
     fn set_progress(&mut self, widget: WidgetId, value: i32) -> Result<()> {
         let value = value.clamp(0, 1000);
+        let node = self.widget_node_mut(widget)?;
+        if node.role == "now_playing_progress_fill" {
+            let fill_width = (168 * value) / 1000;
+            if fill_width <= 0 {
+                Self::hide_widget_raw(node.obj);
+            } else {
+                Self::apply_layout_raw(
+                    node.obj,
+                    Layout {
+                        width: fill_width,
+                        ..node.layout
+                    },
+                );
+            }
+            return Ok(());
+        }
+
         let filled = ((value as usize) * 10) / 1000;
         let empty = 10usize.saturating_sub(filled);
         let bar = format!(
@@ -561,6 +1126,12 @@ impl LvglFacade for NativeLvglFacade {
         Ok(())
     }
 
+    fn set_accent(&mut self, widget: WidgetId, rgb: u32) -> Result<()> {
+        let node = self.widget_node_mut(widget)?;
+        Self::apply_accent_raw(node.obj, node.role, rgb);
+        Ok(())
+    }
+
     fn destroy(&mut self, widget: WidgetId) -> Result<()> {
         let obj = self.widget_obj(widget)?;
         if self.active_root == Some(widget) {
@@ -579,6 +1150,127 @@ impl LvglFacade for NativeLvglFacade {
             self.power_row_count = 0;
         }
         Ok(())
+    }
+}
+
+impl NativeLvglFacade {
+    fn apply_accent_raw(obj: NonNull<sys::lv_obj_t>, role: &'static str, rgb: u32) {
+        const SELECTOR: sys::LvStyleSelector = 0;
+        let accent = unsafe { sys::lv_color_hex(rgb & 0xFFFFFF) };
+        unsafe {
+            match role {
+                "hub_icon_glow" => {
+                    sys::lv_obj_set_style_bg_color(
+                        obj.as_ptr(),
+                        sys::lv_color_hex(mix_u24(rgb, theme::BACKGROUND_RGB, 72)),
+                        SELECTOR,
+                    );
+                    sys::lv_obj_set_style_bg_opa(obj.as_ptr(), 102, SELECTOR);
+                }
+                "talk_card_glow" | "call_icon_halo" => {
+                    sys::lv_obj_set_style_bg_color(
+                        obj.as_ptr(),
+                        sys::lv_color_hex(mix_u24(rgb, theme::BACKGROUND_RGB, 68)),
+                        SELECTOR,
+                    );
+                    sys::lv_obj_set_style_bg_opa(obj.as_ptr(), 96, SELECTOR);
+                }
+                "hub_card_panel" | "talk_card_panel" | "call_panel" => {
+                    sys::lv_obj_set_style_bg_color(obj.as_ptr(), accent, SELECTOR);
+                    sys::lv_obj_set_style_bg_opa(obj.as_ptr(), theme::OPA_COVER, SELECTOR);
+                    sys::lv_obj_set_style_shadow_color(obj.as_ptr(), accent, SELECTOR);
+                }
+                "now_playing_icon_halo" => {
+                    sys::lv_obj_set_style_bg_color(
+                        obj.as_ptr(),
+                        sys::lv_color_hex(mix_u24(rgb, theme::BACKGROUND_RGB, 80)),
+                        SELECTOR,
+                    );
+                    sys::lv_obj_set_style_bg_opa(obj.as_ptr(), theme::OPA_COVER, SELECTOR);
+                    sys::lv_obj_set_style_border_color(
+                        obj.as_ptr(),
+                        sys::lv_color_hex(mix_u24(rgb, theme::BACKGROUND_RGB, 60)),
+                        SELECTOR,
+                    );
+                }
+                "ask_icon_glow" | "ask_icon_halo" | "talk_actions_header_box" => {
+                    sys::lv_obj_set_style_bg_color(
+                        obj.as_ptr(),
+                        sys::lv_color_hex(mix_u24(rgb, theme::BACKGROUND_RGB, 82)),
+                        SELECTOR,
+                    );
+                    sys::lv_obj_set_style_bg_opa(obj.as_ptr(), 76, SELECTOR);
+                }
+                "call_state_chip" | "now_playing_state_chip" => {
+                    sys::lv_obj_set_style_bg_color(
+                        obj.as_ptr(),
+                        sys::lv_color_hex(mix_u24(rgb, theme::BACKGROUND_RGB, 85)),
+                        SELECTOR,
+                    );
+                    sys::lv_obj_set_style_bg_opa(obj.as_ptr(), theme::OPA_COVER, SELECTOR);
+                }
+                "talk_actions_primary_button" => {
+                    sys::lv_obj_set_style_border_color(obj.as_ptr(), accent, SELECTOR);
+                    sys::lv_obj_set_style_bg_color(
+                        obj.as_ptr(),
+                        sys::lv_color_hex(theme::SURFACE_RAISED_RGB),
+                        SELECTOR,
+                    );
+                    sys::lv_obj_set_style_bg_opa(obj.as_ptr(), theme::OPA_COVER, SELECTOR);
+                }
+                "playlist_underline" => {
+                    sys::lv_obj_set_style_bg_color(obj.as_ptr(), accent, SELECTOR);
+                    sys::lv_obj_set_style_bg_opa(obj.as_ptr(), theme::OPA_COVER, SELECTOR);
+                }
+                "now_playing_progress_fill" => {
+                    sys::lv_obj_set_style_bg_color(obj.as_ptr(), accent, SELECTOR);
+                    sys::lv_obj_set_style_bg_opa(obj.as_ptr(), theme::OPA_COVER, SELECTOR);
+                }
+                "hub_icon" => {
+                    sys::lv_obj_set_style_image_recolor(
+                        obj.as_ptr(),
+                        sys::lv_color_hex(theme::INK_RGB),
+                        SELECTOR,
+                    );
+                    sys::lv_obj_set_style_image_recolor_opa(
+                        obj.as_ptr(),
+                        theme::OPA_COVER,
+                        SELECTOR,
+                    );
+                }
+                "ask_icon" => {
+                    sys::lv_obj_set_style_image_recolor(obj.as_ptr(), accent, SELECTOR);
+                    sys::lv_obj_set_style_image_recolor_opa(
+                        obj.as_ptr(),
+                        theme::OPA_COVER,
+                        SELECTOR,
+                    );
+                }
+                "call_state_icon"
+                | "list_row_icon"
+                | "listen_row_icon"
+                | "playlist_row_icon"
+                | "power_row_icon"
+                | "now_playing_icon_label"
+                | "power_icon"
+                | "now_playing_state_label"
+                | "talk_card_label"
+                | "talk_actions_header_label"
+                | "talk_actions_button_label"
+                | "talk_actions_status_label"
+                | "call_state_label" => {
+                    sys::lv_obj_set_style_text_color(obj.as_ptr(), accent, SELECTOR);
+                }
+                "listen_footer" | "now_playing_footer" | "power_footer" => {
+                    sys::lv_obj_set_style_text_color(
+                        obj.as_ptr(),
+                        sys::lv_color_hex(mix_u24(rgb, theme::BACKGROUND_RGB, 65)),
+                        SELECTOR,
+                    );
+                }
+                _ => {}
+            }
+        }
     }
 }
 
@@ -619,20 +1311,49 @@ fn validate_explicit_source_dir(explicit_source: Option<&Path>) -> Result<()> {
     Ok(())
 }
 
-fn icon_label(icon_key: &str) -> &'static str {
-    match icon_key {
-        "ask" => "ASK",
-        "battery" => "PWR",
+fn mix_u24(primary_rgb: u32, secondary_rgb: u32, secondary_ratio_percent: u8) -> u32 {
+    let secondary_ratio = u32::from(secondary_ratio_percent.min(100));
+    let primary_ratio = 100 - secondary_ratio;
+    let red = ((((primary_rgb >> 16) & 0xFF) * primary_ratio
+        + ((secondary_rgb >> 16) & 0xFF) * secondary_ratio)
+        / 100)
+        & 0xFF;
+    let green = ((((primary_rgb >> 8) & 0xFF) * primary_ratio
+        + ((secondary_rgb >> 8) & 0xFF) * secondary_ratio)
+        / 100)
+        & 0xFF;
+    let blue = (((primary_rgb & 0xFF) * primary_ratio + (secondary_rgb & 0xFF) * secondary_ratio)
+        / 100)
+        & 0xFF;
+    (red << 16) | (green << 8) | blue
+}
+
+fn icon_label(icon_key: &str) -> String {
+    if let Some(monogram) = icon_key.strip_prefix("mono:") {
+        if !monogram.is_empty() {
+            return monogram.to_string();
+        }
+    }
+
+    let label = match icon_key {
+        "ask" => "AI",
+        "battery" | "setup" | "power" => "PWR",
         "call_active" => "CALL",
         "call_incoming" => "RING",
         "call_outgoing" => "DIAL",
-        "microphone" => "MIC",
+        "call" | "talk" => "CALL",
+        "check" => "OK",
+        "clock" | "retry" => "REF",
+        "close" | "mic_off" => "X",
+        "listen" | "music_note" | "play" | "track" => "MUS",
+        "microphone" | "mic" | "voice_note" => "REC",
+        "people" | "contact" | "contacts" => "LIST",
         "playlist" => "LIST",
-        "recent" => "HIST",
-        "talk" => "TALK",
-        "track" => "PLAY",
+        "recent" | "history" => "HIST",
+        "signal" | "network" => "WIFI",
         _ => "UI",
-    }
+    };
+    label.to_string()
 }
 
 unsafe extern "C" fn lvgl_flush_callback(

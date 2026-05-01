@@ -49,14 +49,33 @@ def test_prod_rollback_unit_has_its_own_start_limit() -> None:
 
 def test_dev_unit_references_checkout_and_venv() -> None:
     cfg = _parse("yoyopod-dev.service")
+    unit_text = (UNITS_DIR / "yoyopod-dev.service").read_text(encoding="utf-8")
     exec_start = cfg["Service"]["ExecStart"]
     exec_start_pre = cfg["Service"]["ExecStartPre"]
 
     assert cfg["Service"]["WorkingDirectory"] == "/"
     assert cfg["Service"]["EnvironmentFile"] == "-/etc/default/yoyopod-dev"
+    assert "Environment=PYTHONUNBUFFERED=1" in unit_text
+    assert "Environment=HOME=/root" in unit_text
     assert cfg["Unit"]["Conflicts"] == "yoyopod-prod.service"
+    assert "install -d -m 700" in exec_start_pre
+    assert ".local/share/linphone" in exec_start_pre
+    assert ".config/linphone" in exec_start_pre
     assert "YOYOPOD_DEV_CHECKOUT" in exec_start
     assert "/opt/yoyopod-dev/checkout" in exec_start
     assert "YOYOPOD_DEV_VENV" in exec_start
     assert "/opt/yoyopod-dev/venv" in exec_start
+    assert "LD_LIBRARY_PATH" in exec_start_pre
+    assert "LD_LIBRARY_PATH" in exec_start
+    assert "yoyopod/ui/lvgl_binding/native/build" in exec_start
     assert "-m yoyopod_cli.main build ensure-native" in exec_start_pre
+
+
+def test_dev_unit_defaults_to_python_with_rust_runtime_opt_in() -> None:
+    cfg = _parse("yoyopod-dev.service")
+    exec_start = cfg["Service"]["ExecStart"]
+
+    assert "$${YOYOPOD_DEV_RUNTIME:-python}" in exec_start
+    assert "yoyopod_rs/runtime/build/yoyopod-runtime" in exec_start
+    assert "--config-dir $$CHECKOUT/config --hardware whisplay" in exec_start
+    assert '"$$VENV/bin/python" yoyopod.py' in exec_start

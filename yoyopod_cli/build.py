@@ -177,6 +177,19 @@ def _rust_ui_host_binary_path() -> Path:
     return _rust_ui_host_crate_dir() / "build" / f"yoyopod-ui-host{suffix}"
 
 
+def _rust_runtime_workspace_dir() -> Path:
+    return _REPO_ROOT / "yoyopod_rs"
+
+
+def _rust_runtime_crate_dir() -> Path:
+    return _rust_runtime_workspace_dir() / "runtime"
+
+
+def _rust_runtime_binary_path() -> Path:
+    suffix = ".exe" if os.name == "nt" else ""
+    return _rust_runtime_crate_dir() / "build" / f"yoyopod-runtime{suffix}"
+
+
 def _rust_ui_poc_dir() -> Path:
     return _rust_ui_host_crate_dir()
 
@@ -229,6 +242,31 @@ def build_rust_ui_host(*, hardware_feature: bool = True) -> Path:
 
     suffix = ".exe" if os.name == "nt" else ""
     built_binary = workspace_dir / "target" / "release" / f"yoyopod-ui-host{suffix}"
+    shutil.copy2(built_binary, output)
+    return output
+
+
+def build_rust_runtime() -> Path:
+    """Build the Rust runtime binary and return the copied binary path."""
+
+    workspace_dir = _rust_runtime_workspace_dir()
+    output = _rust_runtime_binary_path()
+    output.parent.mkdir(parents=True, exist_ok=True)
+
+    _run(
+        [
+            "cargo",
+            "build",
+            "--release",
+            "-p",
+            "yoyopod-runtime",
+            "--locked",
+        ],
+        cwd=workspace_dir,
+    )
+
+    suffix = ".exe" if os.name == "nt" else ""
+    built_binary = workspace_dir / "target" / "release" / f"yoyopod-runtime{suffix}"
     shutil.copy2(built_binary, output)
     return output
 
@@ -379,6 +417,14 @@ def build_rust_ui_host_command(
 
     output = build_rust_ui_host(hardware_feature=not no_hardware_feature)
     typer.echo(f"Built Rust UI host: {output}")
+
+
+@app.command("rust-runtime")
+def build_rust_runtime_command() -> None:
+    """Build the Rust runtime binary."""
+
+    output = build_rust_runtime()
+    typer.echo(f"Built Rust runtime: {output}")
 
 
 @app.command("lvgl")

@@ -42,30 +42,28 @@ Use `--with-remote-tools --with-github` together when you plan to both validate 
 
 ## Fast local loop
 
-Simulation run:
+Legacy Python simulation run:
 
 ```bash
 yoyopod build simulation
 python yoyopod.py --simulate
 ```
 
-Core validation loop:
+Core Rust validation loop:
 
 ```bash
-uv run python scripts/quality.py gate
-uv run pytest -q
-uv run python scripts/quality.py ci
+cargo test --manifest-path yoyopod_rs/Cargo.toml --workspace --locked
 ```
 
-Full quality debt audit:
+Legacy Python quality debt audit:
 
 ```bash
 uv run python scripts/quality.py audit
 ```
 
-CI currently runs `uv run python scripts/quality.py gate` plus `uv run pytest -q`.
-Use `uv run python scripts/quality.py ci` as the local wrapper when you want both in one command.
-Use `audit` when you want to see the broader repo debt without pretending it is all gated yet.
+Use Python tests and `scripts/quality.py` when changing Python CLI/deploy
+surfaces or fixing Python CI. Do not treat them as the default gate for Rust
+runtime iteration.
 
 ## Choose the right doc path for the work
 
@@ -73,16 +71,17 @@ Use `audit` when you want to see the broader repo debt without pretending it is 
 
 Read:
 
-1. [`SYSTEM_ARCHITECTURE.md`](../architecture/SYSTEM_ARCHITECTURE.md)
-2. subsystem docs for the area you are touching
-3. `rules/architecture.md`
-4. the relevant files under `yoyopod/`
+1. `yoyopod_rs/runtime/`
+2. the relevant Rust worker crate under `yoyopod_rs/`
+3. [`SYSTEM_ARCHITECTURE.md`](../architecture/SYSTEM_ARCHITECTURE.md)
+4. subsystem docs for the area you are touching
+5. `rules/architecture.md`
 
 Current reality:
 
-- `YoyoPodApp` is thinner than before, but runtime cleanup is still in progress
-- `yoyopod/core/bootstrap/` is the current boot hotspot, not the final architecture destination
-- runtime/state/model cleanup should prefer clearer ownership over broad rewrites
+- `yoyopod-runtime` is the target top-level owner for runtime state and worker supervision
+- Python app/bootstrap code is compatibility/tooling surface unless current code still routes through it
+- runtime/state/model cleanup should prefer Rust ownership over broad Python rewrites
 
 ### Raspberry Pi and setup work
 
@@ -126,14 +125,11 @@ When updating docs:
 
 ## Before opening a PR
 
-At minimum, run the same validation commands CI enforces today:
+At minimum for Rust runtime work, run the relevant Rust crate tests:
 
 ```bash
-uv run python scripts/quality.py gate
-uv run pytest -q
+cargo test --manifest-path yoyopod_rs/Cargo.toml --workspace --locked
 ```
-
-`uv run python scripts/quality.py ci` is the local convenience wrapper for those same two steps.
 
 Then add any focused commands relevant to your area, for example:
 

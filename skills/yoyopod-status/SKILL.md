@@ -1,6 +1,6 @@
 ---
 name: yoyopod-status
-description: Health check for Raspberry Pi lanes, connectivity, processes, memory, recent logs
+description: Health check for Raspberry Pi lanes, runtime owner, connectivity, processes, memory, recent logs
 disable-model-invocation: true
 allowed-tools:
   - Read
@@ -27,15 +27,17 @@ If the file does not exist yet, run `yoyopod remote config edit` first. That com
 
 3. **Present the result.** Prefer a compact summary with:
    - active lane and any conflict reasons
+   - active runtime owner when visible (`yoyopod-runtime` or Python fallback)
    - dev service status and prod service status
    - git branch and commit
+   - Rust artifact presence for runtime/UI/media/VoIP when relevant
    - music backend status
    - PiSugar server status
    - PID file state
    - latest startup marker
    - top memory processes
 
-4. **If the app is not running,** explicitly suggest the lane-specific action:
+4. **If no supported runtime owner is running,** explicitly suggest the lane-specific action:
    ```text
    Run `yoyopod remote mode activate dev` for mutable PR testing, or `yoyopod remote mode activate prod` for the packaged slot lane.
    ```
