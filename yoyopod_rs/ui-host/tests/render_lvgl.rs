@@ -1,7 +1,7 @@
 use anyhow::Result;
 use yoyopod_ui_host::lvgl::{
-    theme, CallController, LvglFacade, LvglRenderer, NativeSceneKey, OverlayController,
-    PowerController, SceneKey, ScreenController, WidgetId,
+    theme, CallController, LvglFacade, LvglRenderer, NativeSceneKey, NativeSceneRenderer,
+    OverlayController, PowerController, RustSceneBridge, SceneKey, ScreenController, WidgetId,
 };
 use yoyopod_ui_host::runtime::UiScreen;
 use yoyopod_ui_host::screens::{
@@ -623,6 +623,138 @@ fn native_scene_key_matches_python_c_lvgl_retained_scene_contract() {
 }
 
 #[test]
+fn rust_scene_bridge_preserves_native_list_scene_lifecycle_boundary() -> Result<()> {
+    let bridge = RustSceneBridge::new(FakeFacade::default());
+    let mut renderer = NativeSceneRenderer::new(bridge);
+
+    renderer.render(&listen_screen_model())?;
+    let listen_pass_len = renderer.bridge().facade().events().len();
+
+    renderer.render(&playlists_screen_model())?;
+
+    let events = renderer.bridge().facade().events();
+    let playlist_pass = &events[listen_pass_len..];
+
+    assert_eq!(renderer.active_scene(), Some(NativeSceneKey::Playlist));
+    assert_eq!(renderer.active_screen(), Some(UiScreen::Playlists));
+    assert!(playlist_pass.contains(&FacadeEvent::Destroy {
+        id: WidgetId::new(0),
+    }));
+    assert!(playlist_pass
+        .iter()
+        .any(|event| matches!(event, FacadeEvent::CreateRoot { .. })));
+    assert!(playlist_pass.iter().any(|event| matches!(
+        event,
+        FacadeEvent::CreateContainer {
+            role: "list_row",
+            ..
+        }
+    )));
+
+    Ok(())
+}
+
+#[test]
+fn rust_scene_bridge_reuses_playlist_family_without_rebuilding_widgets() -> Result<()> {
+    let bridge = RustSceneBridge::new(FakeFacade::default());
+    let mut renderer = NativeSceneRenderer::new(bridge);
+
+    renderer.render(&playlists_screen_model())?;
+    let playlists_pass_len = renderer.bridge().facade().events().len();
+
+    renderer.render(&recent_tracks_screen_model())?;
+
+    let events = renderer.bridge().facade().events();
+    let recent_pass = &events[playlists_pass_len..];
+    let row_ids: Vec<_> = events
+        .iter()
+        .filter_map(|event| match event {
+            FacadeEvent::CreateContainer { id, role, .. } if *role == "list_row" => Some(*id),
+            _ => None,
+        })
+        .collect();
+
+    assert_eq!(renderer.active_scene(), Some(NativeSceneKey::Playlist));
+    assert_eq!(renderer.active_screen(), Some(UiScreen::RecentTracks));
+    assert!(!recent_pass.iter().any(|event| matches!(
+        event,
+        FacadeEvent::CreateRoot { .. }
+            | FacadeEvent::CreateContainer { .. }
+            | FacadeEvent::CreateLabel { .. }
+            | FacadeEvent::Destroy { .. }
+    )));
+    assert_eq!(row_ids.len(), 2);
+    assert!(recent_pass.contains(&FacadeEvent::SetVisible {
+        id: row_ids[0],
+        visible: true,
+    }));
+    assert!(recent_pass.contains(&FacadeEvent::SetVisible {
+        id: row_ids[1],
+        visible: false,
+    }));
+
+    Ok(())
+}
+
+#[test]
+fn rust_scene_bridge_caps_playlist_family_to_native_visible_rows() -> Result<()> {
+    let bridge = RustSceneBridge::new(FakeFacade::default());
+    let mut renderer = NativeSceneRenderer::new(bridge);
+
+    renderer.render(&many_playlist_rows_screen_model(4))?;
+
+    let events = renderer.bridge().facade().events();
+    let row_ids: Vec<_> = events
+        .iter()
+        .filter_map(|event| match event {
+            FacadeEvent::CreateContainer { id, role, .. } if *role == "list_row" => Some(*id),
+            _ => None,
+        })
+        .collect();
+
+    assert_eq!(row_ids.len(), 4);
+    assert!(!events.iter().any(|event| matches!(
+        event,
+        FacadeEvent::SetText { text, .. } if text == "Playlist 5"
+    )));
+    assert!(events.contains(&FacadeEvent::SetSelected {
+        id: row_ids[3],
+        selected: true,
+    }));
+
+    Ok(())
+}
+
+#[test]
+fn rust_scene_bridge_wraps_listen_selection_after_native_row_cap() -> Result<()> {
+    let bridge = RustSceneBridge::new(FakeFacade::default());
+    let mut renderer = NativeSceneRenderer::new(bridge);
+
+    renderer.render(&many_listen_rows_screen_model(4))?;
+
+    let events = renderer.bridge().facade().events();
+    let row_ids: Vec<_> = events
+        .iter()
+        .filter_map(|event| match event {
+            FacadeEvent::CreateContainer { id, role, .. } if *role == "list_row" => Some(*id),
+            _ => None,
+        })
+        .collect();
+
+    assert_eq!(row_ids.len(), 4);
+    assert!(events.contains(&FacadeEvent::SetSelected {
+        id: row_ids[0],
+        selected: true,
+    }));
+    assert!(!events.iter().any(|event| matches!(
+        event,
+        FacadeEvent::SetText { text, .. } if text == "Listen Item 5"
+    )));
+
+    Ok(())
+}
+
+#[test]
 fn empty_hub_model_preserves_listen_title_fallback() -> Result<()> {
     let facade = FakeFacade::default();
     let mut renderer = LvglRenderer::new(facade);
@@ -849,6 +981,23 @@ fn listen_screen_model() -> ScreenModel {
     })
 }
 
+fn many_listen_rows_screen_model(selected_index: usize) -> ScreenModel {
+    ScreenModel::Listen(ListScreenModel {
+        chrome: chrome_model(),
+        title: "Listen".to_string(),
+        subtitle: "Music".to_string(),
+        rows: (0..5)
+            .map(|index| ListRowModel {
+                id: format!("listen_{index}"),
+                title: format!("Listen Item {}", index + 1),
+                subtitle: format!("Action {}", index + 1),
+                icon_key: "playlist".to_string(),
+                selected: index == selected_index,
+            })
+            .collect(),
+    })
+}
+
 fn playlists_screen_model() -> ScreenModel {
     ScreenModel::Playlists(ListScreenModel {
         chrome: chrome_model(),
@@ -870,6 +1019,23 @@ fn playlists_screen_model() -> ScreenModel {
                 selected: true,
             },
         ],
+    })
+}
+
+fn many_playlist_rows_screen_model(selected_index: usize) -> ScreenModel {
+    ScreenModel::Playlists(ListScreenModel {
+        chrome: chrome_model(),
+        title: "Playlists".to_string(),
+        subtitle: "Saved mixes".to_string(),
+        rows: (0..5)
+            .map(|index| ListRowModel {
+                id: format!("playlist_{index}"),
+                title: format!("Playlist {}", index + 1),
+                subtitle: format!("{} tracks", 10 + index),
+                icon_key: "playlist".to_string(),
+                selected: index == selected_index,
+            })
+            .collect(),
     })
 }
 

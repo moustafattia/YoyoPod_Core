@@ -1,14 +1,40 @@
 use std::path::Path;
 
-#[cfg(not(feature = "native-lvgl"))]
-use anyhow::bail;
-use anyhow::Result;
+use anyhow::{bail, Result};
 
 use crate::framebuffer::Framebuffer;
 use crate::lvgl::{LvglFacade, LvglRenderer as SemanticLvglRenderer};
 #[cfg(feature = "native-lvgl")]
-use crate::lvgl::{NativeLvglFacade, NativeSceneRenderer, ShimSceneBridge};
+use crate::lvgl::{
+    NativeLvglFacade, NativeSceneRenderer, RustSceneBridge, SceneBridge, ShimSceneBridge,
+};
 use crate::screens::ScreenModel;
+
+#[cfg(any(test, feature = "native-lvgl"))]
+const SCENE_BACKEND_ENV: &str = "YOYOPOD_LVGL_SCENE_BACKEND";
+
+#[cfg(any(test, feature = "native-lvgl"))]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum SceneBackendMode {
+    Shim,
+    Rust,
+}
+
+#[cfg(any(test, feature = "native-lvgl"))]
+fn scene_backend_mode_from_value(value: Option<&str>) -> Result<SceneBackendMode> {
+    let value = value.map(str::trim).filter(|value| !value.is_empty());
+    match value.unwrap_or("shim").to_ascii_lowercase().as_str() {
+        "shim" | "c" | "lvgl_shim" => Ok(SceneBackendMode::Shim),
+        "rust" | "native" | "rust_native" => Ok(SceneBackendMode::Rust),
+        other => bail!("unsupported {SCENE_BACKEND_ENV}={other:?}; expected shim or rust"),
+    }
+}
+
+#[cfg(feature = "native-lvgl")]
+fn scene_backend_mode_from_env() -> Result<SceneBackendMode> {
+    let value = std::env::var(SCENE_BACKEND_ENV).ok();
+    scene_backend_mode_from_value(value.as_deref())
+}
 
 #[allow(dead_code)]
 pub(crate) trait RuntimeLvglBackend: LvglFacade {
@@ -20,15 +46,15 @@ pub(crate) trait RuntimeLvglBackend: LvglFacade {
 #[cfg(feature = "native-lvgl")]
 impl RuntimeLvglBackend for NativeLvglFacade {
     fn display_needs_reset(&self, framebuffer: &Framebuffer) -> bool {
-        self.display_needs_reset(framebuffer)
+        NativeLvglFacade::display_needs_reset(self, framebuffer)
     }
 
     fn ensure_display_registered(&mut self, framebuffer: &Framebuffer) -> Result<()> {
-        self.ensure_display_registered(framebuffer)
+        NativeLvglFacade::ensure_display_registered(self, framebuffer)
     }
 
     fn render_frame(&mut self, framebuffer: &mut Framebuffer) -> Result<()> {
-        self.render_frame(framebuffer)
+        NativeLvglFacade::render_frame(self, framebuffer)
     }
 }
 
@@ -80,16 +106,21 @@ pub struct LvglRenderer;
 
 #[cfg(feature = "native-lvgl")]
 pub struct LvglRenderer {
-    renderer: RuntimeSceneLvglRenderer,
+    renderer: ActiveRuntimeSceneLvglRenderer,
 }
 
 #[cfg(feature = "native-lvgl")]
 impl LvglRenderer {
     pub fn open(explicit_source: Option<&Path>) -> Result<Self> {
-        let bridge = ShimSceneBridge::open(explicit_source)?;
-        Ok(Self {
-            renderer: RuntimeSceneLvglRenderer::new(bridge),
-        })
+        let renderer = match scene_backend_mode_from_env()? {
+            SceneBackendMode::Shim => ActiveRuntimeSceneLvglRenderer::Shim(
+                RuntimeSceneLvglRenderer::new(ShimSceneBridge::open(explicit_source)?),
+            ),
+            SceneBackendMode::Rust => ActiveRuntimeSceneLvglRenderer::Rust(
+                RuntimeSceneLvglRenderer::new(RustSceneBridge::open(explicit_source)?),
+            ),
+        };
+        Ok(Self { renderer })
     }
 
     pub fn render_screen_model(
@@ -102,13 +133,73 @@ impl LvglRenderer {
 }
 
 #[cfg(feature = "native-lvgl")]
-struct RuntimeSceneLvglRenderer {
-    renderer: NativeSceneRenderer<ShimSceneBridge>,
+trait RuntimeSceneBridge: SceneBridge {
+    fn display_needs_reset(&self, framebuffer: &Framebuffer) -> bool;
+    fn ensure_display_registered(&mut self, framebuffer: &Framebuffer) -> Result<()>;
+    fn render_frame(&mut self, framebuffer: &mut Framebuffer) -> Result<()>;
 }
 
 #[cfg(feature = "native-lvgl")]
-impl RuntimeSceneLvglRenderer {
-    fn new(bridge: ShimSceneBridge) -> Self {
+impl RuntimeSceneBridge for ShimSceneBridge {
+    fn display_needs_reset(&self, framebuffer: &Framebuffer) -> bool {
+        ShimSceneBridge::display_needs_reset(self, framebuffer)
+    }
+
+    fn ensure_display_registered(&mut self, framebuffer: &Framebuffer) -> Result<()> {
+        ShimSceneBridge::ensure_display_registered(self, framebuffer)
+    }
+
+    fn render_frame(&mut self, framebuffer: &mut Framebuffer) -> Result<()> {
+        ShimSceneBridge::render_frame(self, framebuffer)
+    }
+}
+
+#[cfg(feature = "native-lvgl")]
+impl RuntimeSceneBridge for RustSceneBridge<NativeLvglFacade> {
+    fn display_needs_reset(&self, framebuffer: &Framebuffer) -> bool {
+        RustSceneBridge::<NativeLvglFacade>::display_needs_reset(self, framebuffer)
+    }
+
+    fn ensure_display_registered(&mut self, framebuffer: &Framebuffer) -> Result<()> {
+        RustSceneBridge::<NativeLvglFacade>::ensure_display_registered(self, framebuffer)
+    }
+
+    fn render_frame(&mut self, framebuffer: &mut Framebuffer) -> Result<()> {
+        RustSceneBridge::<NativeLvglFacade>::render_frame(self, framebuffer)
+    }
+}
+
+#[cfg(feature = "native-lvgl")]
+enum ActiveRuntimeSceneLvglRenderer {
+    Shim(RuntimeSceneLvglRenderer<ShimSceneBridge>),
+    Rust(RuntimeSceneLvglRenderer<RustSceneBridge<NativeLvglFacade>>),
+}
+
+#[cfg(feature = "native-lvgl")]
+impl ActiveRuntimeSceneLvglRenderer {
+    fn render_screen_model(
+        &mut self,
+        framebuffer: &mut Framebuffer,
+        model: &ScreenModel,
+    ) -> Result<()> {
+        match self {
+            Self::Shim(renderer) => renderer.render_screen_model(framebuffer, model),
+            Self::Rust(renderer) => renderer.render_screen_model(framebuffer, model),
+        }
+    }
+}
+
+#[cfg(feature = "native-lvgl")]
+struct RuntimeSceneLvglRenderer<B> {
+    renderer: NativeSceneRenderer<B>,
+}
+
+#[cfg(feature = "native-lvgl")]
+impl<B> RuntimeSceneLvglRenderer<B>
+where
+    B: RuntimeSceneBridge,
+{
+    fn new(bridge: B) -> Self {
         Self {
             renderer: NativeSceneRenderer::new(bridge),
         }
@@ -153,6 +244,36 @@ mod tests {
     use crate::framebuffer::Framebuffer;
     use crate::lvgl::{LvglFacade, WidgetId};
     use crate::screens::{ChromeModel, HubCardModel, HubViewModel, ScreenModel, StatusBarModel};
+
+    #[test]
+    fn scene_backend_mode_parser_defaults_to_shim_and_accepts_rust_aliases() -> Result<()> {
+        assert_eq!(
+            super::scene_backend_mode_from_value(None)?,
+            super::SceneBackendMode::Shim
+        );
+        assert_eq!(
+            super::scene_backend_mode_from_value(Some("shim"))?,
+            super::SceneBackendMode::Shim
+        );
+        assert_eq!(
+            super::scene_backend_mode_from_value(Some("c"))?,
+            super::SceneBackendMode::Shim
+        );
+        assert_eq!(
+            super::scene_backend_mode_from_value(Some("rust"))?,
+            super::SceneBackendMode::Rust
+        );
+        assert_eq!(
+            super::scene_backend_mode_from_value(Some("native"))?,
+            super::SceneBackendMode::Rust
+        );
+
+        let error = super::scene_backend_mode_from_value(Some("python"))
+            .expect_err("unknown LVGL scene backend should be rejected");
+        assert!(error.to_string().contains("YOYOPOD_LVGL_SCENE_BACKEND"));
+
+        Ok(())
+    }
 
     #[derive(Default)]
     struct FakeBackend {
