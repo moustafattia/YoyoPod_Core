@@ -42,6 +42,12 @@ pub enum RuntimeCommand {
         domain: WorkerDomain,
         envelope: WorkerEnvelope,
     },
+    WorkerCommandWithAck {
+        domain: WorkerDomain,
+        envelope: WorkerEnvelope,
+        success_ack: WorkerEnvelope,
+        failure_ack: WorkerEnvelope,
+    },
     Shutdown,
 }
 
@@ -574,23 +580,40 @@ fn remote_media_control(
     command_id: Option<String>,
     command_type: &str,
 ) -> Vec<RuntimeCommand> {
-    let mut commands = vec![worker_command(
-        WorkerDomain::Media,
-        media_message_type,
-        empty_payload(),
-    )];
-    if let Some(command_id) = command_id {
-        commands.push(worker_command(
-            WorkerDomain::Cloud,
+    let media_command = WorkerEnvelope::command(media_message_type, None, empty_payload());
+    let Some(command_id) = command_id else {
+        return vec![RuntimeCommand::WorkerCommand {
+            domain: WorkerDomain::Media,
+            envelope: media_command,
+        }];
+    };
+
+    vec![RuntimeCommand::WorkerCommandWithAck {
+        domain: WorkerDomain::Media,
+        envelope: media_command,
+        success_ack: WorkerEnvelope::command(
             "cloud.ack",
+            None,
             json!({
                 "command_id": command_id,
                 "ok": true,
                 "payload": {"command": command_type}
             }),
-        ));
-    }
-    commands
+        ),
+        failure_ack: WorkerEnvelope::command(
+            "cloud.ack",
+            None,
+            json!({
+                "command_id": command_id,
+                "ok": false,
+                "reason": "media_dispatch_failed",
+                "payload": {
+                    "command": command_type,
+                    "media_command": media_message_type
+                }
+            }),
+        ),
+    }]
 }
 
 fn commands_for_media_snapshot(snapshot: &Value) -> Vec<RuntimeCommand> {

@@ -87,11 +87,61 @@ fn worker_surfaces_backend_commands_as_cloud_command_events() {
     assert!(output.contains(r#""last_command_type":"fetch_config""#));
 }
 
-#[derive(Default)]
+#[test]
+fn worker_queues_publish_commands_until_mqtt_connected() {
+    let shared = Arc::new(Mutex::new(FakeMqttState {
+        connect_on_start: false,
+        events: vec![MqttRuntimeEvent::Connected],
+        ..FakeMqttState::default()
+    }));
+    let backend = FakeMqttBackend::new(shared.clone());
+    let host = CloudHost::new(
+        "config",
+        provisioned_config("queue-until-connected"),
+        backend,
+    );
+    let input = Cursor::new(format!(
+        "{}{}",
+        command(
+            "cloud.publish_heartbeat",
+            json!({"firmware_version": "test-fw"})
+        ),
+        command("worker.stop", json!({})),
+    ));
+    let mut output = Vec::new();
+
+    run_host_loop(
+        host,
+        input,
+        &mut output,
+        std::time::Duration::from_millis(1),
+    )
+    .expect("worker loop");
+
+    let published = &shared.lock().expect("fake mqtt state").published;
+    assert_eq!(published.len(), 1);
+    assert_eq!(published[0].0, "yoyopod/device-123/evt");
+    let heartbeat: Value = serde_json::from_str(&published[0].1).expect("heartbeat json");
+    assert_eq!(heartbeat["type"], "heartbeat");
+    assert_eq!(heartbeat["payload"]["firmware_version"], "test-fw");
+}
+
 struct FakeMqttState {
     published: Vec<(String, String, u8)>,
     events: Vec<MqttRuntimeEvent>,
     connected: bool,
+    connect_on_start: bool,
+}
+
+impl Default for FakeMqttState {
+    fn default() -> Self {
+        Self {
+            published: Vec::new(),
+            events: Vec::new(),
+            connected: false,
+            connect_on_start: true,
+        }
+    }
 }
 
 struct FakeMqttBackend {
@@ -106,7 +156,8 @@ impl FakeMqttBackend {
 
 impl CloudMqttBackend for FakeMqttBackend {
     fn start(&mut self, _config: &CloudHostConfig) -> Result<()> {
-        self.state.lock().expect("fake state").connected = true;
+        let mut state = self.state.lock().expect("fake state");
+        state.connected = state.connect_on_start;
         Ok(())
     }
 

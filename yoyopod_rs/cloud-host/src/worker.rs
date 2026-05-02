@@ -65,11 +65,27 @@ where
     W: Write,
     B: CloudMqttBackend,
 {
-    emit(output, &ready_event(host.config_dir()))?;
-    if let Err(error) = host.start() {
+    let started = match host.start() {
+        Ok(()) => true,
+        Err(error) => {
+            emit(
+                output,
+                &WorkerEnvelope::error("cloud.error", None, "startup_failed", error.to_string()),
+            )?;
+            false
+        }
+    };
+    if started {
+        emit(output, &ready_event(host.config_dir()))?;
+    } else {
         emit(
             output,
-            &WorkerEnvelope::error("cloud.error", None, "startup_failed", error.to_string()),
+            &WorkerEnvelope::error(
+                "cloud.error",
+                None,
+                "not_ready",
+                "cloud MQTT startup failed before ready",
+            ),
         )?;
     }
     emit(output, &snapshot_event(host.snapshot()))?;

@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, VecDeque};
 
 use anyhow::{Context, Result};
 use serde_json::{json, Value};
@@ -7,14 +7,24 @@ use crate::config::CloudHostConfig;
 use crate::mqtt::{CloudMqttBackend, MqttRuntimeEvent};
 use crate::snapshot::{current_epoch_seconds, current_millis, persist_status, CloudStatusSnapshot};
 
+const MAX_PENDING_PUBLISHES: usize = 32;
+
 pub struct CloudHost<B: CloudMqttBackend> {
     config_dir: String,
     config: CloudHostConfig,
     mqtt: B,
     snapshot: CloudStatusSnapshot,
+    pending_publishes: VecDeque<PendingPublish>,
+    mqtt_started: bool,
     last_telemetry_payloads: BTreeMap<String, Value>,
     last_connectivity_type: Option<String>,
     next_battery_report_at_ms: u64,
+}
+
+struct PendingPublish {
+    topic: String,
+    payload: String,
+    qos: u8,
 }
 
 impl<B: CloudMqttBackend> CloudHost<B> {
@@ -25,6 +35,8 @@ impl<B: CloudMqttBackend> CloudHost<B> {
             config,
             mqtt,
             snapshot,
+            pending_publishes: VecDeque::new(),
+            mqtt_started: false,
             last_telemetry_payloads: BTreeMap::new(),
             last_connectivity_type: None,
             next_battery_report_at_ms: 0,
@@ -68,12 +80,14 @@ impl<B: CloudMqttBackend> CloudHost<B> {
             self.snapshot.mark_degraded(error.to_string());
             self.persist_status();
         })?;
+        self.mqtt_started = true;
         self.persist_status();
         Ok(())
     }
 
     pub fn stop(&mut self) {
         self.mqtt.stop();
+        self.mqtt_started = false;
         self.snapshot.mark_disconnected("stopped");
         self.persist_status();
     }
@@ -84,6 +98,12 @@ impl<B: CloudMqttBackend> CloudHost<B> {
             match event {
                 MqttRuntimeEvent::Connected => {
                     self.snapshot.mark_connected();
+                    if let Err(error) = self.flush_pending_publishes() {
+                        let message = error.to_string();
+                        self.snapshot.mark_degraded(message.clone());
+                        self.persist_status();
+                        events.push(CloudRuntimeEvent::Error(message));
+                    }
                     self.persist_status();
                     events.push(CloudRuntimeEvent::Snapshot(self.snapshot.clone()));
                 }
@@ -176,17 +196,13 @@ impl<B: CloudMqttBackend> CloudHost<B> {
     }
 
     pub fn publish_device_event(&mut self, event_type: &str, payload: Value) -> Result<bool> {
-        if !self.snapshot.mqtt_connected && !self.mqtt.is_connected() {
-            return Ok(false);
-        }
         let topic = self.config.device_event_topic();
         let message = json!({
             "type": event_type,
             "payload": payload,
             "ts": current_epoch_seconds(),
         });
-        self.mqtt
-            .publish(&topic, &serde_json::to_string(&message)?, 1)
+        self.publish_or_queue(&topic, serde_json::to_string(&message)?, 1)
             .with_context(|| format!("publish cloud event {event_type}"))
     }
 
@@ -196,9 +212,6 @@ impl<B: CloudMqttBackend> CloudHost<B> {
         payload: Value,
         qos: u8,
     ) -> Result<bool> {
-        if !self.snapshot.mqtt_connected && !self.mqtt.is_connected() {
-            return Ok(false);
-        }
         let topic_suffix = topic_suffix.trim().trim_matches('/');
         if topic_suffix.is_empty() {
             return Ok(false);
@@ -213,7 +226,7 @@ impl<B: CloudMqttBackend> CloudHost<B> {
         }
         let topic = format!("yoyopod/telemetry/{topic_suffix}");
         let encoded = serde_json::to_string(&payload)?;
-        let published = self.mqtt.publish(&topic, &encoded, qos)?;
+        let published = self.publish_or_queue(&topic, encoded, qos)?;
         if published {
             self.last_telemetry_payloads.insert(key, payload);
         }
@@ -227,9 +240,6 @@ impl<B: CloudMqttBackend> CloudHost<B> {
         reason: Option<&str>,
         payload: Value,
     ) -> Result<bool> {
-        if !self.snapshot.mqtt_connected && !self.mqtt.is_connected() {
-            return Ok(false);
-        }
         let command_id = command_id.trim();
         if command_id.is_empty() {
             return Ok(false);
@@ -242,17 +252,54 @@ impl<B: CloudMqttBackend> CloudHost<B> {
         if let Some(reason) = reason.filter(|value| !value.trim().is_empty()) {
             message["reason"] = json!(reason);
         }
-        self.mqtt
-            .publish(
-                &self.config.device_ack_topic(),
-                &serde_json::to_string(&message)?,
-                1,
-            )
-            .with_context(|| format!("publish cloud ack {command_id}"))
+        self.publish_or_queue(
+            &self.config.device_ack_topic(),
+            serde_json::to_string(&message)?,
+            1,
+        )
+        .with_context(|| format!("publish cloud ack {command_id}"))
     }
 
     pub fn persist_status(&self) {
         persist_status(&self.config, &self.snapshot);
+    }
+
+    fn publish_or_queue(&mut self, topic: &str, payload: String, qos: u8) -> Result<bool> {
+        if self.snapshot.mqtt_connected || self.mqtt.is_connected() {
+            return self.mqtt.publish(topic, &payload, qos);
+        }
+        if !self.mqtt_started || !self.config.provisioned() || !self.config.mqtt_configured() {
+            return Ok(false);
+        }
+        if self.pending_publishes.len() == MAX_PENDING_PUBLISHES {
+            let _ = self.pending_publishes.pop_front();
+        }
+        self.pending_publishes.push_back(PendingPublish {
+            topic: topic.to_string(),
+            payload,
+            qos,
+        });
+        Ok(true)
+    }
+
+    fn flush_pending_publishes(&mut self) -> Result<()> {
+        while let Some(pending) = self.pending_publishes.pop_front() {
+            match self
+                .mqtt
+                .publish(&pending.topic, &pending.payload, pending.qos)
+            {
+                Ok(true) => {}
+                Ok(false) => {
+                    self.pending_publishes.push_front(pending);
+                    break;
+                }
+                Err(error) => {
+                    self.pending_publishes.push_front(pending);
+                    return Err(error);
+                }
+            }
+        }
+        Ok(())
     }
 }
 

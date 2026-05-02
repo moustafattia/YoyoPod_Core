@@ -884,20 +884,39 @@ fn cloud_command_routes_remote_pause_to_media_and_ack() {
 
     let commands = commands_for_event(&RuntimeState::default(), &event);
 
+    let [RuntimeCommand::WorkerCommandWithAck {
+        domain,
+        envelope,
+        success_ack,
+        failure_ack,
+    }] = commands.as_slice()
+    else {
+        panic!("expected conditional media command with cloud ack");
+    };
+    assert_eq!(*domain, WorkerDomain::Media);
+    assert_eq!(envelope.message_type, "media.pause");
+    assert_eq!(envelope.payload, json!({}));
+    assert_eq!(success_ack.message_type, "cloud.ack");
     assert_eq!(
-        commands,
-        vec![
-            worker_command(WorkerDomain::Media, "media.pause", json!({})),
-            worker_command(
-                WorkerDomain::Cloud,
-                "cloud.ack",
-                json!({
-                    "command_id": "cmd-1",
-                    "ok": true,
-                    "payload": {"command": "pause"}
-                })
-            )
-        ]
+        success_ack.payload,
+        json!({
+            "command_id": "cmd-1",
+            "ok": true,
+            "payload": {"command": "pause"}
+        })
+    );
+    assert_eq!(failure_ack.message_type, "cloud.ack");
+    assert_eq!(
+        failure_ack.payload,
+        json!({
+            "command_id": "cmd-1",
+            "ok": false,
+            "reason": "media_dispatch_failed",
+            "payload": {
+                "command": "pause",
+                "media_command": "media.pause"
+            }
+        })
     );
 }
 

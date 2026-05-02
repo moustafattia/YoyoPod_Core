@@ -94,6 +94,19 @@ impl RuntimeLoop {
             RuntimeCommand::WorkerCommand { domain, envelope } => {
                 let _ = io.send_worker_envelope(domain, envelope);
             }
+            RuntimeCommand::WorkerCommandWithAck {
+                domain,
+                envelope,
+                success_ack,
+                failure_ack,
+            } => {
+                let ack = if io.send_worker_envelope(domain, envelope) {
+                    success_ack
+                } else {
+                    failure_ack
+                };
+                let _ = io.send_worker_envelope(WorkerDomain::Cloud, ack);
+            }
             RuntimeCommand::Shutdown => {
                 self.shutdown_requested = true;
             }
